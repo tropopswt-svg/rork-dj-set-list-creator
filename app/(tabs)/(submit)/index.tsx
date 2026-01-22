@@ -7,6 +7,8 @@ import {
   TextInput,
   Pressable,
   Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import {
@@ -17,14 +19,25 @@ import {
   Trash2,
   Sparkles,
   CheckCircle,
+  Youtube,
+  ExternalLink,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { trpc } from '@/lib/trpc';
 
 interface PendingTrack {
   id: string;
   title: string;
   artist: string;
   timestamp: string;
+  confidence?: 'high' | 'medium' | 'low';
+  source?: string;
+}
+
+interface ScrapedLinks {
+  youtube?: string;
+  soundcloud?: string;
+  mixcloud?: string;
 }
 
 export default function SubmitScreen() {
@@ -38,20 +51,61 @@ export default function SubmitScreen() {
   const [newTrackTimestamp, setNewTrackTimestamp] = useState('');
   const [isAddingTrack, setIsAddingTrack] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [thumbnail, setThumbnail] = useState('');
+  const [platform, setPlatform] = useState('');
+  const [links, setLinks] = useState<ScrapedLinks>({});
+
+  const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
+    onSuccess: (result) => {
+      console.log('[Submit] Scrape result:', result);
+      if (result.success && result.data) {
+        setSetName(result.data.title || '');
+        setArtistName(result.data.artist || '');
+        setThumbnail(result.data.thumbnail || '');
+        setPlatform(result.data.platform || '');
+        setLinks(result.data.links || {});
+        if (result.data.venue) setVenue(result.data.venue);
+        
+        if (result.data.tracks && result.data.tracks.length > 0) {
+          const importedTracks: PendingTrack[] = result.data.tracks.map((t, i) => ({
+            id: `imported-${Date.now()}-${i}`,
+            title: t.title,
+            artist: t.artist,
+            timestamp: t.timestamp,
+            confidence: t.confidence,
+            source: t.source,
+          }));
+          setTracks(importedTracks);
+          Alert.alert('Import Complete', `Found ${importedTracks.length} tracks from comments & tracklists`);
+        } else {
+          Alert.alert('Metadata Imported', 'Set details imported. Add tracks manually or wait for AI to scan comments.');
+        }
+      } else {
+        Alert.alert('Import Failed', result.error || 'Could not import from this URL');
+      }
+    },
+    onError: (error) => {
+      console.error('[Submit] Scrape error:', error);
+      Alert.alert('Error', 'Failed to scrape URL. Please try again.');
+    },
+  });
 
   const handleImportFromUrl = () => {
     if (!setUrl.trim()) {
       Alert.alert('Error', 'Please enter a URL first');
       return;
     }
-    setIsImporting(true);
-    setTimeout(() => {
-      setSetName('Example Set Name');
-      setArtistName('DJ Name');
-      setIsImporting(false);
-      Alert.alert('Import Complete', 'AI is scanning comments for track IDs...');
-    }, 1500);
+    
+    let url = setUrl.trim();
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    
+    console.log('[Submit] Starting import for URL:', url);
+    scrapeMutation.mutate({ url });
   };
+
+  const isImportingReal = scrapeMutation.isPending;
 
   const handleAddTrack = () => {
     if (!newTrackTitle.trim() || !newTrackArtist.trim()) {
@@ -95,6 +149,9 @@ export default function SubmitScreen() {
             setArtistName('');
             setVenue('');
             setTracks([]);
+            setThumbnail('');
+            setPlatform('');
+            setLinks({});
           },
         },
       ]
@@ -128,13 +185,17 @@ export default function SubmitScreen() {
               />
             </View>
             <Pressable
-              style={[styles.importButton, isImporting && styles.importButtonDisabled]}
+              style={[styles.importButton, isImportingReal && styles.importButtonDisabled]}
               onPress={handleImportFromUrl}
-              disabled={isImporting}
+              disabled={isImportingReal}
             >
-              <Sparkles size={16} color="#fff" />
+              {isImportingReal ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Sparkles size={16} color="#fff" />
+              )}
               <Text style={styles.importButtonText}>
-                {isImporting ? 'Scanning...' : 'Import'}
+                {isImportingReal ? 'Scanning...' : 'Import'}
               </Text>
             </Pressable>
           </View>
@@ -142,6 +203,41 @@ export default function SubmitScreen() {
             AI will scan comments & 1001tracklists for track IDs
           </Text>
         </View>
+
+        {thumbnail ? (
+          <View style={styles.thumbnailSection}>
+            <Image source={{ uri: thumbnail }} style={styles.thumbnail} />
+            <View style={styles.platformBadge}>
+              <Text style={styles.platformText}>{platform.toUpperCase()}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        {Object.keys(links).length > 0 && (
+          <View style={styles.linksSection}>
+            <Text style={styles.linksSectionTitle}>Available Links</Text>
+            <View style={styles.linksRow}>
+              {links.youtube && (
+                <View style={styles.linkBadge}>
+                  <Youtube size={14} color="#FF0000" />
+                  <Text style={styles.linkText}>YouTube</Text>
+                </View>
+              )}
+              {links.soundcloud && (
+                <View style={styles.linkBadge}>
+                  <ExternalLink size={14} color="#FF5500" />
+                  <Text style={styles.linkText}>SoundCloud</Text>
+                </View>
+              )}
+              {links.mixcloud && (
+                <View style={styles.linkBadge}>
+                  <ExternalLink size={14} color="#5000FF" />
+                  <Text style={styles.linkText}>Mixcloud</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Set Details</Text>
@@ -585,5 +681,62 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
+  },
+  thumbnailSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  thumbnail: {
+    width: '100%',
+    height: 180,
+    backgroundColor: Colors.dark.surface,
+  },
+  platformBadge: {
+    position: 'absolute',
+    top: 12,
+    right: 12,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  platformText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '600' as const,
+    letterSpacing: 0.5,
+  },
+  linksSection: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+  linksSectionTitle: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.textSecondary,
+    marginBottom: 8,
+  },
+  linksRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  linkBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  linkText: {
+    fontSize: 13,
+    color: Colors.dark.text,
+    fontWeight: '500' as const,
   },
 });
