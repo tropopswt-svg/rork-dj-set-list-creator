@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Disc3, Bookmark, PlusSquare, User } from 'lucide-react-native';
+import { Disc3, Rss, Users, PlusSquare, User } from 'lucide-react-native';
 import { StyleSheet } from 'react-native';
 import Colors from '@/constants/colors';
 
@@ -23,10 +23,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="(library)"
+        name="(feed)"
         options={{
-          title: 'Saved',
-          tabBarIcon: ({ color, size }) => <Bookmark size={size} color={color} />,
+          title: 'Feed',
+          tabBarIcon: ({ color, size }) => <Rss size={size} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -37,10 +37,23 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="(social)"
+        options={{
+          title: 'Social',
+          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="(profile)"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="(library)"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
@@ -56,8 +69,8 @@ const styles = StyleSheet.create({
     height: 85,
   },
   tabBarLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500' as const,
-    marginTop: 4,
+    marginTop: 2,
   },
 });

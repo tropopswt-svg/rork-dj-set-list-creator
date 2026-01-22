@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, Radio, ListMusic, Clock, MessageSquare } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, Radio, ListMusic, MessageSquare } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -10,6 +10,15 @@ interface SetFeedCardProps {
   setList: SetList;
   onPress?: () => void;
 }
+
+const coverImages = [
+  'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
+];
 
 export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
   const handlePress = () => {
@@ -43,12 +52,17 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${Math.floor(days / 365)}y ago`;
   };
 
+  const getCoverImage = () => {
+    const index = parseInt(setList.id) % coverImages.length;
+    return coverImages[index] || coverImages[0];
+  };
+
   const getPlatformIcons = () => {
     const platforms = setList.sourceLinks.map(l => l.platform);
     const unique = [...new Set(platforms)];
     
     return unique.slice(0, 3).map((platform, index) => {
-      const iconProps = { size: 11 };
+      const iconProps = { size: 12 };
       switch (platform) {
         case 'youtube':
           return <Youtube key={index} {...iconProps} color="#FF0000" />;
@@ -72,12 +86,13 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
       <View style={styles.row}>
         <View style={styles.coverContainer}>
           <Image 
-            source={{ uri: setList.coverUrl || 'https://i1.sndcdn.com/artworks-000149102513-l3t2u4-t500x500.jpg' }} 
+            source={{ uri: getCoverImage() }} 
             style={styles.cover}
+            contentFit="cover"
           />
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
-              <Play size={16} color="#fff" fill="#fff" />
+              <Play size={18} color="#fff" fill="#fff" />
             </View>
           </View>
           <View style={styles.durationBadge}>
@@ -96,15 +111,15 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
           <View style={styles.footer}>
             <View style={styles.stats}>
               {setList.plays && setList.plays > 0 && (
-                <Text style={styles.statText}>{formatPlays(setList.plays)}</Text>
+                <Text style={styles.statText}>{formatPlays(setList.plays)} plays</Text>
               )}
               <View style={styles.tracksStat}>
-                <Music size={10} color={Colors.dark.textMuted} />
+                <Music size={11} color={Colors.dark.textMuted} />
                 <Text style={styles.statText}>{setList.tracksIdentified || setList.tracks.length}</Text>
               </View>
               {setList.commentsScraped && setList.commentsScraped > 0 && (
                 <View style={styles.tracksStat}>
-                  <MessageSquare size={10} color={Colors.dark.textMuted} />
+                  <MessageSquare size={11} color={Colors.dark.textMuted} />
                   <Text style={styles.statText}>{setList.commentsScraped}</Text>
                 </View>
               )}
@@ -127,11 +142,18 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 12,
     backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
   pressed: {
-    opacity: 0.9,
+    opacity: 0.95,
     transform: [{ scale: 0.99 }],
   },
   row: {
@@ -142,7 +164,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: 100,
     height: 100,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   cover: {
@@ -155,27 +177,27 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 2,
+    paddingLeft: 3,
   },
   durationBadge: {
     position: 'absolute',
     bottom: 6,
     right: 6,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: 'rgba(0,0,0,0.75)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   durationText: {
     fontSize: 10,
@@ -184,20 +206,20 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 14,
     justifyContent: 'space-between',
   },
   artist: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
     marginBottom: 2,
   },
   name: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 2,
   },
   venue: {
@@ -211,17 +233,18 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
+    gap: 12,
+    marginBottom: 6,
   },
   tracksStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
   },
   statText: {
     fontSize: 11,
     color: Colors.dark.textMuted,
+    fontWeight: '500' as const,
   },
   metaRow: {
     flexDirection: 'row',
@@ -231,10 +254,11 @@ const styles = StyleSheet.create({
   platforms: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   date: {
     fontSize: 11,
     color: Colors.dark.textMuted,
+    fontWeight: '500' as const,
   },
 });

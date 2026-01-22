@@ -2,24 +2,24 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Search, Link2, TrendingUp, Clock, File } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock, Flame } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import ImportSetModal from '@/components/ImportSetModal';
-import { mockSetLists, mockUsers } from '@/mocks/tracks';
+import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
 
 type FilterType = 'trending' | 'recent';
 
 const hotArtists = [
-  { id: '1', name: 'Dixon', image: 'https://i1.sndcdn.com/avatars-yRPAjSgPbBr7tKDW-S5QKUQ-t500x500.jpg' },
-  { id: '2', name: 'Âme', image: 'https://i1.sndcdn.com/avatars-000003875866-9tfo8r-t500x500.jpg' },
-  { id: '3', name: 'Hunee', image: 'https://i1.sndcdn.com/avatars-000187309942-8gak9k-t500x500.jpg' },
-  { id: '4', name: 'Ben Böhmer', image: 'https://i1.sndcdn.com/avatars-000335919042-c8i3vm-t500x500.jpg' },
-  { id: '5', name: 'Chris Stussy', image: 'https://i1.sndcdn.com/avatars-000597139977-4pv4u3-t500x500.jpg' },
-  { id: '6', name: 'Sama\'', image: 'https://i1.sndcdn.com/avatars-000336772399-82lf3w-t500x500.jpg' },
+  { id: '1', name: 'Dixon', image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop' },
+  { id: '2', name: 'Âme', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop' },
+  { id: '3', name: 'Hunee', image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=200&h=200&fit=crop' },
+  { id: '4', name: 'Ben Böhmer', image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=200&h=200&fit=crop' },
+  { id: '5', name: 'Chris Stussy', image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop' },
+  { id: '6', name: 'Sama\'', image: 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=200&h=200&fit=crop' },
 ];
 
 export default function DiscoverScreen() {
@@ -115,7 +115,7 @@ export default function DiscoverScreen() {
         >
           <View style={styles.hotSection}>
             <View style={styles.sectionHeader}>
-              <File size={16} color={Colors.dark.primary} />
+              <Flame size={16} color={Colors.dark.primary} />
               <Text style={styles.sectionTitle}>Hot Artists</Text>
             </View>
             <ScrollView 
@@ -132,11 +132,15 @@ export default function DiscoverScreen() {
                   }}
                 >
                   <View style={styles.hotArtistImageWrapper}>
-                    <Image 
-                      source={{ uri: artist.image }} 
-                      style={styles.hotArtistImage}
-                    />
-                    <View style={styles.hotArtistRing} />
+                    <View style={styles.hotArtistGradientRing}>
+                      <View style={styles.hotArtistInnerRing}>
+                        <Image 
+                          source={{ uri: artist.image }} 
+                          style={styles.hotArtistImage}
+                          contentFit="cover"
+                        />
+                      </View>
+                    </View>
                   </View>
                   <Text style={styles.hotArtistName} numberOfLines={1}>{artist.name}</Text>
                 </Pressable>
@@ -235,83 +239,96 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     marginBottom: 12,
     paddingHorizontal: 14,
-    borderRadius: 24,
-    height: 42,
+    borderRadius: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
-    fontSize: 14,
+    fontSize: 15,
     color: Colors.dark.text,
   },
   hotSection: {
-    marginBottom: 16,
+    marginBottom: 20,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.dark.text,
   },
   hotArtistsContainer: {
     paddingHorizontal: 16,
-    gap: 16,
+    gap: 14,
   },
   hotArtistItem: {
     alignItems: 'center',
-    width: 72,
+    width: 76,
   },
   hotArtistImageWrapper: {
-    position: 'relative',
-    marginBottom: 6,
+    marginBottom: 8,
+  },
+  hotArtistGradientRing: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.dark.primary,
+    padding: 2.5,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  hotArtistInnerRing: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 34,
+    backgroundColor: Colors.dark.background,
+    padding: 2.5,
   },
   hotArtistImage: {
-    width: 64,
-    height: 64,
+    width: '100%',
+    height: '100%',
     borderRadius: 32,
   },
-  hotArtistRing: {
-    position: 'absolute',
-    top: -3,
-    left: -3,
-    right: -3,
-    bottom: -3,
-    borderRadius: 35,
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-  },
   hotArtistName: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.dark.textSecondary,
+    color: Colors.dark.text,
     textAlign: 'center',
   },
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,
-    marginBottom: 14,
-    gap: 8,
+    marginBottom: 16,
+    gap: 10,
   },
   filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 18,
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
     backgroundColor: Colors.dark.surface,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
   filterChipActive: {
     backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
   },
   filterText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500' as const,
     color: Colors.dark.textSecondary,
   },

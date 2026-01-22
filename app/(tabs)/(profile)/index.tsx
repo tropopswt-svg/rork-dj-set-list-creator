@@ -4,10 +4,10 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  Image,
   Pressable,
 } from 'react-native';
-import { Stack } from 'expo-router';
+import { Image } from 'expo-image';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Settings, Award, Clock, CheckCircle, AlertCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { mockCurrentUser } from '@/mocks/tracks';
@@ -27,7 +27,10 @@ const formatTimestamp = (seconds: number) => {
 };
 
 export default function ProfileScreen() {
-  const user = mockCurrentUser;
+  const user = {
+    ...mockCurrentUser,
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -57,17 +60,14 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Profile',
-          headerRight: () => (
-            <Pressable style={styles.settingsButton}>
-              <Settings size={22} color={Colors.dark.text} />
-            </Pressable>
-          ),
-        }}
-      />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View style={styles.headerBar}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <Pressable style={styles.settingsButton}>
+            <Settings size={22} color={Colors.dark.text} />
+          </Pressable>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
           <Text style={styles.displayName}>{user.displayName}</Text>
@@ -163,7 +163,8 @@ export default function ProfileScreen() {
             </View>
           )}
         </View>
-      </ScrollView>
+        </ScrollView>
+      </SafeAreaView>
     </View>
   );
 }
@@ -173,8 +174,35 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
+  safeArea: {
+    flex: 1,
+  },
+  headerBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerTitle: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+    letterSpacing: -0.3,
+  },
   settingsButton: {
-    padding: 8,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  scrollContent: {
+    paddingBottom: 100,
   },
   header: {
     alignItems: 'center',

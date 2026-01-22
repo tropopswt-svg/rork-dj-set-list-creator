@@ -266,7 +266,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
+    backgroundColor: 'rgba(45, 42, 38, 0.7)',
     justifyContent: 'flex-end',
   },
   content: {
@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   importButtonText: {
-    color: Colors.dark.background,
+    color: '#fff',
     fontSize: 16,
     fontWeight: '600' as const,
   },
