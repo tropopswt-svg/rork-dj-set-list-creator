@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { Stack } from 'expo-router';
 import {
@@ -21,9 +22,15 @@ import {
   CheckCircle,
   Youtube,
   ExternalLink,
+  User,
+  AlertTriangle,
+  X,
 } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
+import { useSets } from '@/contexts/SetsContext';
+import { Artist, SetList } from '@/types';
 
 interface PendingTrack {
   id: string;
@@ -41,6 +48,8 @@ interface ScrapedLinks {
 }
 
 export default function SubmitScreen() {
+  const { addSet, searchArtistsByQuery, findDuplicateSet, getArtistByName } = useSets();
+  
   const [setUrl, setSetUrl] = useState('');
   const [setName, setSetName] = useState('');
   const [artistName, setArtistName] = useState('');
@@ -50,10 +59,13 @@ export default function SubmitScreen() {
   const [newTrackArtist, setNewTrackArtist] = useState('');
   const [newTrackTimestamp, setNewTrackTimestamp] = useState('');
   const [isAddingTrack, setIsAddingTrack] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
   const [thumbnail, setThumbnail] = useState('');
   const [platform, setPlatform] = useState('');
   const [links, setLinks] = useState<ScrapedLinks>({});
+  
+  const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
+  const [artistSuggestions, setArtistSuggestions] = useState<Artist[]>([]);
+  const [duplicateWarning, setDuplicateWarning] = useState<SetList | null>(null);
 
   const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
     onSuccess: (result) => {
@@ -65,6 +77,15 @@ export default function SubmitScreen() {
         setPlatform(result.data.platform || '');
         setLinks(result.data.links || {});
         if (result.data.venue) setVenue(result.data.venue);
+        
+        const sourceUrl = Object.values(result.data.links || {}).find(Boolean);
+        if (sourceUrl) {
+          const duplicate = findDuplicateSet(sourceUrl, result.data.artist, result.data.title);
+          if (duplicate) {
+            setDuplicateWarning(duplicate);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          }
+        }
         
         if (result.data.tracks && result.data.tracks.length > 0) {
           const importedTracks: PendingTrack[] = result.data.tracks.map((t, i) => ({
@@ -101,11 +122,59 @@ export default function SubmitScreen() {
       url = 'https://' + url;
     }
     
+    setDuplicateWarning(null);
+    
+    const existingDuplicate = findDuplicateSet(url);
+    if (existingDuplicate) {
+      setDuplicateWarning(existingDuplicate);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+    
     console.log('[Submit] Starting import for URL:', url);
     scrapeMutation.mutate({ url });
   };
 
   const isImportingReal = scrapeMutation.isPending;
+
+  const handleArtistChange = useCallback((text: string) => {
+    setArtistName(text);
+    setDuplicateWarning(null);
+    
+    if (text.trim().length > 0) {
+      const suggestions = searchArtistsByQuery(text);
+      setArtistSuggestions(suggestions);
+      setShowArtistSuggestions(suggestions.length > 0);
+    } else {
+      setShowArtistSuggestions(false);
+      setArtistSuggestions([]);
+    }
+  }, [searchArtistsByQuery]);
+
+  const handleSelectArtist = useCallback((artist: Artist) => {
+    setArtistName(artist.name);
+    setShowArtistSuggestions(false);
+    Haptics.selectionAsync();
+    
+    if (setName.trim()) {
+      const duplicate = findDuplicateSet(undefined, artist.name, setName);
+      if (duplicate) {
+        setDuplicateWarning(duplicate);
+      }
+    }
+  }, [findDuplicateSet, setName]);
+
+  const handleSetNameChange = useCallback((text: string) => {
+    setSetName(text);
+    setDuplicateWarning(null);
+    
+    if (artistName.trim() && text.trim()) {
+      const duplicate = findDuplicateSet(undefined, artistName, text);
+      if (duplicate) {
+        setDuplicateWarning(duplicate);
+      }
+    }
+  }, [findDuplicateSet, artistName]);
 
   const handleAddTrack = () => {
     if (!newTrackTitle.trim() || !newTrackArtist.trim()) {
@@ -137,31 +206,112 @@ export default function SubmitScreen() {
       return;
     }
 
-    Alert.alert(
-      'Set Submitted!',
-      `Your set "${setName}" has been submitted for review. You'll earn points for each verified track.`,
-      [
-        {
-          text: 'OK',
-          onPress: () => {
-            setSetUrl('');
-            setSetName('');
-            setArtistName('');
-            setVenue('');
-            setTracks([]);
-            setThumbnail('');
-            setPlatform('');
-            setLinks({});
-          },
-        },
-      ]
-    );
+    if (duplicateWarning) {
+      Alert.alert(
+        'Duplicate Set',
+        `This set already exists: "${duplicateWarning.name}" by ${duplicateWarning.artist}. Do you want to view it instead?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'View Existing', onPress: () => {} },
+        ]
+      );
+      return;
+    }
+
+    const sourceLinks: SetList['sourceLinks'] = [];
+    if (links.youtube) sourceLinks.push({ platform: 'youtube', url: links.youtube });
+    if (links.soundcloud) sourceLinks.push({ platform: 'soundcloud', url: links.soundcloud });
+    if (links.mixcloud) sourceLinks.push({ platform: 'mixcloud', url: links.mixcloud });
+
+    const newSet: SetList = {
+      id: Date.now().toString(),
+      name: setName.trim(),
+      artist: artistName.trim(),
+      venue: venue.trim() || undefined,
+      date: new Date(),
+      tracks: tracks.map((t, i) => ({
+        id: `track-${Date.now()}-${i}`,
+        title: t.title,
+        artist: t.artist,
+        timestamp: parseTimestamp(t.timestamp),
+        duration: 0,
+        coverUrl: thumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+        addedAt: new Date(),
+        source: 'manual' as const,
+        verified: false,
+      })),
+      coverUrl: thumbnail || undefined,
+      sourceLinks,
+      totalDuration: 0,
+      aiProcessed: false,
+      commentsScraped: 0,
+      tracksIdentified: tracks.length,
+      plays: 0,
+    };
+
+    const result = addSet(newSet);
+
+    if (result.success) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Set Submitted!',
+        `Your set "${setName}" has been added. You'll earn points for each verified track.`,
+        [{ text: 'OK', onPress: resetForm }]
+      );
+    } else if (result.duplicate) {
+      Alert.alert(
+        'Duplicate Found',
+        `This set already exists: "${result.duplicate.name}" by ${result.duplicate.artist}`,
+        [{ text: 'OK' }]
+      );
+    }
   };
+
+  const parseTimestamp = (ts: string): number => {
+    const parts = ts.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
+  };
+
+  const resetForm = () => {
+    setSetUrl('');
+    setSetName('');
+    setArtistName('');
+    setVenue('');
+    setTracks([]);
+    setThumbnail('');
+    setPlatform('');
+    setLinks({});
+    setDuplicateWarning(null);
+    setShowArtistSuggestions(false);
+  };
+
+  const renderArtistSuggestion = ({ item }: { item: Artist }) => (
+    <Pressable
+      style={styles.suggestionItem}
+      onPress={() => handleSelectArtist(item)}
+    >
+      {item.imageUrl ? (
+        <Image source={{ uri: item.imageUrl }} style={styles.suggestionImage} />
+      ) : (
+        <View style={styles.suggestionImagePlaceholder}>
+          <User size={16} color={Colors.dark.textMuted} />
+        </View>
+      )}
+      <View style={styles.suggestionInfo}>
+        <Text style={styles.suggestionName}>{item.name}</Text>
+        <Text style={styles.suggestionMeta}>
+          {item.setsCount} sets • {item.genres.slice(0, 2).join(', ') || 'Various'}
+        </Text>
+      </View>
+    </Pressable>
+  );
 
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ title: 'Submit Set' }} />
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Add a New Set</Text>
           <Text style={styles.headerSubtitle}>
@@ -179,7 +329,10 @@ export default function SubmitScreen() {
                 placeholder="YouTube, SoundCloud, or Mixcloud URL"
                 placeholderTextColor={Colors.dark.textMuted}
                 value={setUrl}
-                onChangeText={setSetUrl}
+                onChangeText={(text) => {
+                  setSetUrl(text);
+                  setDuplicateWarning(null);
+                }}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
@@ -203,6 +356,21 @@ export default function SubmitScreen() {
             AI will scan comments & 1001tracklists for track IDs
           </Text>
         </View>
+
+        {duplicateWarning && (
+          <View style={styles.duplicateWarning}>
+            <AlertTriangle size={18} color={Colors.dark.warning} />
+            <View style={styles.duplicateContent}>
+              <Text style={styles.duplicateTitle}>Set Already Exists</Text>
+              <Text style={styles.duplicateText}>
+                "{duplicateWarning.name}" by {duplicateWarning.artist}
+              </Text>
+            </View>
+            <Pressable onPress={() => setDuplicateWarning(null)}>
+              <X size={18} color={Colors.dark.textMuted} />
+            </Pressable>
+          </View>
+        )}
 
         {thumbnail ? (
           <View style={styles.thumbnailSection}>
@@ -248,19 +416,51 @@ export default function SubmitScreen() {
               placeholder="e.g., Boiler Room Berlin"
               placeholderTextColor={Colors.dark.textMuted}
               value={setName}
-              onChangeText={setSetName}
+              onChangeText={handleSetNameChange}
             />
           </View>
+          
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>DJ / Artist *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Dixon"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={artistName}
-              onChangeText={setArtistName}
-            />
+            <View style={styles.artistInputWrapper}>
+              <User size={18} color={Colors.dark.textMuted} />
+              <TextInput
+                style={styles.artistInput}
+                placeholder="e.g., Dixon"
+                placeholderTextColor={Colors.dark.textMuted}
+                value={artistName}
+                onChangeText={handleArtistChange}
+                onFocus={() => {
+                  if (artistName.trim()) {
+                    const suggestions = searchArtistsByQuery(artistName);
+                    setArtistSuggestions(suggestions);
+                    setShowArtistSuggestions(suggestions.length > 0);
+                  }
+                }}
+                onBlur={() => {
+                  setTimeout(() => setShowArtistSuggestions(false), 200);
+                }}
+              />
+              {artistName.trim() && getArtistByName(artistName) && (
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle size={14} color={Colors.dark.success} />
+                </View>
+              )}
+            </View>
+            
+            {showArtistSuggestions && artistSuggestions.length > 0 && (
+              <View style={styles.suggestionsContainer}>
+                <FlatList
+                  data={artistSuggestions}
+                  renderItem={renderArtistSuggestion}
+                  keyExtractor={(item) => item.id}
+                  scrollEnabled={false}
+                  keyboardShouldPersistTaps="handled"
+                />
+              </View>
+            )}
           </View>
+          
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Venue (optional)</Text>
             <TextInput
@@ -399,7 +599,10 @@ export default function SubmitScreen() {
           </View>
         </View>
 
-        <Pressable style={styles.submitButton} onPress={handleSubmit}>
+        <Pressable 
+          style={[styles.submitButton, duplicateWarning && styles.submitButtonWarning]} 
+          onPress={handleSubmit}
+        >
           <Text style={styles.submitButtonText}>Submit Set</Text>
         </Pressable>
 
@@ -491,6 +694,31 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     marginTop: 8,
   },
+  duplicateWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 159, 67, 0.12)',
+    marginHorizontal: 16,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 159, 67, 0.3)',
+    gap: 12,
+    marginBottom: 8,
+  },
+  duplicateContent: {
+    flex: 1,
+  },
+  duplicateTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.warning,
+    marginBottom: 2,
+  },
+  duplicateText: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+  },
   inputGroup: {
     marginBottom: 14,
   },
@@ -509,6 +737,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  artistInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 48,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    gap: 10,
+  },
+  artistInput: {
+    flex: 1,
+    color: Colors.dark.text,
+    fontSize: 14,
+  },
+  verifiedBadge: {
+    marginLeft: 4,
+  },
+  suggestionsContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    overflow: 'hidden',
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  suggestionImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  suggestionImagePlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.surfaceLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  suggestionInfo: {
+    flex: 1,
+  },
+  suggestionName: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 2,
+  },
+  suggestionMeta: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
   },
   addTrackButton: {
     flexDirection: 'row',
@@ -673,6 +963,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+  },
+  submitButtonWarning: {
+    backgroundColor: Colors.dark.warning,
   },
   submitButtonText: {
     color: '#fff',

@@ -110,3 +110,12 @@ export interface UserContribution {
   addedAt: Date;
   points: number;
 }
+
+export interface Artist {
+  id: string;
+  name: string;
+  imageUrl?: string;
+  genres: string[];
+  setsCount: number;
+  followersCount?: number;
+}

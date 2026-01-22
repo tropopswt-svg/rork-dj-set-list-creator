@@ -8,27 +8,25 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import ImportSetModal from '@/components/ImportSetModal';
-import { mockSetLists } from '@/mocks/tracks';
+import { useSets, useFilteredSets } from '@/contexts/SetsContext';
 import { SetList } from '@/types';
 
 type FilterType = 'trending' | 'recent';
 
-const hotArtists = [
-  { id: '1', name: 'Dixon', image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop' },
-  { id: '2', name: 'Âme', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop' },
-  { id: '3', name: 'Hunee', image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=200&h=200&fit=crop' },
-  { id: '4', name: 'Ben Böhmer', image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=200&h=200&fit=crop' },
-  { id: '5', name: 'Chris Stussy', image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop' },
-  { id: '6', name: 'Sama\'', image: 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=200&h=200&fit=crop' },
-];
-
 export default function DiscoverScreen() {
   const router = useRouter();
-  const [setLists, setSetLists] = useState<SetList[]>(mockSetLists);
+  const { allArtists, addSet } = useSets();
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [refreshing, setRefreshing] = useState(false);
+
+  const filteredSets = useFilteredSets(searchQuery, activeFilter);
+
+  const hotArtists = allArtists
+    .filter(a => a.imageUrl)
+    .sort((a, b) => (b.setsCount || 0) - (a.setsCount || 0))
+    .slice(0, 8);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -55,24 +53,16 @@ export default function DiscoverScreen() {
       plays: 0,
     };
     
-    setSetLists([newSet, ...setLists]);
+    const result = addSet(newSet);
     setShowImportModal(false);
     
-    router.push(`/(tabs)/(discover)/${newSet.id}`);
+    router.push(`/(tabs)/(discover)/${result.set.id}`);
   };
 
-  const filteredSets = setLists
-    .filter(set => 
-      set.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      set.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      set.venue?.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      if (activeFilter === 'trending') {
-        return (b.plays || 0) - (a.plays || 0);
-      }
-      return new Date(b.date).getTime() - new Date(a.date).getTime();
-    });
+  const handleArtistPress = (artistName: string) => {
+    Haptics.selectionAsync();
+    setSearchQuery(artistName);
+  };
 
   return (
     <View style={styles.container}>
@@ -113,40 +103,40 @@ export default function DiscoverScreen() {
             />
           }
         >
-          <View style={styles.hotSection}>
-            <View style={styles.sectionHeader}>
-              <Flame size={16} color={Colors.dark.primary} />
-              <Text style={styles.sectionTitle}>Hot Artists</Text>
-            </View>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.hotArtistsContainer}
-            >
-              {hotArtists.map((artist) => (
-                <Pressable 
-                  key={artist.id} 
-                  style={styles.hotArtistItem}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                  }}
-                >
-                  <View style={styles.hotArtistImageWrapper}>
-                    <View style={styles.hotArtistGradientRing}>
-                      <View style={styles.hotArtistInnerRing}>
-                        <Image 
-                          source={{ uri: artist.image }} 
-                          style={styles.hotArtistImage}
-                          contentFit="cover"
-                        />
+          {!searchQuery && (
+            <View style={styles.hotSection}>
+              <View style={styles.sectionHeader}>
+                <Flame size={16} color={Colors.dark.primary} />
+                <Text style={styles.sectionTitle}>Hot Artists</Text>
+              </View>
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.hotArtistsContainer}
+              >
+                {hotArtists.map((artist) => (
+                  <Pressable 
+                    key={artist.id} 
+                    style={styles.hotArtistItem}
+                    onPress={() => handleArtistPress(artist.name)}
+                  >
+                    <View style={styles.hotArtistImageWrapper}>
+                      <View style={styles.hotArtistGradientRing}>
+                        <View style={styles.hotArtistInnerRing}>
+                          <Image 
+                            source={{ uri: artist.imageUrl }} 
+                            style={styles.hotArtistImage}
+                            contentFit="cover"
+                          />
+                        </View>
                       </View>
                     </View>
-                  </View>
-                  <Text style={styles.hotArtistName} numberOfLines={1}>{artist.name}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
+                    <Text style={styles.hotArtistName} numberOfLines={1}>{artist.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
 
           <View style={styles.filterRow}>
             <Pressable 
