@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { Settings, Award, Clock, CheckCircle, AlertCircle } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { mockCurrentUser } from '@/mocks/tracks';
@@ -27,6 +28,7 @@ const formatTimestamp = (seconds: number) => {
 };
 
 export default function ProfileScreen() {
+  const router = useRouter();
   const user = {
     ...mockCurrentUser,
     avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
@@ -63,7 +65,7 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.headerBar}>
           <Text style={styles.headerTitle}>Profile</Text>
-          <Pressable style={styles.settingsButton}>
+          <Pressable style={styles.settingsButton} onPress={() => router.push('/(tabs)/(profile)/settings')}>
             <Settings size={22} color={Colors.dark.text} />
           </Pressable>
         </View>
