@@ -231,10 +231,6 @@ export default function SetDetailScreen() {
             )}
 
             <View style={styles.quickStats}>
-              {setList.plays && (
-                <Text style={styles.quickStatText}>{formatPlays(setList.plays)} plays</Text>
-              )}
-              <Text style={styles.quickStatDot}>•</Text>
               <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration || 0)}</Text>
               <Text style={styles.quickStatDot}>•</Text>
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
