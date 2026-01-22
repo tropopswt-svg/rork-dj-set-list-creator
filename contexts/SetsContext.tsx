@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { SetList, Artist } from '@/types';
+import { SetList, Artist, Track } from '@/types';
 import { mockSetLists } from '@/mocks/tracks';
 import { mockArtists, searchArtists, findArtistByName } from '@/mocks/artists';
 
@@ -245,6 +245,52 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     return sets.filter(s => s.artist.toLowerCase().trim() === normalized);
   }, [sets]);
 
+  const addTracksToSet = useCallback((setId: string, newTracks: Track[]) => {
+    setSets(prev => {
+      const updated = prev.map(set => {
+        if (set.id === setId) {
+          const existingTimestamps = new Set(set.tracks.map(t => t.timestamp));
+          const uniqueTracks = newTracks.filter(t => !existingTimestamps.has(t.timestamp));
+          const mergedTracks = [...set.tracks, ...uniqueTracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          return { ...set, tracks: mergedTracks };
+        }
+        return set;
+      });
+
+      const updatedSet = updated.find(s => s.id === setId);
+      if (updatedSet) {
+        setSubmittedSets(prev => {
+          const newSubmitted = prev.map(s => s.id === setId ? updatedSet : s);
+          if (!prev.find(s => s.id === setId)) {
+            newSubmitted.push(updatedSet);
+          }
+          AsyncStorage.setItem(SUBMITTED_SETS_KEY, JSON.stringify(newSubmitted));
+          return newSubmitted;
+        });
+      }
+
+      console.log('[SetsContext] Added', newTracks.length, 'tracks to set:', setId);
+      return updated;
+    });
+  }, []);
+
+  const bulkImportSets = useCallback((newSets: SetList[]): { success: number; failed: number } => {
+    let success = 0;
+    let failed = 0;
+
+    newSets.forEach(newSet => {
+      const result = addSet(newSet);
+      if (result.success) {
+        success++;
+      } else {
+        failed++;
+      }
+    });
+
+    console.log('[SetsContext] Bulk import complete:', success, 'success,', failed, 'failed');
+    return { success, failed };
+  }, [addSet]);
+
   return {
     sets,
     savedSets,
@@ -261,6 +307,8 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     searchArtistsByQuery,
     getArtistByName,
     normalizeArtistName,
+    addTracksToSet,
+    bulkImportSets,
   };
 });
 
