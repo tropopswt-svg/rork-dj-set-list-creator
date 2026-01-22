@@ -7,6 +7,7 @@ import { mockArtists, searchArtists, findArtistByName } from '@/mocks/artists';
 
 const SETS_STORAGE_KEY = 'saved_sets';
 const ARTISTS_STORAGE_KEY = 'custom_artists';
+const SUBMITTED_SETS_KEY = 'submitted_sets';
 
 function normalizeUrl(url: string): string {
   return url
@@ -25,6 +26,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   const [sets, setSets] = useState<SetList[]>(mockSetLists);
   const [savedSetIds, setSavedSetIds] = useState<Set<string>>(new Set());
   const [customArtists, setCustomArtists] = useState<Artist[]>([]);
+  const [submittedSets, setSubmittedSets] = useState<SetList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -33,9 +35,10 @@ export const [SetsProvider, useSets] = createContextHook(() => {
 
   const loadSavedData = async () => {
     try {
-      const [savedSetsJson, customArtistsJson] = await Promise.all([
+      const [savedSetsJson, customArtistsJson, submittedSetsJson] = await Promise.all([
         AsyncStorage.getItem(SETS_STORAGE_KEY),
         AsyncStorage.getItem(ARTISTS_STORAGE_KEY),
+        AsyncStorage.getItem(SUBMITTED_SETS_KEY),
       ]);
 
       if (savedSetsJson) {
@@ -46,6 +49,16 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       if (customArtistsJson) {
         const artists = JSON.parse(customArtistsJson) as Artist[];
         setCustomArtists(artists);
+      }
+
+      if (submittedSetsJson) {
+        const submitted = JSON.parse(submittedSetsJson) as SetList[];
+        setSubmittedSets(submitted);
+        setSets(prev => {
+          const existingIds = new Set(prev.map(s => s.id));
+          const newSets = submitted.filter(s => !existingIds.has(s.id));
+          return [...newSets, ...prev];
+        });
       }
     } catch (error) {
       console.error('[SetsContext] Error loading saved data:', error);
@@ -110,17 +123,39 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     const setWithId = { ...newSet, id: newSet.id || Date.now().toString() };
     setSets(prev => [setWithId, ...prev]);
     
-    const artistExists = allArtists.some(a => a.name.toLowerCase() === newSet.artist.toLowerCase());
-    if (!artistExists && newSet.artist) {
+    setSubmittedSets(prev => {
+      const updated = [setWithId, ...prev];
+      AsyncStorage.setItem(SUBMITTED_SETS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+    
+    const artistKey = newSet.artist.toLowerCase().trim();
+    const artistExists = allArtists.some(a => a.name.toLowerCase().trim() === artistKey);
+    
+    if (!artistExists && newSet.artist && newSet.artist !== 'Unknown Artist') {
       const newArtist: Artist = {
         id: `artist-${Date.now()}`,
-        name: newSet.artist,
+        name: newSet.artist.trim(),
         imageUrl: newSet.coverUrl,
         genres: [],
         setsCount: 1,
       };
       setCustomArtists(prev => {
+        const alreadyExists = prev.some(a => a.name.toLowerCase().trim() === artistKey);
+        if (alreadyExists) return prev;
         const updated = [...prev, newArtist];
+        AsyncStorage.setItem(ARTISTS_STORAGE_KEY, JSON.stringify(updated));
+        console.log('[SetsContext] New artist created:', newArtist.name);
+        return updated;
+      });
+    } else {
+      setCustomArtists(prev => {
+        const updated = prev.map(a => {
+          if (a.name.toLowerCase().trim() === artistKey) {
+            return { ...a, setsCount: (a.setsCount || 0) + 1 };
+          }
+          return a;
+        });
         AsyncStorage.setItem(ARTISTS_STORAGE_KEY, JSON.stringify(updated));
         return updated;
       });
@@ -171,18 +206,61 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     return allArtists.find(a => a.name.toLowerCase() === name.toLowerCase());
   }, [allArtists]);
 
+  const addArtist = useCallback((name: string, imageUrl?: string): Artist => {
+    const normalizedName = name.toLowerCase().trim();
+    const existing = allArtists.find(a => a.name.toLowerCase().trim() === normalizedName);
+    
+    if (existing) {
+      console.log('[SetsContext] Artist already exists:', existing.name);
+      return existing;
+    }
+
+    const newArtist: Artist = {
+      id: `artist-${Date.now()}`,
+      name: name.trim(),
+      imageUrl,
+      genres: [],
+      setsCount: 0,
+    };
+
+    setCustomArtists(prev => {
+      const updated = [...prev, newArtist];
+      AsyncStorage.setItem(ARTISTS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    console.log('[SetsContext] Artist added:', newArtist.name);
+    return newArtist;
+  }, [allArtists]);
+
+  const normalizeArtistName = useCallback((name: string): string => {
+    const found = allArtists.find(a => 
+      a.name.toLowerCase().trim() === name.toLowerCase().trim()
+    );
+    return found ? found.name : name.trim();
+  }, [allArtists]);
+
+  const getSetsByArtist = useCallback((artistName: string) => {
+    const normalized = artistName.toLowerCase().trim();
+    return sets.filter(s => s.artist.toLowerCase().trim() === normalized);
+  }, [sets]);
+
   return {
     sets,
     savedSets,
+    submittedSets,
     allArtists,
     isLoading,
     addSet,
+    addArtist,
     toggleSaveSet,
     isSetSaved,
     getSetById,
+    getSetsByArtist,
     findDuplicateSet,
     searchArtistsByQuery,
     getArtistByName,
+    normalizeArtistName,
   };
 });
 

@@ -48,7 +48,7 @@ interface ScrapedLinks {
 }
 
 export default function SubmitScreen() {
-  const { addSet, searchArtistsByQuery, findDuplicateSet, getArtistByName } = useSets();
+  const { addSet, searchArtistsByQuery, findDuplicateSet, getArtistByName, normalizeArtistName } = useSets();
   
   const [setUrl, setSetUrl] = useState('');
   const [setName, setSetName] = useState('');
@@ -71,8 +71,15 @@ export default function SubmitScreen() {
     onSuccess: (result) => {
       console.log('[Submit] Scrape result:', result);
       if (result.success && result.data) {
-        setSetName(result.data.title || '');
-        setArtistName(result.data.artist || '');
+        const scrapedTitle = result.data.title || '';
+        const scrapedArtist = result.data.artist || '';
+        
+        const normalizedArtist = scrapedArtist && scrapedArtist !== 'Unknown Artist' 
+          ? normalizeArtistName(scrapedArtist) 
+          : scrapedArtist;
+        
+        setSetName(scrapedTitle);
+        setArtistName(normalizedArtist);
         setThumbnail(result.data.thumbnail || '');
         setPlatform(result.data.platform || '');
         setLinks(result.data.links || {});
@@ -80,24 +87,37 @@ export default function SubmitScreen() {
         
         const sourceUrl = Object.values(result.data.links || {}).find(Boolean);
         if (sourceUrl) {
-          const duplicate = findDuplicateSet(sourceUrl, result.data.artist, result.data.title);
+          const duplicate = findDuplicateSet(sourceUrl, normalizedArtist, scrapedTitle);
           if (duplicate) {
             setDuplicateWarning(duplicate);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
           }
         }
         
+        const existingArtist = getArtistByName(normalizedArtist);
+        if (existingArtist) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+        
         if (result.data.tracks && result.data.tracks.length > 0) {
-          const importedTracks: PendingTrack[] = result.data.tracks.map((t, i) => ({
-            id: `imported-${Date.now()}-${i}`,
-            title: t.title,
-            artist: t.artist,
-            timestamp: t.timestamp,
-            confidence: t.confidence,
-            source: t.source,
-          }));
+          const seen = new Set<string>();
+          const importedTracks: PendingTrack[] = result.data.tracks
+            .filter(t => {
+              const key = `${t.artist.toLowerCase()}-${t.title.toLowerCase()}`;
+              if (seen.has(key)) return false;
+              seen.add(key);
+              return true;
+            })
+            .map((t, i) => ({
+              id: `imported-${Date.now()}-${i}`,
+              title: t.title,
+              artist: t.artist,
+              timestamp: t.timestamp,
+              confidence: t.confidence,
+              source: t.source,
+            }));
           setTracks(importedTracks);
-          Alert.alert('Import Complete', `Found ${importedTracks.length} tracks from comments & tracklists`);
+          Alert.alert('Import Complete', `Found ${importedTracks.length} unique tracks from comments & tracklists`);
         } else {
           Alert.alert('Metadata Imported', 'Set details imported. Add tracks manually or wait for AI to scan comments.');
         }
@@ -182,6 +202,16 @@ export default function SubmitScreen() {
       return;
     }
 
+    const trackKey = `${newTrackArtist.toLowerCase().trim()}-${newTrackTitle.toLowerCase().trim()}`;
+    const isDuplicate = tracks.some(t => 
+      `${t.artist.toLowerCase()}-${t.title.toLowerCase()}` === trackKey
+    );
+
+    if (isDuplicate) {
+      Alert.alert('Duplicate Track', 'This track is already in the list');
+      return;
+    }
+
     const newTrack: PendingTrack = {
       id: Date.now().toString(),
       title: newTrackTitle.trim(),
@@ -194,6 +224,7 @@ export default function SubmitScreen() {
     setNewTrackArtist('');
     setNewTrackTimestamp('');
     setIsAddingTrack(false);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleRemoveTrack = (id: string) => {
