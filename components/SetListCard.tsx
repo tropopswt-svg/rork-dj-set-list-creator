@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Music, Calendar, MapPin, Youtube, Music2, Sparkles, MessageSquare } from 'lucide-react-native';
+import { Music, MapPin, Youtube, Music2, Sparkles, MessageSquare } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -13,7 +13,50 @@ interface SetListCardProps {
   large?: boolean;
 }
 
+const FALLBACK_IMAGES = [
+  'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
+];
+
 export default function SetListCard({ setList, onPress, large }: SetListCardProps) {
+  const [imageError, setImageError] = useState(false);
+  const [triedHqFallback, setTriedHqFallback] = useState(false);
+
+  const getFallbackImage = useCallback(() => {
+    const index = parseInt(setList.id) % FALLBACK_IMAGES.length;
+    return FALLBACK_IMAGES[index] || FALLBACK_IMAGES[0];
+  }, [setList.id]);
+
+  const getCoverImage = useCallback(() => {
+    if (imageError && triedHqFallback) {
+      return getFallbackImage();
+    }
+    
+    if (setList.coverUrl) {
+      if (imageError && setList.coverUrl.includes('maxresdefault')) {
+        return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+      }
+      return setList.coverUrl;
+    }
+    
+    return getFallbackImage();
+  }, [setList.coverUrl, imageError, triedHqFallback, getFallbackImage]);
+
+  const handleImageError = useCallback(() => {
+    console.log(`[SetListCard] Image error for set: ${setList.name}`);
+    if (!triedHqFallback && setList.coverUrl?.includes('maxresdefault')) {
+      console.log('[SetListCard] Trying hqdefault fallback');
+      setTriedHqFallback(true);
+      setImageError(true);
+    } else {
+      console.log('[SetListCard] Using stock fallback image');
+      setTriedHqFallback(true);
+      setImageError(true);
+    }
+  }, [triedHqFallback, setList.coverUrl, setList.name]);
+
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
@@ -42,8 +85,10 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
     return (
       <Pressable style={styles.largeContainer} onPress={handlePress}>
         <Image 
-          source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop' }} 
+          source={{ uri: getCoverImage() }} 
           style={styles.largeCover}
+          onError={handleImageError}
+          cachePolicy="memory-disk"
         />
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.9)']}
@@ -92,8 +137,10 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
     <Pressable style={styles.container} onPress={handlePress}>
       <View style={styles.coverContainer}>
         <Image 
-          source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop' }} 
+          source={{ uri: getCoverImage() }} 
           style={styles.cover}
+          onError={handleImageError}
+          cachePolicy="memory-disk"
         />
         {setList.sourcePlatform && (
           <View style={styles.platformBadge}>
