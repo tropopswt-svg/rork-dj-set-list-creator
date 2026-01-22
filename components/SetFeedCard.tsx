@@ -48,7 +48,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     const unique = [...new Set(platforms)];
     
     return unique.slice(0, 3).map((platform, index) => {
-      const iconProps = { size: 12 };
+      const iconProps = { size: 11 };
       switch (platform) {
         case 'youtube':
           return <Youtube key={index} {...iconProps} color="#FF0000" />;
@@ -57,7 +57,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
         case 'mixcloud':
           return <Radio key={index} {...iconProps} color="#5000FF" />;
         case '1001tracklists':
-          return <ListMusic key={index} {...iconProps} color="#00D4AA" />;
+          return <ListMusic key={index} {...iconProps} color={Colors.dark.primary} />;
         default:
           return null;
       }
@@ -65,54 +65,56 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
   };
 
   return (
-    <Pressable style={styles.container} onPress={handlePress}>
-      <View style={styles.coverContainer}>
-        <Image 
-          source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop' }} 
-          style={styles.cover}
-        />
-        <View style={styles.playOverlay}>
-          <View style={styles.playButton}>
-            <Play size={20} color={Colors.dark.text} fill={Colors.dark.text} />
-          </View>
-        </View>
-        <View style={styles.durationBadge}>
-          <Clock size={10} color={Colors.dark.text} />
-          <Text style={styles.durationText}>{formatDuration(setList.totalDuration || 0)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.artist}>{setList.artist}</Text>
-          <Text style={styles.date}>{formatDate(setList.date)}</Text>
-        </View>
-
-        <Text style={styles.name} numberOfLines={2}>{setList.name}</Text>
-        
-        {setList.venue && (
-          <Text style={styles.venue} numberOfLines={1}>{setList.venue}</Text>
-        )}
-
-        <View style={styles.footer}>
-          <View style={styles.stats}>
-            {setList.plays && setList.plays > 0 && (
-              <Text style={styles.statText}>{formatPlays(setList.plays)} plays</Text>
-            )}
-            <View style={styles.tracksStat}>
-              <Music size={12} color={Colors.dark.textMuted} />
-              <Text style={styles.statText}>{setList.tracksIdentified || setList.tracks.length} tracks</Text>
+    <Pressable 
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]} 
+      onPress={handlePress}
+    >
+      <View style={styles.row}>
+        <View style={styles.coverContainer}>
+          <Image 
+            source={{ uri: setList.coverUrl || 'https://i1.sndcdn.com/artworks-000149102513-l3t2u4-t500x500.jpg' }} 
+            style={styles.cover}
+          />
+          <View style={styles.playOverlay}>
+            <View style={styles.playButton}>
+              <Play size={16} color="#fff" fill="#fff" />
             </View>
-            {setList.commentsScraped && setList.commentsScraped > 0 && (
-              <View style={styles.tracksStat}>
-                <MessageSquare size={12} color={Colors.dark.textMuted} />
-                <Text style={styles.statText}>{setList.commentsScraped}</Text>
-              </View>
-            )}
           </View>
+          <View style={styles.durationBadge}>
+            <Text style={styles.durationText}>{formatDuration(setList.totalDuration || 0)}</Text>
+          </View>
+        </View>
 
-          <View style={styles.platforms}>
-            {getPlatformIcons()}
+        <View style={styles.content}>
+          <Text style={styles.artist}>{setList.artist}</Text>
+          <Text style={styles.name} numberOfLines={2}>{setList.name}</Text>
+          
+          {setList.venue && (
+            <Text style={styles.venue} numberOfLines={1}>{setList.venue}</Text>
+          )}
+
+          <View style={styles.footer}>
+            <View style={styles.stats}>
+              {setList.plays && setList.plays > 0 && (
+                <Text style={styles.statText}>{formatPlays(setList.plays)}</Text>
+              )}
+              <View style={styles.tracksStat}>
+                <Music size={10} color={Colors.dark.textMuted} />
+                <Text style={styles.statText}>{setList.tracksIdentified || setList.tracks.length}</Text>
+              </View>
+              {setList.commentsScraped && setList.commentsScraped > 0 && (
+                <View style={styles.tracksStat}>
+                  <MessageSquare size={10} color={Colors.dark.textMuted} />
+                  <Text style={styles.statText}>{setList.commentsScraped}</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.metaRow}>
+              <View style={styles.platforms}>
+                {getPlatformIcons()}
+              </View>
+              <Text style={styles.date}>{formatDate(setList.date)}</Text>
+            </View>
           </View>
         </View>
       </View>
@@ -122,15 +124,26 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 
 const styles = StyleSheet.create({
   container: {
+    marginHorizontal: 16,
+    marginBottom: 12,
     backgroundColor: Colors.dark.surface,
-    marginHorizontal: 20,
-    marginBottom: 16,
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
+  },
+  pressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
+  row: {
+    flexDirection: 'row',
+    padding: 12,
   },
   coverContainer: {
     position: 'relative',
-    height: 180,
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   cover: {
     width: '100%',
@@ -142,88 +155,86 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.25)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   playButton: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingLeft: 3,
+    paddingLeft: 2,
   },
   durationBadge: {
     position: 'absolute',
-    bottom: 10,
-    right: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
+    bottom: 6,
+    right: 6,
     backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   durationText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#fff',
   },
   content: {
-    padding: 14,
-  },
-  header: {
-    flexDirection: 'row',
+    flex: 1,
+    marginLeft: 12,
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
   },
   artist: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
-  },
-  date: {
-    fontSize: 12,
-    color: Colors.dark.textMuted,
+    marginBottom: 2,
   },
   name: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 22,
-    marginBottom: 4,
+    lineHeight: 18,
+    marginBottom: 2,
   },
   venue: {
-    fontSize: 13,
+    fontSize: 12,
     color: Colors.dark.textSecondary,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    marginTop: 'auto',
   },
   stats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    marginBottom: 4,
   },
   tracksStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
   },
   statText: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.dark.textMuted,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   platforms: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
+  },
+  date: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
   },
 });
