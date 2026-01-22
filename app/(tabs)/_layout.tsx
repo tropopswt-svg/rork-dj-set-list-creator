@@ -1,11 +1,20 @@
-import { Tabs } from 'expo-router';
-import { Disc3, Rss, Users, PlusSquare, User } from 'lucide-react-native';
-import { StyleSheet } from 'react-native';
+import { Tabs, useRouter } from 'expo-router';
+import { Disc3, Rss, Users, Plus, User } from 'lucide-react-native';
+import { StyleSheet, View, Pressable } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 
 export default function TabLayout() {
+  const router = useRouter();
+
+  const handleFABPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push('/(tabs)/(submit)');
+  };
+
   return (
-    <Tabs
+    <View style={styles.container}>
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
@@ -32,8 +41,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(submit)"
         options={{
-          title: 'Submit',
-          tabBarIcon: ({ color, size }) => <PlusSquare size={size} color={color} />,
+          href: null,
         }}
       />
       <Tabs.Screen
@@ -57,10 +65,23 @@ export default function TabLayout() {
         }}
       />
     </Tabs>
+
+      <Pressable
+        style={styles.fab}
+        onPress={handleFABPress}
+      >
+        <View style={styles.fabInner}>
+          <Plus size={26} color="#fff" strokeWidth={2.5} />
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   tabBar: {
     backgroundColor: Colors.dark.surface,
     borderTopColor: Colors.dark.border,
@@ -72,5 +93,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500' as const,
     marginTop: 2,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 50,
+    alignSelf: 'center',
+    zIndex: 100,
+  },
+  fabInner: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });
