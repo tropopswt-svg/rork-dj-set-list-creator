@@ -8,15 +8,18 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
-import { X, Upload, FileSpreadsheet, Music, List, Check, AlertCircle, Copy, Trash2 } from 'lucide-react-native';
+import { X, Upload, FileSpreadsheet, Music, List, Check, AlertCircle, Copy, Trash2, Search, Plus, Cloud, Database } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
 import { SetList, Track } from '@/types';
+import { trpc } from '@/lib/trpc';
 
-type TabType = 'sets' | 'tracks';
+type TabType = 'sets' | 'tracks' | 'soundcloud' | 'repository';
 
 interface ParsedSet {
   name: string;
@@ -36,6 +39,16 @@ interface ParsedTrack {
   timestampSeconds: number;
   valid: boolean;
   error?: string;
+}
+
+interface SoundCloudTrack {
+  title: string;
+  artist: string;
+  url: string;
+  thumbnail?: string;
+  duration?: number;
+  playCount?: number;
+  genre?: string;
 }
 
 const SETS_CSV_EXAMPLE = `name,artist,venue,date,sourceUrl,coverUrl
@@ -68,6 +81,22 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatPlayCount(count: number): string {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(1)}M`;
+  }
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K`;
+  }
+  return count.toString();
+}
+
 function parseCSV(text: string): string[][] {
   const lines = text.trim().split('\n');
   return lines.map(line => {
@@ -93,12 +122,30 @@ function parseCSV(text: string): string[][] {
 
 export default function DevToolsScreen() {
   const router = useRouter();
-  const { addSet, getSetById, sets, addTracksToSet } = useSets();
+  const { addSet, getSetById, sets, addTracksToSet, addTrackToRepository, trackRepository, removeTrackFromRepository } = useSets();
   const [activeTab, setActiveTab] = useState<TabType>('sets');
   const [setsInput, setSetsInput] = useState('');
   const [tracksInput, setTracksInput] = useState('');
   const [selectedSetId, setSelectedSetId] = useState('');
   const [importStatus, setImportStatus] = useState<{ success: number; failed: number } | null>(null);
+  
+  const [soundcloudQuery, setSoundcloudQuery] = useState('');
+  const [soundcloudResults, setSoundcloudResults] = useState<SoundCloudTrack[]>([]);
+  const [selectedTracks, setSelectedTracks] = useState<Set<string>>(new Set());
+  const [repoSearchQuery, setRepoSearchQuery] = useState('');
+
+  const searchSoundCloud = trpc.scraper.searchSoundCloudTracks.useMutation({
+    onSuccess: (data) => {
+      if (data.success) {
+        setSoundcloudResults(data.results);
+        console.log('[DevTools] SoundCloud search returned', data.results.length, 'results');
+      }
+    },
+    onError: (error) => {
+      console.error('[DevTools] SoundCloud search error:', error);
+      Alert.alert('Search Error', 'Failed to search SoundCloud. Please try again.');
+    },
+  });
 
   const parsedSets = useMemo((): ParsedSet[] => {
     if (!setsInput.trim()) return [];
@@ -175,6 +222,15 @@ export default function DevToolsScreen() {
       };
     }).filter(t => t.title || t.artist);
   }, [tracksInput]);
+
+  const filteredRepository = useMemo(() => {
+    if (!repoSearchQuery.trim()) return trackRepository.slice(0, 50);
+    const query = repoSearchQuery.toLowerCase();
+    return trackRepository.filter(t => 
+      t.title.toLowerCase().includes(query) ||
+      t.artist.toLowerCase().includes(query)
+    ).slice(0, 50);
+  }, [trackRepository, repoSearchQuery]);
 
   const handleImportSets = useCallback(() => {
     const validSets = parsedSets.filter(s => s.valid);
@@ -275,6 +331,97 @@ export default function DevToolsScreen() {
     }
   }, []);
 
+  const handleSoundCloudSearch = useCallback(() => {
+    if (!soundcloudQuery.trim()) return;
+    console.log('[DevTools] Searching SoundCloud for:', soundcloudQuery);
+    searchSoundCloud.mutate({ query: soundcloudQuery });
+  }, [soundcloudQuery, searchSoundCloud]);
+
+  const toggleTrackSelection = useCallback((url: string) => {
+    setSelectedTracks(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(url)) {
+        newSet.delete(url);
+      } else {
+        newSet.add(url);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const handleAddSelectedToRepository = useCallback(() => {
+    if (selectedTracks.size === 0) {
+      Alert.alert('No Tracks Selected', 'Please select tracks to add to the repository.');
+      return;
+    }
+
+    let success = 0;
+    let failed = 0;
+
+    soundcloudResults.forEach(track => {
+      if (selectedTracks.has(track.url)) {
+        const newTrack: Track = {
+          id: `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          title: track.title,
+          artist: track.artist,
+          duration: track.duration || 0,
+          coverUrl: track.thumbnail || `https://picsum.photos/seed/${track.title.replace(/\s/g, '')}/200/200`,
+          addedAt: new Date(),
+          source: 'link' as const,
+          verified: false,
+          trackLinks: [{ platform: 'soundcloud', url: track.url }],
+        };
+
+        const result = addTrackToRepository(newTrack);
+        if (result.success) {
+          success++;
+        } else {
+          failed++;
+        }
+      }
+    });
+
+    setSelectedTracks(new Set());
+    
+    Alert.alert(
+      'Import Complete',
+      `Added: ${success}\nDuplicates: ${failed}`,
+      [{ text: 'OK' }]
+    );
+  }, [selectedTracks, soundcloudResults, addTrackToRepository]);
+
+  const handleAddSingleTrack = useCallback((track: SoundCloudTrack) => {
+    const newTrack: Track = {
+      id: `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: track.title,
+      artist: track.artist,
+      duration: track.duration || 0,
+      coverUrl: track.thumbnail || `https://picsum.photos/seed/${track.title.replace(/\s/g, '')}/200/200`,
+      addedAt: new Date(),
+      source: 'link' as const,
+      verified: false,
+      trackLinks: [{ platform: 'soundcloud', url: track.url }],
+    };
+
+    const result = addTrackToRepository(newTrack);
+    if (result.success) {
+      Alert.alert('Added', `"${track.title}" added to repository.`);
+    } else {
+      Alert.alert('Duplicate', 'This track is already in the repository.');
+    }
+  }, [addTrackToRepository]);
+
+  const handleRemoveFromRepository = useCallback((trackId: string, trackTitle: string) => {
+    Alert.alert(
+      'Remove Track',
+      `Remove "${trackTitle}" from repository?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => removeTrackFromRepository(trackId) },
+      ]
+    );
+  }, [removeTrackFromRepository]);
+
   return (
     <View style={styles.container}>
       <Stack.Screen 
@@ -298,26 +445,46 @@ export default function DevToolsScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.tabs}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'sets' && styles.activeTab]}
-            onPress={() => setActiveTab('sets')}
-          >
-            <List size={18} color={activeTab === 'sets' ? Colors.dark.primary : Colors.dark.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'sets' && styles.activeTabText]}>
-              Import Sets
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'tracks' && styles.activeTab]}
-            onPress={() => setActiveTab('tracks')}
-          >
-            <Music size={18} color={activeTab === 'tracks' ? Colors.dark.primary : Colors.dark.textSecondary} />
-            <Text style={[styles.tabText, activeTab === 'tracks' && styles.activeTabText]}>
-              Import Tracks
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll}>
+          <View style={styles.tabs}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'sets' && styles.activeTab]}
+              onPress={() => setActiveTab('sets')}
+            >
+              <List size={16} color={activeTab === 'sets' ? Colors.dark.primary : Colors.dark.textSecondary} />
+              <Text style={[styles.tabText, activeTab === 'sets' && styles.activeTabText]}>
+                Sets
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'tracks' && styles.activeTab]}
+              onPress={() => setActiveTab('tracks')}
+            >
+              <Music size={16} color={activeTab === 'tracks' ? Colors.dark.primary : Colors.dark.textSecondary} />
+              <Text style={[styles.tabText, activeTab === 'tracks' && styles.activeTabText]}>
+                Tracks
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'soundcloud' && styles.activeTab]}
+              onPress={() => setActiveTab('soundcloud')}
+            >
+              <Cloud size={16} color={activeTab === 'soundcloud' ? Colors.dark.primary : Colors.dark.textSecondary} />
+              <Text style={[styles.tabText, activeTab === 'soundcloud' && styles.activeTabText]}>
+                SoundCloud
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === 'repository' && styles.activeTab]}
+              onPress={() => setActiveTab('repository')}
+            >
+              <Database size={16} color={activeTab === 'repository' ? Colors.dark.primary : Colors.dark.textSecondary} />
+              <Text style={[styles.tabText, activeTab === 'repository' && styles.activeTabText]}>
+                Repository ({trackRepository.length})
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {activeTab === 'sets' ? (
@@ -400,7 +567,7 @@ export default function DevToolsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-          ) : (
+          ) : activeTab === 'tracks' ? (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Bulk Import Tracks (CSV/TSV)</Text>
@@ -505,16 +672,172 @@ export default function DevToolsScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+          ) : activeTab === 'soundcloud' ? (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Search SoundCloud Tracks</Text>
+              <Text style={styles.helpText}>
+                Search for tracks on SoundCloud and add them to your repository
+              </Text>
+
+              <View style={styles.searchRow}>
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search tracks, artists..."
+                  placeholderTextColor={Colors.dark.textSecondary}
+                  value={soundcloudQuery}
+                  onChangeText={setSoundcloudQuery}
+                  onSubmitEditing={handleSoundCloudSearch}
+                  returnKeyType="search"
+                />
+                <TouchableOpacity
+                  style={[styles.searchButton, searchSoundCloud.isPending && styles.searchButtonDisabled]}
+                  onPress={handleSoundCloudSearch}
+                  disabled={searchSoundCloud.isPending}
+                >
+                  {searchSoundCloud.isPending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Search size={20} color="#fff" />
+                  )}
+                </TouchableOpacity>
+              </View>
+
+              {soundcloudResults.length > 0 && (
+                <>
+                  <View style={styles.resultsHeader}>
+                    <Text style={styles.resultsCount}>{soundcloudResults.length} results</Text>
+                    {selectedTracks.size > 0 && (
+                      <TouchableOpacity
+                        style={styles.addSelectedButton}
+                        onPress={handleAddSelectedToRepository}
+                      >
+                        <Plus size={16} color="#fff" />
+                        <Text style={styles.addSelectedText}>Add {selectedTracks.size} Selected</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+
+                  <ScrollView style={styles.resultsScroll} nestedScrollEnabled>
+                    {soundcloudResults.map((track, index) => (
+                      <TouchableOpacity
+                        key={`${track.url}-${index}`}
+                        style={[
+                          styles.trackResult,
+                          selectedTracks.has(track.url) && styles.trackResultSelected
+                        ]}
+                        onPress={() => toggleTrackSelection(track.url)}
+                        onLongPress={() => handleAddSingleTrack(track)}
+                      >
+                        {track.thumbnail ? (
+                          <Image source={{ uri: track.thumbnail }} style={styles.trackThumbnail} />
+                        ) : (
+                          <View style={[styles.trackThumbnail, styles.trackThumbnailPlaceholder]}>
+                            <Music size={20} color={Colors.dark.textSecondary} />
+                          </View>
+                        )}
+                        <View style={styles.trackInfo}>
+                          <Text style={styles.trackTitle} numberOfLines={1}>{track.title}</Text>
+                          <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
+                          <View style={styles.trackMeta}>
+                            {track.duration && (
+                              <Text style={styles.trackMetaText}>{formatDuration(track.duration)}</Text>
+                            )}
+                            {track.playCount !== undefined && (
+                              <Text style={styles.trackMetaText}>▶ {formatPlayCount(track.playCount)}</Text>
+                            )}
+                            {track.genre && (
+                              <Text style={styles.trackMetaText}>{track.genre}</Text>
+                            )}
+                          </View>
+                        </View>
+                        <View style={styles.trackActions}>
+                          {selectedTracks.has(track.url) ? (
+                            <View style={styles.selectedBadge}>
+                              <Check size={16} color="#fff" />
+                            </View>
+                          ) : (
+                            <TouchableOpacity
+                              style={styles.addButton}
+                              onPress={() => handleAddSingleTrack(track)}
+                            >
+                              <Plus size={18} color={Colors.dark.primary} />
+                            </TouchableOpacity>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              {!searchSoundCloud.isPending && soundcloudResults.length === 0 && soundcloudQuery && (
+                <View style={styles.emptyState}>
+                  <Cloud size={48} color={Colors.dark.textSecondary} />
+                  <Text style={styles.emptyStateText}>No results found</Text>
+                  <Text style={styles.emptyStateSubtext}>Try a different search term</Text>
+                </View>
+              )}
+            </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Track Repository</Text>
+              <Text style={styles.helpText}>
+                {trackRepository.length} tracks in your repository
+              </Text>
+
+              <TextInput
+                style={styles.repoSearchInput}
+                placeholder="Search repository..."
+                placeholderTextColor={Colors.dark.textSecondary}
+                value={repoSearchQuery}
+                onChangeText={setRepoSearchQuery}
+              />
+
+              {filteredRepository.length > 0 ? (
+                <ScrollView style={styles.repoList} nestedScrollEnabled>
+                  {filteredRepository.map((track) => (
+                    <View key={track.id} style={styles.repoTrack}>
+                      {track.coverUrl ? (
+                        <Image source={{ uri: track.coverUrl }} style={styles.repoThumbnail} />
+                      ) : (
+                        <View style={[styles.repoThumbnail, styles.trackThumbnailPlaceholder]}>
+                          <Music size={16} color={Colors.dark.textSecondary} />
+                        </View>
+                      )}
+                      <View style={styles.repoTrackInfo}>
+                        <Text style={styles.repoTrackTitle} numberOfLines={1}>{track.title}</Text>
+                        <Text style={styles.repoTrackArtist} numberOfLines={1}>{track.artist}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.deleteButton}
+                        onPress={() => handleRemoveFromRepository(track.id, track.title)}
+                      >
+                        <Trash2 size={16} color={Colors.dark.error} />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : (
+                <View style={styles.emptyState}>
+                  <Database size={48} color={Colors.dark.textSecondary} />
+                  <Text style={styles.emptyStateText}>
+                    {repoSearchQuery ? 'No matching tracks' : 'Repository is empty'}
+                  </Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    {repoSearchQuery ? 'Try a different search' : 'Add tracks from SoundCloud'}
+                  </Text>
+                </View>
+              )}
+            </View>
           )}
 
           <View style={styles.formatGuide}>
-            <Text style={styles.formatGuideTitle}>Format Tips</Text>
+            <Text style={styles.formatGuideTitle}>Tips</Text>
             <Text style={styles.formatGuideText}>
-              • Use commas or tabs to separate columns{'\n'}
-              • First row must be headers{'\n'}
-              • Timestamps: 4:32 (mm:ss) or 1:02:30 (h:mm:ss){'\n'}
-              • Dates: YYYY-MM-DD format{'\n'}
-              • Leave optional fields empty (not "null")
+              • Use CSV tab for bulk imports{'\n'}
+              • SoundCloud: Search and add tracks to repository{'\n'}
+              • Long press on SoundCloud result to quick-add{'\n'}
+              • Repository tracks can be used for track matching
             </Text>
           </View>
         </ScrollView>
@@ -553,20 +876,24 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
   },
+  tabsScroll: {
+    flexGrow: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
   tabs: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 8,
   },
   tab: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: 12,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 20,
     backgroundColor: Colors.dark.card,
   },
   activeTab: {
@@ -575,7 +902,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.primary,
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.dark.textSecondary,
   },
@@ -588,6 +915,7 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 24,
+    marginTop: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -599,6 +927,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.dark.text,
+    marginBottom: 4,
   },
   exampleButton: {
     flexDirection: 'row',
@@ -767,5 +1096,189 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.textSecondary,
     lineHeight: 22,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: Colors.dark.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: Colors.dark.text,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  searchButton: {
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 12,
+    width: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchButtonDisabled: {
+    backgroundColor: Colors.dark.primary + '60',
+  },
+  resultsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  resultsCount: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+  },
+  addSelectedButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  addSelectedText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#fff',
+  },
+  resultsScroll: {
+    maxHeight: 400,
+  },
+  trackResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.card,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
+  },
+  trackResultSelected: {
+    backgroundColor: Colors.dark.primary + '20',
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  trackThumbnail: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.border,
+  },
+  trackThumbnailPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  trackInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  trackTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  trackArtist: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+  },
+  trackMeta: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  trackMetaText: {
+    fontSize: 11,
+    color: Colors.dark.textSecondary + 'aa',
+  },
+  trackActions: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.dark.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyState: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    gap: 12,
+  },
+  emptyStateText: {
+    fontSize: 16,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  emptyStateSubtext: {
+    fontSize: 14,
+    color: Colors.dark.textSecondary,
+  },
+  repoSearchInput: {
+    backgroundColor: Colors.dark.card,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: Colors.dark.text,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    marginBottom: 16,
+  },
+  repoList: {
+    maxHeight: 400,
+  },
+  repoTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.card,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    gap: 10,
+  },
+  repoThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: Colors.dark.border,
+  },
+  repoTrackInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  repoTrackTitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  repoTrackArtist: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+  },
+  deleteButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.dark.error + '15',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

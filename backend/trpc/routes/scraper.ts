@@ -789,6 +789,74 @@ export const scraperRouter = createTRPCRouter({
       };
     }),
 
+  searchSoundCloudTracks: publicProcedure
+    .input(z.object({ query: z.string() }))
+    .mutation(async ({ input }) => {
+      console.log(`[Scraper] Searching SoundCloud for tracks: ${input.query}`);
+      
+      const results: Array<{ 
+        title: string; 
+        artist: string; 
+        url: string; 
+        thumbnail?: string;
+        duration?: number;
+        playCount?: number;
+        genre?: string;
+      }> = [];
+      
+      try {
+        const searchQuery = encodeURIComponent(input.query);
+        const searchUrl = `https://soundcloud.com/search/sounds?q=${searchQuery}`;
+        
+        const response = await fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          
+          const hydrationMatch = html.match(/window\.__sc_hydration\s*=\s*(\[[\s\S]*?\]);/);
+          if (hydrationMatch) {
+            try {
+              const hydrationData = JSON.parse(hydrationMatch[1]);
+              
+              for (const item of hydrationData) {
+                if (item.hydratable === 'search' && item.data?.collection) {
+                  for (const track of item.data.collection.slice(0, 20)) {
+                    if (track.title && track.user?.username && track.kind === 'track') {
+                      const durationSeconds = track.duration ? Math.floor(track.duration / 1000) : undefined;
+                      results.push({
+                        title: track.title,
+                        artist: track.user.username,
+                        url: track.permalink_url || `https://soundcloud.com/${track.user.permalink}/${track.permalink}`,
+                        thumbnail: track.artwork_url?.replace('-large', '-t500x500'),
+                        duration: durationSeconds,
+                        playCount: track.playback_count,
+                        genre: track.genre,
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('[Scraper] SoundCloud hydration parse error:', e);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Scraper] SoundCloud track search error:', error);
+      }
+      
+      console.log(`[Scraper] Found ${results.length} tracks from SoundCloud`);
+      return {
+        success: true,
+        results,
+      };
+    }),
+
   search1001Tracklists: publicProcedure
     .input(z.object({ query: z.string() }))
     .mutation(async ({ input }) => {
