@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,13 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Image,
 } from 'react-native';
-import { X, Music, User, Link2, Sparkles, AlertCircle, ExternalLink } from 'lucide-react-native';
+import { X, Music, User, Link2, Sparkles, AlertCircle, ExternalLink, Search, Check } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { Track, TrackLink } from '@/types';
+import { useSets } from '@/contexts/SetsContext';
 
 interface AddTrackModalProps {
   visible: boolean;
@@ -47,6 +49,7 @@ const PLATFORM_NAMES: Record<LinkPlatform, string> = {
 };
 
 export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }: AddTrackModalProps) {
+  const { searchTracksInRepository, trackRepository } = useSets();
   const [activeTab, setActiveTab] = useState<TabType>('link');
   const [title, setTitle] = useState('');
   const [artist, setArtist] = useState('');
@@ -56,6 +59,24 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
   const [isUnreleased, setIsUnreleased] = useState(false);
   const [isFetching, setIsFetching] = useState(false);
   const [fetchedFromLink, setFetchedFromLink] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedFromRepo, setSelectedFromRepo] = useState(false);
+
+  const trackSuggestions = useMemo(() => {
+    const query = title.trim() || artist.trim();
+    if (!query || query.length < 2 || selectedFromRepo) return [];
+    return searchTracksInRepository(query).slice(0, 6);
+  }, [title, artist, searchTracksInRepository, selectedFromRepo]);
+
+  const handleSelectTrack = (track: Track) => {
+    setTitle(track.title);
+    setArtist(track.artist);
+    setShowSuggestions(false);
+    setSelectedFromRepo(true);
+    if (track.trackLinks && track.trackLinks.length > 0) {
+      setTrackUrl(track.trackLinks[0].url);
+    }
+  };
 
   const detectPlatform = (url: string): LinkPlatform => {
     if (url.includes('spotify.com') || url.includes('open.spotify')) return 'spotify';
@@ -148,6 +169,8 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
     setIsUnreleased(false);
     setFetchedFromLink(false);
     setActiveTab('link');
+    setShowSuggestions(false);
+    setSelectedFromRepo(false);
   };
 
   const handleClose = () => {
@@ -320,14 +343,22 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
                 </Pressable>
                 {isUnreleased && (
                   <Text style={styles.unreleasedHint}>
-                    This track hasn't been officially released yet
+                    This track has not been officially released yet
                   </Text>
                 )}
               </View>
             )}
 
             <View style={styles.inputGroup}>
-              <Text style={styles.label}>Track Title</Text>
+              <View style={styles.labelRow}>
+                <Text style={styles.label}>Track Title</Text>
+                {trackRepository.length > 0 && (
+                  <View style={styles.repoHint}>
+                    <Search size={10} color={Colors.dark.primary} />
+                    <Text style={styles.repoHintText}>{trackRepository.length} tracks in library</Text>
+                  </View>
+                )}
+              </View>
               <View style={styles.inputContainer}>
                 <Music size={18} color={Colors.dark.textMuted} />
                 <TextInput
@@ -335,9 +366,44 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
                   placeholder={isUnreleased ? "e.g. Unreleased ID" : "e.g. Strobe"}
                   placeholderTextColor={Colors.dark.textMuted}
                   value={title}
-                  onChangeText={setTitle}
+                  onChangeText={(text) => {
+                    setTitle(text);
+                    setSelectedFromRepo(false);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
                 />
               </View>
+              
+              {showSuggestions && trackSuggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  <View style={styles.suggestionsHeader}>
+                    <Search size={12} color={Colors.dark.textMuted} />
+                    <Text style={styles.suggestionsTitle}>From Track Library</Text>
+                  </View>
+                  {trackSuggestions.map((track) => (
+                    <Pressable
+                      key={track.id}
+                      style={styles.suggestionItem}
+                      onPress={() => handleSelectTrack(track)}
+                    >
+                      <Image 
+                        source={{ uri: track.coverUrl }} 
+                        style={styles.suggestionCover}
+                      />
+                      <View style={styles.suggestionInfo}>
+                        <Text style={styles.suggestionTitle} numberOfLines={1}>
+                          {track.title}
+                        </Text>
+                        <Text style={styles.suggestionArtist} numberOfLines={1}>
+                          {track.artist}
+                        </Text>
+                      </View>
+                      <Check size={16} color={Colors.dark.primary} style={styles.suggestionCheck} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -349,9 +415,20 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
                   placeholder={isUnreleased ? "e.g. Unknown / ID" : "e.g. deadmau5"}
                   placeholderTextColor={Colors.dark.textMuted}
                   value={artist}
-                  onChangeText={setArtist}
+                  onChangeText={(text) => {
+                    setArtist(text);
+                    setSelectedFromRepo(false);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
                 />
               </View>
+              {selectedFromRepo && (
+                <View style={styles.selectedBadge}>
+                  <Check size={12} color={Colors.dark.success} />
+                  <Text style={styles.selectedText}>Selected from library</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.infoBox}>
@@ -642,5 +719,90 @@ const styles = StyleSheet.create({
     color: Colors.dark.background,
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  labelRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 8,
+  },
+  repoHint: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  repoHintText: {
+    fontSize: 10,
+    color: Colors.dark.primary,
+    fontWeight: '500' as const,
+  },
+  suggestionsContainer: {
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 12,
+    marginTop: 8,
+    overflow: 'hidden' as const,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.2)',
+  },
+  suggestionsHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255, 107, 53, 0.05)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  suggestionsTitle: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase' as const,
+    letterSpacing: 0.5,
+  },
+  suggestionItem: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  suggestionCover: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: Colors.dark.surface,
+  },
+  suggestionInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  suggestionTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  suggestionArtist: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  suggestionCheck: {
+    opacity: 0.5,
+  },
+  selectedBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    marginTop: 8,
+  },
+  selectedText: {
+    fontSize: 12,
+    color: Colors.dark.success,
   },
 });
