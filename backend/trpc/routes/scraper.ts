@@ -1051,6 +1051,59 @@ function extractArtistFromTitle(title: string): { artist: string; cleanTitle: st
   return { artist: '', cleanTitle: title };
 }
 
+/**
+ * Validate that a Spotify track exists by checking the oEmbed API
+ */
+async function validateSpotifyTrack(trackId: string): Promise<boolean> {
+  try {
+    const oembedUrl = `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${trackId}`;
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; RorkSetList/1.0)',
+      },
+      signal: AbortSignal.timeout(5000), // 5s timeout
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    // oEmbed returns track info if it exists
+    return !!data && !!data.title;
+  } catch (error) {
+    console.warn(`[Validation] Spotify track ${trackId} validation failed:`, error instanceof Error ? error.message : 'Unknown error');
+    return false;
+  }
+}
+
+/**
+ * Validate that a YouTube video exists by checking if it's accessible
+ */
+async function validateYouTubeVideo(videoId: string): Promise<boolean> {
+  try {
+    // Use YouTube oEmbed API to check if video exists
+    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; RorkSetList/1.0)',
+      },
+      signal: AbortSignal.timeout(5000), // 5s timeout
+    });
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const data = await response.json();
+    // oEmbed returns video info if it exists
+    return !!data && !!data.title;
+  } catch (error) {
+    console.warn(`[Validation] YouTube video ${videoId} validation failed:`, error instanceof Error ? error.message : 'Unknown error');
+    return false;
+  }
+}
+
 /** Internal helper: identify track at a URL+timestamp via ACRCloud. No tab/playback needed. */
 async function identifyTrackFromUrlInternal(
   audioUrl: string,
@@ -1147,6 +1200,34 @@ async function identifyTrackFromUrlInternal(
       const externalMetadata = music.external_metadata || {};
       const spotifyId = externalMetadata.spotify?.track?.id;
       const youtubeId = externalMetadata.youtube?.vid;
+      
+      // Validate links by checking if they exist via API
+      const validatedLinks: { spotify?: string; youtube?: string; isrc?: string } = {};
+      
+      if (spotifyId) {
+        const spotifyUrl = `https://open.spotify.com/track/${spotifyId}`;
+        const isValid = await validateSpotifyTrack(spotifyId);
+        if (isValid) {
+          validatedLinks.spotify = spotifyUrl;
+        } else {
+          console.warn(`[ACRCloud] Spotify track ${spotifyId} not found or inaccessible`);
+        }
+      }
+      
+      if (youtubeId) {
+        const youtubeUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+        const isValid = await validateYouTubeVideo(youtubeId);
+        if (isValid) {
+          validatedLinks.youtube = youtubeUrl;
+        } else {
+          console.warn(`[ACRCloud] YouTube video ${youtubeId} not found or inaccessible`);
+        }
+      }
+      
+      if (music.external_ids?.isrc) {
+        validatedLinks.isrc = music.external_ids.isrc;
+      }
+      
       return {
         success: true,
         error: null,
@@ -1158,11 +1239,7 @@ async function identifyTrackFromUrlInternal(
           label: music.label,
           confidence: music.score ?? 100,
           duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
-          links: {
-            spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
-            youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
-            isrc: music.external_ids?.isrc,
-          },
+          links: validatedLinks,
         },
       };
     }
@@ -1635,125 +1712,11 @@ export const scraperRouter = createTRPCRouter({
       console.log(`[ACRCloud] Identifying track from URL: ${input.audioUrl}`);
       console.log(`[ACRCloud] Start: ${input.startSeconds || 0}s, Duration: ${input.durationSeconds || 10}s`);
       
-      const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
-      const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
-      const host = process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com';
-      
-      if (!accessKey || !accessSecret) {
-        console.error('[ACRCloud] Missing credentials');
-        return {
-          success: false,
-          error: 'ACRCloud credentials not configured',
-          result: null,
-        };
-      }
-      
-      try {
-        const httpMethod = 'POST';
-        const httpUri = '/v1/identify';
-        const dataType = 'url';
-        const signatureVersion = '1';
-        const timestamp = Math.floor(Date.now() / 1000).toString();
-        
-        const stringToSign = [
-          httpMethod,
-          httpUri,
-          accessKey,
-          dataType,
-          signatureVersion,
-          timestamp,
-        ].join('\n');
-        
-        const signature = crypto
-          .createHmac('sha1', accessSecret)
-          .update(stringToSign)
-          .digest('base64');
-        
-        const formData = new URLSearchParams();
-        formData.append('access_key', accessKey);
-        formData.append('url', input.audioUrl);
-        formData.append('timestamp', timestamp);
-        formData.append('signature', signature);
-        formData.append('data_type', dataType);
-        formData.append('signature_version', signatureVersion);
-        
-        if (input.startSeconds !== undefined) {
-          formData.append('start_time_seconds', input.startSeconds.toString());
-        }
-        if (input.durationSeconds !== undefined) {
-          formData.append('rec_length', input.durationSeconds.toString());
-        }
-        
-        console.log(`[ACRCloud] Sending URL identification request to ${host}`);
-        
-        const response = await fetch(`https://${host}${httpUri}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-          body: formData.toString(),
-        });
-        
-        const result = await response.json();
-        console.log('[ACRCloud] Response:', JSON.stringify(result, null, 2));
-        
-        if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
-          const music = result.metadata.music[0];
-          const artists = music.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
-          const title = music.title || 'Unknown Track';
-          const album = music.album?.name;
-          const releaseDate = music.release_date;
-          const label = music.label;
-          const externalIds = music.external_ids || {};
-          const externalMetadata = music.external_metadata || {};
-          
-          const spotifyId = externalMetadata.spotify?.track?.id;
-          const youtubeId = externalMetadata.youtube?.vid;
-          
-          console.log(`[ACRCloud] Identified: ${artists} - ${title}`);
-          
-          return {
-            success: true,
-            error: null,
-            result: {
-              title,
-              artist: artists,
-              album,
-              releaseDate,
-              label,
-              confidence: music.score || 100,
-              duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
-              links: {
-                spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
-                youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
-                isrc: externalIds.isrc,
-              },
-            },
-          };
-        }
-        
-        if (result.status?.code === 1001) {
-          console.log('[ACRCloud] No match found');
-          return {
-            success: true,
-            error: null,
-            result: null,
-          };
-        }
-        
-        console.error('[ACRCloud] API error:', result.status);
-        return {
-          success: false,
-          error: result.status?.msg || 'Unknown error from ACRCloud',
-          result: null,
-        };
-      } catch (error) {
-        console.error('[ACRCloud] Request error:', error);
-        return {
-          success: false,
-          error: error instanceof Error ? error.message : 'Failed to identify track',
-          result: null,
-        };
-      }
+      // Use the internal helper which handles SoundCloud/YouTube URL resolution
+      return await identifyTrackFromUrlInternal(
+        input.audioUrl,
+        input.startSeconds ?? 0,
+        input.durationSeconds ?? 15
+      );
     }),
 });
