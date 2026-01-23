@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -6,6 +6,7 @@ import { Bell, UserPlus, Play, ChevronRight, Music } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { useSets } from '@/contexts/SetsContext';
 
 interface Artist {
   id: string;
@@ -157,8 +158,103 @@ const feedItems: FeedItem[] = [
 
 export default function FeedScreen() {
   const router = useRouter();
+  const { sets } = useSets();
   const [refreshing, setRefreshing] = useState(false);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
+
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor(diff / 60000);
+
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
+  };
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  // Use real sets for feed items, sorted by date (newest first)
+  const realFeedItems = useMemo(() => {
+    return sets
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20)
+      .map(set => ({
+        id: set.id,
+        type: 'new_set' as const,
+        artist: {
+          id: set.artist,
+          name: set.artist,
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+          following: true,
+        },
+        set: {
+          id: set.id,
+          name: set.name,
+          venue: set.venue || '',
+          date: formatDate(set.date),
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+          duration: set.totalDuration ? formatDuration(set.totalDuration) : '',
+          tracksIdentified: set.tracksIdentified || set.tracks.length,
+        },
+        timestamp: set.date,
+      }));
+  }, [sets]);
+
+  const formatDate = (date: Date) => {
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const days = Math.floor(diff / 86400000);
+    const hours = Math.floor(diff / 3600000);
+    const minutes = Math.floor(diff / 60000);
+
+    if (days > 0) return `${days}d ago`;
+    if (hours > 0) return `${hours}h ago`;
+    if (minutes > 0) return `${minutes}m ago`;
+    return 'Just now';
+  };
+
+  const formatDuration = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  };
+
+  // Use real sets for feed items, sorted by date (newest first)
+  const realFeedItems = useMemo(() => {
+    return sets
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 20)
+      .map(set => ({
+        id: set.id,
+        type: 'new_set' as const,
+        artist: {
+          id: set.artist,
+          name: set.artist,
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+          following: true,
+        },
+        set: {
+          id: set.id,
+          name: set.name,
+          venue: set.venue || '',
+          date: formatDate(set.date),
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+          duration: set.totalDuration ? formatDuration(set.totalDuration) : '',
+          tracksIdentified: set.tracksIdentified || set.tracks.length,
+        },
+        timestamp: set.date,
+      }));
+  }, [sets]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -263,7 +359,8 @@ export default function FeedScreen() {
 
           <View style={styles.feedSection}>
             <Text style={styles.feedTitle}>Recent Activity</Text>
-            {feedItems.map((item) => (
+            {realFeedItems.length > 0 ? (
+              realFeedItems.map((item) => (
               <Pressable 
                 key={item.id}
                 style={styles.feedCard}

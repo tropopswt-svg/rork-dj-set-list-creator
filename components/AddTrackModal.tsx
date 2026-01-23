@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -61,11 +61,19 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
   const [fetchedFromLink, setFetchedFromLink] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedFromRepo, setSelectedFromRepo] = useState(false);
+  const [trackSuggestions, setTrackSuggestions] = useState<Track[]>([]);
 
-  const trackSuggestions = useMemo(() => {
-    const query = title.trim() || artist.trim();
-    if (!query || query.length < 2 || selectedFromRepo) return [];
-    return searchTracksInRepository(query).slice(0, 6);
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      const query = title.trim() || artist.trim();
+      if (!query || query.length < 2 || selectedFromRepo) {
+        setTrackSuggestions([]);
+        return;
+      }
+      const results = await searchTracksInRepository(query);
+      setTrackSuggestions(results.slice(0, 6));
+    };
+    loadSuggestions();
   }, [title, artist, searchTracksInRepository, selectedFromRepo]);
 
   const handleSelectTrack = (track: Track) => {

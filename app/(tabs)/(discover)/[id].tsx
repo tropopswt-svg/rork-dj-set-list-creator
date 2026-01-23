@@ -32,7 +32,6 @@ import TrackGapCard from '@/components/TrackGapCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ContributorModal from '@/components/ContributorModal';
 import IdentifyTrackModal from '@/components/IdentifyTrackModal';
-import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink } from '@/types';
 import { useSets } from '@/contexts/SetsContext';
 import { trpc } from '@/lib/trpc';
@@ -97,12 +96,8 @@ export default function SetDetailScreen() {
       }
       return contextSet;
     }
-    const found = mockSetLists.find(s => s.id === id);
-    if (found && tracks.length === 0) {
-      setTracks(found.tracks);
-    }
-    return found;
-  }, [id, getSetById]);
+    return undefined;
+  }, [id, getSetById, tracks.length]);
 
   if (!setList) {
     return (
@@ -191,6 +186,9 @@ export default function SetDetailScreen() {
 
   const verifiedCount = sortedTracks.filter(t => t.verified).length;
   const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
+  const tracksIdentified = sortedTracks.length;
+  // Use stored commentsScraped if available, otherwise 0 (will be updated when scraping happens)
+  const commentsScraped = setList?.commentsScraped || 0;
 
   const formatTotalDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -421,7 +419,7 @@ export default function SetDetailScreen() {
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.15)' }]}>
                 <Sparkles size={18} color={Colors.dark.primary} />
               </View>
-              <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
+              <Text style={styles.statValue}>{tracksIdentified}</Text>
               <Text style={styles.statLabel}>Identified</Text>
             </View>
             
@@ -445,7 +443,7 @@ export default function SetDetailScreen() {
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.15)' }]}>
                 <MessageSquare size={18} color="#FB923C" />
               </View>
-              <Text style={styles.statValue}>{setList.commentsScraped || 0}</Text>
+              <Text style={styles.statValue}>{commentsScraped}</Text>
               <Text style={styles.statLabel}>Scraped</Text>
             </View>
           </View>
@@ -454,7 +452,11 @@ export default function SetDetailScreen() {
             <View style={styles.aiInfoBanner}>
               <Sparkles size={16} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                Tracklist built from {setList.commentsScraped?.toLocaleString()} comments & 1001Tracklists
+                {commentsScraped > 0 ? (
+                  <>Tracklist built from {commentsScraped.toLocaleString()} comments & 1001Tracklists</>
+                ) : (
+                  <>Tracklist with {tracksIdentified} identified tracks</>
+                )}
               </Text>
             </View>
           )}

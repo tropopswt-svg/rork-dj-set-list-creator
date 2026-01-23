@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { SetList, Artist, Track } from '@/types';
-import { mockSetLists } from '@/mocks/tracks';
-import { mockArtists, searchArtists, findArtistByName } from '@/mocks/artists';
+import { trackLibrary } from '@/lib/TrackLibrary';
 
 const SETS_STORAGE_KEY = 'saved_sets';
 const ARTISTS_STORAGE_KEY = 'custom_artists';
@@ -24,7 +23,7 @@ function normalizeSetKey(artist: string, name: string): string {
 }
 
 export const [SetsProvider, useSets] = createContextHook(() => {
-  const [sets, setSets] = useState<SetList[]>(mockSetLists);
+  const [sets, setSets] = useState<SetList[]>([]);
   const [savedSetIds, setSavedSetIds] = useState<Set<string>>(new Set());
   const [customArtists, setCustomArtists] = useState<Artist[]>([]);
   const [submittedSets, setSubmittedSets] = useState<SetList[]>([]);
@@ -37,11 +36,25 @@ export const [SetsProvider, useSets] = createContextHook(() => {
 
   const loadSavedData = async () => {
     try {
-      const [savedSetsJson, customArtistsJson, submittedSetsJson, trackRepoJson] = await Promise.all([
+      // Load TrackLibrary first
+      await trackLibrary.load();
+      
+      // Migrate old track repository to new library if needed
+      const trackRepoJson = await AsyncStorage.getItem(TRACK_REPOSITORY_KEY);
+      if (trackRepoJson) {
+        const oldTracks = JSON.parse(trackRepoJson) as Track[];
+        if (oldTracks.length > 0) {
+          console.log('[SetsContext] Migrating', oldTracks.length, 'tracks to new library...');
+          const result = await trackLibrary.bulkAddTracks(oldTracks);
+          console.log('[SetsContext] Migration complete:', result.success, 'added,', result.failed, 'duplicates');
+          // Keep old storage for now, can remove later
+        }
+      }
+
+      const [savedSetsJson, customArtistsJson, submittedSetsJson] = await Promise.all([
         AsyncStorage.getItem(SETS_STORAGE_KEY),
         AsyncStorage.getItem(ARTISTS_STORAGE_KEY),
         AsyncStorage.getItem(SUBMITTED_SETS_KEY),
-        AsyncStorage.getItem(TRACK_REPOSITORY_KEY),
       ]);
 
       if (savedSetsJson) {
@@ -56,19 +69,23 @@ export const [SetsProvider, useSets] = createContextHook(() => {
 
       if (submittedSetsJson) {
         const submitted = JSON.parse(submittedSetsJson) as SetList[];
-        setSubmittedSets(submitted);
-        setSets(prev => {
-          const existingIds = new Set(prev.map(s => s.id));
-          const newSets = submitted.filter(s => !existingIds.has(s.id));
-          return [...newSets, ...prev];
-        });
+        // Convert date strings to Date objects
+        const parsedSets = submitted.map(set => ({
+          ...set,
+          date: new Date(set.date),
+          tracks: set.tracks.map(track => ({
+            ...track,
+            addedAt: new Date(track.addedAt),
+          })),
+        }));
+        setSubmittedSets(parsedSets);
+        setSets(parsedSets);
       }
 
-      if (trackRepoJson) {
-        const tracks = JSON.parse(trackRepoJson) as Track[];
-        setTrackRepository(tracks);
-        console.log('[SetsContext] Loaded', tracks.length, 'tracks from repository');
-      }
+      // Load tracks from new library
+      const libraryTracks = await trackLibrary.getAllTracks();
+      setTrackRepository(libraryTracks);
+      console.log('[SetsContext] Loaded', libraryTracks.length, 'tracks from library');
     } catch (error) {
       console.error('[SetsContext] Error loading saved data:', error);
     } finally {
@@ -79,7 +96,6 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   const allArtists = useMemo(() => {
     const artistMap = new Map<string, Artist>();
     
-    mockArtists.forEach(a => artistMap.set(a.name.toLowerCase(), a));
     customArtists.forEach(a => artistMap.set(a.name.toLowerCase(), a));
     
     sets.forEach(set => {
@@ -92,6 +108,9 @@ export const [SetsProvider, useSets] = createContextHook(() => {
           genres: [],
           setsCount: 1,
         });
+      } else {
+        const existing = artistMap.get(key)!;
+        artistMap.set(key, { ...existing, setsCount: (existing.setsCount || 0) + 1 });
       }
     });
 
@@ -300,67 +319,37 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     return { success, failed };
   }, [addSet]);
 
-  const addTrackToRepository = useCallback((track: Track): { success: boolean; duplicate?: Track } => {
-    const normalizedKey = `${track.artist.toLowerCase().trim()}-${track.title.toLowerCase().trim()}`;
-    const existing = trackRepository.find(t => 
-      `${t.artist.toLowerCase().trim()}-${t.title.toLowerCase().trim()}` === normalizedKey
-    );
-
-    if (existing) {
-      console.log('[SetsContext] Track already in repository:', track.title);
-      return { success: false, duplicate: existing };
+  const addTrackToRepository = useCallback(async (track: Track): Promise<{ success: boolean; duplicate?: Track }> => {
+    const result = await trackLibrary.addTrack(track);
+    if (result.success) {
+      // Update local state
+      const libraryTracks = await trackLibrary.getAllTracks();
+      setTrackRepository(libraryTracks);
     }
+    return result;
+  }, []);
 
-    const trackWithId = { ...track, id: track.id || `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` };
-    setTrackRepository(prev => {
-      const updated = [trackWithId, ...prev];
-      AsyncStorage.setItem(TRACK_REPOSITORY_KEY, JSON.stringify(updated));
-      return updated;
-    });
+  const bulkAddTracksToRepository = useCallback(async (tracks: Track[]): Promise<{ success: number; failed: number }> => {
+    const result = await trackLibrary.bulkAddTracks(tracks);
+    // Update local state
+    const libraryTracks = await trackLibrary.getAllTracks();
+    setTrackRepository(libraryTracks);
+    console.log('[SetsContext] Bulk track import complete:', result.success, 'success,', result.failed, 'duplicates');
+    return { success: result.success, failed: result.failed };
+  }, []);
 
-    console.log('[SetsContext] Track added to repository:', track.title);
-    return { success: true };
-  }, [trackRepository]);
+  const getTrackFromRepository = useCallback(async (artist: string, title: string): Promise<Track | undefined> => {
+    return await trackLibrary.getTrackByArtistTitle(artist, title);
+  }, []);
 
-  const bulkAddTracksToRepository = useCallback((tracks: Track[]): { success: number; failed: number } => {
-    let success = 0;
-    let failed = 0;
+  const searchTracksInRepository = useCallback(async (query: string): Promise<Track[]> => {
+    return await trackLibrary.searchTracks(query, 50);
+  }, []);
 
-    tracks.forEach(track => {
-      const result = addTrackToRepository(track);
-      if (result.success) {
-        success++;
-      } else {
-        failed++;
-      }
-    });
-
-    console.log('[SetsContext] Bulk track import complete:', success, 'success,', failed, 'duplicates');
-    return { success, failed };
-  }, [addTrackToRepository]);
-
-  const getTrackFromRepository = useCallback((artist: string, title: string): Track | undefined => {
-    const normalizedKey = `${artist.toLowerCase().trim()}-${title.toLowerCase().trim()}`;
-    return trackRepository.find(t => 
-      `${t.artist.toLowerCase().trim()}-${t.title.toLowerCase().trim()}` === normalizedKey
-    );
-  }, [trackRepository]);
-
-  const searchTracksInRepository = useCallback((query: string): Track[] => {
-    if (!query.trim()) return trackRepository.slice(0, 20);
-    const normalizedQuery = query.toLowerCase().trim();
-    return trackRepository.filter(t => 
-      t.title.toLowerCase().includes(normalizedQuery) ||
-      t.artist.toLowerCase().includes(normalizedQuery)
-    ).slice(0, 50);
-  }, [trackRepository]);
-
-  const removeTrackFromRepository = useCallback((trackId: string) => {
-    setTrackRepository(prev => {
-      const updated = prev.filter(t => t.id !== trackId);
-      AsyncStorage.setItem(TRACK_REPOSITORY_KEY, JSON.stringify(updated));
-      return updated;
-    });
+  const removeTrackFromRepository = useCallback(async (trackId: string) => {
+    await trackLibrary.removeTrack(trackId);
+    const libraryTracks = await trackLibrary.getAllTracks();
+    setTrackRepository(libraryTracks);
     console.log('[SetsContext] Track removed from repository:', trackId);
   }, []);
 
