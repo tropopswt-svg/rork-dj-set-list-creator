@@ -31,6 +31,7 @@ import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 import { useSets } from '@/contexts/SetsContext';
 import { Artist, SetList } from '@/types';
+import IdentifyTrackModal from '@/components/IdentifyTrackModal';
 
 interface PendingTrack {
   id: string;
@@ -87,6 +88,115 @@ export default function SubmitScreen() {
   const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
   const [artistSuggestions, setArtistSuggestions] = useState<Artist[]>([]);
   const [duplicateWarning, setDuplicateWarning] = useState<SetList | null>(null);
+  
+  const [artistScrapeName, setArtistScrapeName] = useState('');
+  const [isScrapingArtist, setIsScrapingArtist] = useState(false);
+  const [scrapeProgress, setScrapeProgress] = useState<{ current: number; total: number } | null>(null);
+  
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
+  const [identifyTimestamp, setIdentifyTimestamp] = useState(0);
+
+  const scrapeAllArtistSetsMutation = trpc.scraper.scrapeAllArtistSets.useMutation({
+    onSuccess: (result) => {
+      setIsScrapingArtist(false);
+      setScrapeProgress(null);
+      
+      if (result.success && result.sets && result.sets.length > 0) {
+        let added = 0;
+        let duplicates = 0;
+        
+        result.sets.forEach((scrapedSet) => {
+          const sourceLinks: SetList['sourceLinks'] = [];
+          
+          // Add 1001tracklists URL first if available
+          if (scrapedSet.url) {
+            sourceLinks.push({ platform: '1001tracklists', url: scrapedSet.url });
+          }
+          
+          // Add audio links
+          if (scrapedSet.links?.youtube) {
+            sourceLinks.push({ platform: 'youtube', url: scrapedSet.links.youtube });
+          }
+          if (scrapedSet.links?.soundcloud) {
+            sourceLinks.push({ platform: 'soundcloud', url: scrapedSet.links.soundcloud });
+          }
+          if (scrapedSet.links?.mixcloud) {
+            sourceLinks.push({ platform: 'mixcloud', url: scrapedSet.links.mixcloud });
+          }
+          
+          // If no links at all, use a placeholder
+          if (sourceLinks.length === 0) {
+            sourceLinks.push({ platform: '1001tracklists', url: 'https://www.1001tracklists.com' });
+          }
+          
+          const parseTimestamp = (timestamp: string): number => {
+            const parts = timestamp.split(':').map(Number);
+            if (parts.length === 3) {
+              return parts[0] * 3600 + parts[1] * 60 + parts[2];
+            } else if (parts.length === 2) {
+              return parts[0] * 60 + parts[1];
+            }
+            return 0;
+          };
+          
+          const newSet: SetList = {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            name: scrapedSet.title || 'Untitled Set',
+            artist: scrapedSet.artist || result.artist || 'Unknown Artist',
+            venue: scrapedSet.venue,
+            date: scrapedSet.date ? new Date(scrapedSet.date) : new Date(),
+            tracks: scrapedSet.tracks.map((t, i) => ({
+              id: `track-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+              title: t.title,
+              artist: t.artist,
+              timestamp: parseTimestamp(t.timestamp),
+              duration: 0,
+              coverUrl: scrapedSet.thumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+              addedAt: new Date(),
+              source: 'link' as const,
+              verified: false,
+            })),
+            coverUrl: scrapedSet.thumbnail,
+            sourceLinks,
+            totalDuration: scrapedSet.duration ? parseTimestamp(scrapedSet.duration) * 1000 : undefined,
+            aiProcessed: false,
+            commentsScraped: 0,
+            tracksIdentified: scrapedSet.tracks.length,
+            plays: 0,
+          };
+          
+          const addResult = addSet(newSet);
+          if (addResult.success) {
+            added++;
+          } else {
+            duplicates++;
+          }
+        });
+        
+        Alert.alert(
+          'Import Complete',
+          `Successfully added ${added} set(s) with ${result.totalTracks} total tracks.${duplicates > 0 ? ` ${duplicates} duplicate(s) skipped.` : ''}`,
+          [{ text: 'OK' }]
+        );
+        
+        setArtistScrapeName('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert(
+          'No Sets Found',
+          result.error || 'Could not find any sets for this artist.',
+          [{ text: 'OK' }]
+        );
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    onError: (error) => {
+      setIsScrapingArtist(false);
+      setScrapeProgress(null);
+      Alert.alert('Error', error.message || 'Failed to scrape artist sets');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
 
   const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
     onSuccess: (result) => {
@@ -250,6 +360,55 @@ export default function SubmitScreen() {
 
   const handleRemoveTrack = (id: string) => {
     setTracks(tracks.filter((t) => t.id !== id));
+  };
+
+  const handleTrackIdentified = (identifiedTrack: {
+    title: string;
+    artist: string;
+    album?: string;
+    releaseDate?: string;
+    label?: string;
+    confidence: number;
+    duration?: number;
+    links: {
+      spotify?: string;
+      youtube?: string;
+      isrc?: string;
+    };
+  }, timestamp: number) => {
+    const timestampStr = formatTimestamp(timestamp);
+    
+    const trackKey = `${identifiedTrack.artist.toLowerCase().trim()}-${identifiedTrack.title.toLowerCase().trim()}`;
+    const isDuplicate = tracks.some(t => 
+      `${t.artist.toLowerCase()}-${t.title.toLowerCase()}` === trackKey
+    );
+
+    if (isDuplicate) {
+      Alert.alert('Duplicate Track', 'This track is already in the list');
+      return;
+    }
+
+    const newTrack: PendingTrack = {
+      id: Date.now().toString(),
+      title: identifiedTrack.title,
+      artist: identifiedTrack.artist,
+      timestamp: timestampStr,
+      confidence: identifiedTrack.confidence >= 80 ? 'high' : identifiedTrack.confidence >= 60 ? 'medium' : 'low',
+      source: 'ai-identification',
+      durationSeconds: identifiedTrack.duration,
+      coverUrl: undefined,
+      sourceUrl: identifiedTrack.links.spotify || identifiedTrack.links.youtube,
+    };
+
+    setTracks([...tracks, newTrack]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  const getAudioUrl = (): string | undefined => {
+    if (links.youtube) return links.youtube;
+    if (links.soundcloud) return links.soundcloud;
+    if (links.mixcloud) return links.mixcloud;
+    return undefined;
   };
 
   const handleSubmit = () => {
@@ -760,6 +919,56 @@ export default function SubmitScreen() {
           </Text>
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Scrape All Artist Sets</Text>
+          <Text style={[styles.helpText, { marginBottom: 12 }]}>
+            Automatically find and import all sets from an artist on 1001tracklists
+          </Text>
+          <View style={styles.urlInputRow}>
+            <View style={styles.urlInputWrapper}>
+              <User size={18} color={Colors.dark.textMuted} />
+              <TextInput
+                style={styles.urlInput}
+                placeholder="Enter artist name (e.g., Max Dean)"
+                placeholderTextColor={Colors.dark.textMuted}
+                value={artistScrapeName}
+                onChangeText={setArtistScrapeName}
+                autoCapitalize="words"
+                editable={!isScrapingArtist}
+              />
+            </View>
+            <Pressable
+              style={[styles.importButton, (isScrapingArtist || !artistScrapeName.trim()) && styles.importButtonDisabled]}
+              onPress={() => {
+                if (!artistScrapeName.trim()) return;
+                setIsScrapingArtist(true);
+                setScrapeProgress({ current: 0, total: 0 });
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                scrapeAllArtistSetsMutation.mutate({
+                  artistName: artistScrapeName.trim(),
+                  maxSets: 20,
+                  delayMs: 1000,
+                });
+              }}
+              disabled={isScrapingArtist || !artistScrapeName.trim()}
+            >
+              {isScrapingArtist ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Sparkles size={16} color="#fff" />
+              )}
+              <Text style={styles.importButtonText}>
+                {isScrapingArtist ? 'Scraping...' : 'Scrape All'}
+              </Text>
+            </Pressable>
+          </View>
+          {scrapeProgress && scrapeProgress.total > 0 && (
+            <Text style={styles.helpText}>
+              Scraping set {scrapeProgress.current} of {scrapeProgress.total}...
+            </Text>
+          )}
+        </View>
+
         {duplicateWarning && (
           <View style={styles.duplicateWarning}>
             <AlertTriangle size={18} color={Colors.dark.warning} />
@@ -884,13 +1093,27 @@ export default function SubmitScreen() {
                 {tracks.length} track{tracks.length !== 1 ? 's' : ''} added
               </Text>
             </View>
-            <Pressable
-              style={styles.addTrackButton}
-              onPress={() => setIsAddingTrack(true)}
-            >
-              <Plus size={18} color={Colors.dark.primary} />
-              <Text style={styles.addTrackText}>Add Track</Text>
-            </Pressable>
+            <View style={styles.trackActionsRow}>
+              {getAudioUrl() && (
+                <Pressable
+                  style={styles.identifyButton}
+                  onPress={() => {
+                    setIdentifyTimestamp(0);
+                    setShowIdentifyModal(true);
+                  }}
+                >
+                  <Sparkles size={16} color={Colors.dark.primary} />
+                  <Text style={styles.identifyButtonText}>Identify</Text>
+                </Pressable>
+              )}
+              <Pressable
+                style={styles.addTrackButton}
+                onPress={() => setIsAddingTrack(true)}
+              >
+                <Plus size={18} color={Colors.dark.primary} />
+                <Text style={styles.addTrackText}>Add Track</Text>
+              </Pressable>
+            </View>
           </View>
 
           {isAddingTrack && (
@@ -984,7 +1207,18 @@ export default function SubmitScreen() {
               <Music size={32} color={Colors.dark.textMuted} />
               <Text style={styles.emptyText}>No tracks added yet</Text>
               <Text style={styles.emptySubtext}>
-                Add tracks manually or import from URL
+                {getAudioUrl() 
+                  ? 'Add tracks manually, import from URL, or use AI identification'
+                  : 'Import a set URL first, then you can identify tracks at specific timestamps'}
+              </Text>
+            </View>
+          )}
+          
+          {getAudioUrl() && tracks.length > 0 && (
+            <View style={styles.identifyHint}>
+              <Sparkles size={14} color={Colors.dark.primary} />
+              <Text style={styles.identifyHintText}>
+                Tip: Use "Identify" to find tracks at specific timestamps
               </Text>
             </View>
           )}
@@ -1066,6 +1300,15 @@ export default function SubmitScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
+
+      <IdentifyTrackModal
+        visible={showIdentifyModal}
+        onClose={() => setShowIdentifyModal(false)}
+        onIdentified={handleTrackIdentified}
+        timestamp={identifyTimestamp}
+        setTitle={setName || undefined}
+        audioUrl={getAudioUrl()}
+      />
     </View>
   );
 }
@@ -1258,6 +1501,27 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
   },
+  trackActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  identifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.2)',
+  },
+  identifyButtonText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+  },
   addTrackButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1381,6 +1645,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.textMuted,
     marginTop: 4,
+    textAlign: 'center',
+    paddingHorizontal: 20,
+  },
+  identifyHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(0, 212, 170, 0.08)',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.15)',
+  },
+  identifyHintText: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    flex: 1,
   },
   pointsInfo: {
     flexDirection: 'row',

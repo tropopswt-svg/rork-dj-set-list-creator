@@ -88,6 +88,34 @@ export default function SetDetailScreen() {
       console.error('[SetDetail] Gap analysis error:', error);
     },
   });
+
+  const scanSetFromUrlMutation = trpc.scraper.scanSetFromUrl.useMutation({
+    onSuccess: (data) => {
+      if (data.success && data.identified && data.identified.length > 0) {
+        const newTracks: Track[] = data.identified.map((t) => ({
+          id: `scan-${Date.now()}-${t.timestamp}`,
+          title: t.title,
+          artist: t.artist,
+          album: t.album,
+          duration: t.duration ?? 0,
+          coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+          addedAt: new Date(),
+          source: 'ai',
+          timestamp: t.timestamp,
+          contributedBy: 'ACRCloud',
+          verified: true,
+          trackLinks: t.links.spotify ? [{ platform: 'spotify', url: t.links.spotify }] : undefined,
+        }));
+        setTracks((prev) => [...prev, ...newTracks]);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => runGapAnalysis(), 300);
+      }
+    },
+    onError: (err) => {
+      console.error('[SetDetail] Scan set error:', err);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
   
   const setList = useMemo(() => {
     const contextSet = getSetById(id || '');
@@ -306,13 +334,11 @@ export default function SetDetailScreen() {
 
   const getAudioUrl = (): string | undefined => {
     const youtubeLink = setList?.sourceLinks.find(l => l.platform === 'youtube');
-    if (youtubeLink) {
-      return youtubeLink.url;
-    }
+    if (youtubeLink) return youtubeLink.url;
     const soundcloudLink = setList?.sourceLinks.find(l => l.platform === 'soundcloud');
-    if (soundcloudLink) {
-      return soundcloudLink.url;
-    }
+    if (soundcloudLink) return soundcloudLink.url;
+    const mixcloudLink = setList?.sourceLinks.find(l => l.platform === 'mixcloud');
+    if (mixcloudLink) return mixcloudLink.url;
     return undefined;
   };
 
