@@ -554,16 +554,137 @@ async function search1001Tracklists(query: string): Promise<z.infer<typeof Scrap
   return tracks;
 }
 
-async function fetch1001TracklistDirect(url: string): Promise<z.infer<typeof ScrapedTrack>[]> {
+interface Fetch1001Result {
+  tracks: z.infer<typeof ScrapedTrack>[];
+  title?: string;
+  artist?: string;
+  venue?: string;
+  date?: string;
+  thumbnail?: string;
+  duration?: string;
+  links: {
+    youtube?: string;
+    soundcloud?: string;
+    mixcloud?: string;
+    spotify?: string;
+    appleMusic?: string;
+  };
+}
+
+function extract1001AudioLinks(html: string): Fetch1001Result['links'] {
+  const links: Fetch1001Result['links'] = {};
+  
+  const youtubePatterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/gi,
+    /data-yt(?:video)?id=["']([a-zA-Z0-9_-]{11})["']/gi,
+    /ytVideoId["']?\s*[:=]\s*["']([a-zA-Z0-9_-]{11})["']/gi,
+  ];
+  
+  for (const pattern of youtubePatterns) {
+    const match = pattern.exec(html);
+    if (match && match[1]) {
+      links.youtube = `https://www.youtube.com/watch?v=${match[1]}`;
+      console.log(`[Scraper] Found YouTube link: ${links.youtube}`);
+      break;
+    }
+  }
+  
+  const soundcloudPatterns = [
+    /href=["'](https?:\/\/soundcloud\.com\/[^"'\s]+)["']/gi,
+    /data-sc-url=["']([^"']+)["']/gi,
+    /soundcloud\.com\/([a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+)/gi,
+  ];
+  
+  for (const pattern of soundcloudPatterns) {
+    const match = pattern.exec(html);
+    if (match) {
+      const scUrl = match[1].startsWith('http') ? match[1] : `https://soundcloud.com/${match[1]}`;
+      if (!scUrl.includes('/search') && !scUrl.includes('/explore')) {
+        links.soundcloud = scUrl.split('?')[0];
+        console.log(`[Scraper] Found SoundCloud link: ${links.soundcloud}`);
+        break;
+      }
+    }
+  }
+  
+  const mixcloudPatterns = [
+    /href=["'](https?:\/\/(?:www\.)?mixcloud\.com\/[^"'\s]+)["']/gi,
+    /mixcloud\.com\/([a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+)/gi,
+  ];
+  
+  for (const pattern of mixcloudPatterns) {
+    const match = pattern.exec(html);
+    if (match) {
+      const mcUrl = match[1].startsWith('http') ? match[1] : `https://www.mixcloud.com/${match[1]}`;
+      if (!mcUrl.includes('/search') && !mcUrl.includes('/explore')) {
+        links.mixcloud = mcUrl.split('?')[0];
+        console.log(`[Scraper] Found Mixcloud link: ${links.mixcloud}`);
+        break;
+      }
+    }
+  }
+  
+  const spotifyMatch = html.match(/href=["'](https?:\/\/open\.spotify\.com\/[^"'\s]+)["']/i);
+  if (spotifyMatch) {
+    links.spotify = spotifyMatch[1].split('?')[0];
+    console.log(`[Scraper] Found Spotify link: ${links.spotify}`);
+  }
+  
+  const appleMusicMatch = html.match(/href=["'](https?:\/\/music\.apple\.com\/[^"'\s]+)["']/i);
+  if (appleMusicMatch) {
+    links.appleMusic = appleMusicMatch[1].split('?')[0];
+    console.log(`[Scraper] Found Apple Music link: ${links.appleMusic}`);
+  }
+  
+  const iframePatterns = [
+    /<iframe[^>]*src=["']([^"']*youtube[^"']*)["']/gi,
+    /<iframe[^>]*src=["']([^"']*soundcloud[^"']*)["']/gi,
+    /<iframe[^>]*src=["']([^"']*mixcloud[^"']*)["']/gi,
+  ];
+  
+  for (const pattern of iframePatterns) {
+    const match = pattern.exec(html);
+    if (match && match[1]) {
+      const iframeSrc = match[1];
+      if (iframeSrc.includes('youtube') && !links.youtube) {
+        const ytMatch = iframeSrc.match(/embed\/([a-zA-Z0-9_-]{11})/);
+        if (ytMatch) {
+          links.youtube = `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+          console.log(`[Scraper] Found YouTube from iframe: ${links.youtube}`);
+        }
+      } else if (iframeSrc.includes('soundcloud') && !links.soundcloud) {
+        const scUrlMatch = iframeSrc.match(/url=([^&]+)/);
+        if (scUrlMatch) {
+          links.soundcloud = decodeURIComponent(scUrlMatch[1]);
+          console.log(`[Scraper] Found SoundCloud from iframe: ${links.soundcloud}`);
+        }
+      } else if (iframeSrc.includes('mixcloud') && !links.mixcloud) {
+        const mcMatch = iframeSrc.match(/feed=([^&]+)/);
+        if (mcMatch) {
+          links.mixcloud = decodeURIComponent(mcMatch[1]);
+          console.log(`[Scraper] Found Mixcloud from iframe: ${links.mixcloud}`);
+        }
+      }
+    }
+  }
+  
+  return links;
+}
+
+async function fetch1001TracklistDirect(url: string): Promise<Fetch1001Result> {
   console.log(`[Scraper] Fetching 1001tracklists directly: ${url}`);
   
-  const tracks: z.infer<typeof ScrapedTrack>[] = [];
+  const result: Fetch1001Result = {
+    tracks: [],
+    links: {},
+  };
   
   try {
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
     
@@ -571,15 +692,89 @@ async function fetch1001TracklistDirect(url: string): Promise<z.infer<typeof Scr
       const html = await response.text();
       console.log(`[Scraper] 1001tracklists page length: ${html.length}`);
       
+      result.links = extract1001AudioLinks(html);
+      
       const titleMatch = html.match(/<h1[^>]*id="pageTitle"[^>]*>([^<]+)<\/h1>/i) ||
+                         html.match(/<meta[^>]*property="og:title"[^>]*content="([^"]+)"/i) ||
                          html.match(/<title>([^<]+)<\/title>/i);
-      const djMatch = html.match(/<meta[^>]*name="author"[^>]*content="([^"]+)"/i) ||
-                      html.match(/<a[^>]*class="[^"]*artistLink[^"]*"[^>]*>([^<]+)<\/a>/i);
       
-      const setTitle = titleMatch ? titleMatch[1].replace(/ \| 1001tracklists$/i, '').trim() : undefined;
-      const djName = djMatch ? djMatch[1].trim() : undefined;
+      const djPatterns = [
+        /<a[^>]*class="[^"]*blue[^"]*"[^>]*href="\/dj\/[^"]*"[^>]*>([^<]+)<\/a>/i,
+        /<meta[^>]*name="author"[^>]*content="([^"]+)"/i,
+        /<span[^>]*class="[^"]*artistLink[^"]*"[^>]*>([^<]+)<\/span>/i,
+        /<a[^>]*href="\/dj\/[^"]*"[^>]*title="([^"]+)"/i,
+      ];
       
-      console.log(`[Scraper] Found set: ${setTitle} by ${djName}`);
+      let djName: string | undefined;
+      for (const pattern of djPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          djName = match[1].trim();
+          break;
+        }
+      }
+      
+      if (titleMatch) {
+        result.title = titleMatch[1]
+          .replace(/ \| 1001Tracklists$/i, '')
+          .replace(/ Tracklist$/i, '')
+          .trim();
+      }
+      result.artist = djName;
+      
+      const venuePatterns = [
+        /@\s*([^,\n<]+)/i,
+        /at\s+([^,\n<]+(?:festival|club|room|warehouse|party)?)/i,
+        /venue["']?\s*[:=]\s*["']?([^"'<,]+)/i,
+      ];
+      
+      if (result.title) {
+        for (const pattern of venuePatterns) {
+          const match = result.title.match(pattern);
+          if (match && match[1] && match[1].length > 2 && match[1].length < 100) {
+            result.venue = match[1].trim();
+            break;
+          }
+        }
+      }
+      
+      const datePatterns = [
+        /<time[^>]*datetime="([^"]+)"[^>]*>/i,
+        /(\d{4}-\d{2}-\d{2})/,
+        /(\d{1,2}[\.\/\-]\d{1,2}[\.\/\-]\d{2,4})/,
+      ];
+      
+      for (const pattern of datePatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          result.date = match[1];
+          break;
+        }
+      }
+      
+      const thumbnailPatterns = [
+        /<meta[^>]*property="og:image"[^>]*content="([^"]+)"/i,
+        /<img[^>]*class="[^"]*mainImage[^"]*"[^>]*src="([^"]+)"/i,
+        /<img[^>]*id="[^"]*artwork[^"]*"[^>]*src="([^"]+)"/i,
+        /data-artwork-url=["']([^"']+)["']/i,
+      ];
+      
+      for (const pattern of thumbnailPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1]) {
+          result.thumbnail = match[1];
+          break;
+        }
+      }
+      
+      const durationMatch = html.match(/duration["']?\s*[:=]\s*["']?(\d+:\d{2}(?::\d{2})?)["']?/i) ||
+                            html.match(/(\d{1,2}:\d{2}:\d{2})\s*(?:total|length|duration)/i);
+      if (durationMatch) {
+        result.duration = durationMatch[1];
+      }
+      
+      console.log(`[Scraper] Found set: "${result.title}" by ${result.artist}`);
+      console.log(`[Scraper] Audio links found:`, result.links);
       
       const trackRowPattern = /<div[^>]*class="[^"]*tlpItem[^"]*"[^>]*>[\s\S]*?<\/div>/gi;
       const rows = html.match(trackRowPattern) || [];
@@ -593,7 +788,7 @@ async function fetch1001TracklistDirect(url: string): Promise<z.infer<typeof Scr
           const parts = fullTrack.split(' - ');
           
           if (parts.length >= 2) {
-            tracks.push({
+            result.tracks.push({
               title: parts.slice(1).join(' - ').trim(),
               artist: parts[0].trim(),
               timestamp: timeMatch ? timeMatch[1].trim() : '0:00',
@@ -604,16 +799,34 @@ async function fetch1001TracklistDirect(url: string): Promise<z.infer<typeof Scr
         }
       }
       
-      if (tracks.length === 0) {
+      if (result.tracks.length === 0) {
         const jsonLdMatch = html.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/i);
         if (jsonLdMatch) {
           try {
             const jsonLd = JSON.parse(jsonLdMatch[1]);
+            
+            if (jsonLd.name && !result.title) {
+              result.title = jsonLd.name;
+            }
+            if (jsonLd.byArtist?.name && !result.artist) {
+              result.artist = jsonLd.byArtist.name;
+            }
+            if (jsonLd.image && !result.thumbnail) {
+              result.thumbnail = Array.isArray(jsonLd.image) ? jsonLd.image[0] : jsonLd.image;
+            }
+            if (jsonLd.datePublished && !result.date) {
+              result.date = jsonLd.datePublished;
+            }
+            if (jsonLd.duration) {
+              const durationParsed = jsonLd.duration.replace(/^PT/, '').replace(/H/, ':').replace(/M/, ':').replace(/S/, '');
+              result.duration = durationParsed;
+            }
+            
             if (jsonLd.track && Array.isArray(jsonLd.track)) {
               for (const t of jsonLd.track) {
                 if (t.name) {
                   const parts = t.name.split(' - ');
-                  tracks.push({
+                  result.tracks.push({
                     title: parts.length > 1 ? parts.slice(1).join(' - ') : t.name,
                     artist: parts[0] || 'Unknown',
                     timestamp: '0:00',
@@ -628,12 +841,41 @@ async function fetch1001TracklistDirect(url: string): Promise<z.infer<typeof Scr
           }
         }
       }
+      
+      if (result.tracks.length === 0) {
+        const trackItemPatterns = [
+          /<div[^>]*class="[^"]*tlpTog[^"]*"[^>]*>[\s\S]*?<\/div>/gi,
+          /<tr[^>]*class="[^"]*tlpItem[^"]*"[^>]*>[\s\S]*?<\/tr>/gi,
+        ];
+        
+        for (const pattern of trackItemPatterns) {
+          const items = html.match(pattern) || [];
+          for (const item of items) {
+            const valueMatch = item.match(/value["']?\s*[:=]\s*["']?([^"'<]+)/i) ||
+                               item.match(/>([^<]+\s+-\s+[^<]+)</i);
+            if (valueMatch) {
+              const parts = valueMatch[1].split(' - ');
+              if (parts.length >= 2) {
+                result.tracks.push({
+                  title: parts.slice(1).join(' - ').trim(),
+                  artist: parts[0].trim(),
+                  timestamp: '0:00',
+                  confidence: 'high',
+                  source: '1001tracklists',
+                });
+              }
+            }
+          }
+          if (result.tracks.length > 0) break;
+        }
+      }
     }
   } catch (error) {
     console.error('[Scraper] 1001tracklists direct fetch error:', error);
   }
   
-  return tracks;
+  console.log(`[Scraper] Extracted ${result.tracks.length} tracks from 1001tracklists`);
+  return result;
 }
 
 function extractArtistFromTitle(title: string): { artist: string; cleanTitle: string } {
@@ -690,13 +932,21 @@ export const scraperRouter = createTRPCRouter({
           setData = await fetchMixcloudData(extracted.id);
           break;
         case "1001tracklists":
-          const tracks1001 = await fetch1001TracklistDirect(input.url);
+          const result1001 = await fetch1001TracklistDirect(input.url);
           setData = {
-            title: "Set from 1001tracklists",
-            artist: "Unknown Artist",
+            title: result1001.title || "Set from 1001tracklists",
+            artist: result1001.artist || "Unknown Artist",
+            thumbnail: result1001.thumbnail,
+            venue: result1001.venue,
+            date: result1001.date,
+            duration: result1001.duration,
             platform: "1001tracklists",
-            tracks: tracks1001,
-            links: {},
+            tracks: result1001.tracks,
+            links: {
+              youtube: result1001.links.youtube,
+              soundcloud: result1001.links.soundcloud,
+              mixcloud: result1001.links.mixcloud,
+            },
           };
           break;
         default:
@@ -855,6 +1105,48 @@ export const scraperRouter = createTRPCRouter({
         success: true,
         results,
       };
+    }),
+
+  get1001TracklistAudioLinks: publicProcedure
+    .input(z.object({ url: z.string().url() }))
+    .mutation(async ({ input }) => {
+      console.log(`[Scraper] Fetching audio links from 1001tracklists: ${input.url}`);
+      
+      if (!input.url.includes('1001tracklists.com')) {
+        return {
+          success: false,
+          error: 'URL must be from 1001tracklists.com',
+          links: null,
+          metadata: null,
+        };
+      }
+      
+      try {
+        const result = await fetch1001TracklistDirect(input.url);
+        
+        return {
+          success: true,
+          error: null,
+          links: result.links,
+          metadata: {
+            title: result.title,
+            artist: result.artist,
+            venue: result.venue,
+            date: result.date,
+            thumbnail: result.thumbnail,
+            duration: result.duration,
+            trackCount: result.tracks.length,
+          },
+        };
+      } catch (error) {
+        console.error('[Scraper] Error fetching 1001tracklists audio links:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to fetch audio links',
+          links: null,
+          metadata: null,
+        };
+      }
     }),
 
   search1001Tracklists: publicProcedure
