@@ -209,53 +209,6 @@ export default function FeedScreen() {
       }));
   }, [sets]);
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const days = Math.floor(diff / 86400000);
-    const hours = Math.floor(diff / 3600000);
-    const minutes = Math.floor(diff / 60000);
-
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return 'Just now';
-  };
-
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    if (hours > 0) return `${hours}h ${mins}m`;
-    return `${mins}m`;
-  };
-
-  // Use real sets for feed items, sorted by date (newest first)
-  const realFeedItems = useMemo(() => {
-    return sets
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-      .slice(0, 20)
-      .map(set => ({
-        id: set.id,
-        type: 'new_set' as const,
-        artist: {
-          id: set.artist,
-          name: set.artist,
-          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
-          following: true,
-        },
-        set: {
-          id: set.id,
-          name: set.name,
-          venue: set.venue || '',
-          date: formatDate(set.date),
-          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-          duration: set.totalDuration ? formatDuration(set.totalDuration) : '',
-          tracksIdentified: set.tracksIdentified || set.tracks.length,
-        },
-        timestamp: set.date,
-      }));
-  }, [sets]);
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => {
@@ -361,54 +314,55 @@ export default function FeedScreen() {
             <Text style={styles.feedTitle}>Recent Activity</Text>
             {realFeedItems.length > 0 ? (
               realFeedItems.map((item) => (
-              <Pressable 
-                key={item.id}
-                style={styles.feedCard}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push(`/(tabs)/(discover)/${item.set.id}`);
-                }}
-              >
-                <View style={styles.feedHeader}>
-                  <Image 
-                    source={{ uri: item.artist.image }} 
-                    style={styles.feedArtistImage}
-                    contentFit="cover"
-                  />
-                  <View style={styles.feedHeaderText}>
-                    <Text style={styles.feedArtistName}>{item.artist.name}</Text>
-                    <Text style={styles.feedAction}>posted a new set</Text>
-                  </View>
-                  <Text style={styles.feedTime}>{item.set.date}</Text>
-                </View>
-                <View style={styles.feedContent}>
-                  <View style={styles.feedCoverContainer}>
+                <Pressable 
+                  key={item.id}
+                  style={styles.feedCard}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    router.push(`/(tabs)/(discover)/${item.set.id}`);
+                  }}
+                >
+                  <View style={styles.feedHeader}>
                     <Image 
-                      source={{ uri: item.set.image }} 
-                      style={styles.feedCover}
+                      source={{ uri: item.artist.image }} 
+                      style={styles.feedArtistImage}
                       contentFit="cover"
                     />
-                    <View style={styles.feedPlayOverlay}>
-                      <View style={styles.feedPlayButton}>
-                        <Play size={20} color="#fff" fill="#fff" />
+                    <View style={styles.feedHeaderText}>
+                      <Text style={styles.feedArtistName}>{item.artist.name}</Text>
+                      <Text style={styles.feedAction}>posted a new set</Text>
+                    </View>
+                    <Text style={styles.feedTime}>{item.set.date}</Text>
+                  </View>
+                  <View style={styles.feedContent}>
+                    <View style={styles.feedCoverContainer}>
+                      <Image 
+                        source={{ uri: item.set.image }} 
+                        style={styles.feedCover}
+                        contentFit="cover"
+                      />
+                      <View style={styles.feedPlayOverlay}>
+                        <View style={styles.feedPlayButton}>
+                          <Play size={20} color="#fff" fill="#fff" />
+                        </View>
+                      </View>
+                    </View>
+                    <View style={styles.feedSetInfo}>
+                      <Text style={styles.feedSetName} numberOfLines={2}>{item.set.name}</Text>
+                      <Text style={styles.feedSetVenue}>{item.set.venue}</Text>
+                      <View style={styles.feedSetStats}>
+                        <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
+                        <View style={styles.feedSetDivider} />
+                        <View style={styles.feedTracksRow}>
+                          <Music size={12} color={Colors.dark.textMuted} />
+                          <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
+                        </View>
                       </View>
                     </View>
                   </View>
-                  <View style={styles.feedSetInfo}>
-                    <Text style={styles.feedSetName} numberOfLines={2}>{item.set.name}</Text>
-                    <Text style={styles.feedSetVenue}>{item.set.venue}</Text>
-                    <View style={styles.feedSetStats}>
-                      <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
-                      <View style={styles.feedSetDivider} />
-                      <View style={styles.feedTracksRow}>
-                        <Music size={12} color={Colors.dark.textMuted} />
-                        <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </Pressable>
-            ))}
+                </Pressable>
+              ))
+            ) : null}
           </View>
         </ScrollView>
       </SafeAreaView>
