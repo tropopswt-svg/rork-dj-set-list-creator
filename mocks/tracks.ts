@@ -3175,8 +3175,8 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(0, 6),
     coverUrl: 'https://i1.sndcdn.com/artworks-xr5WW4hEKPpR-0-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example1', label: 'Full Set' },
-      { platform: 'soundcloud', url: 'https://soundcloud.com/chris-stussy/straat', label: 'Audio Only' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=LXGBKmlRn0U', label: 'Full Set' },
+      { platform: 'soundcloud', url: 'https://soundcloud.com/user-820329560/chris-stussy-dj-set-from-the?si=7a3ebf4d315540f7956be8c984b14164&utm_source=clipboard&utm_medium=text&utm_campaign=social_sharing', label: 'Audio Only' },
       { platform: '1001tracklists', url: 'https://www.1001tracklists.com/tracklist/example1' },
     ],
     totalDuration: 5400,
