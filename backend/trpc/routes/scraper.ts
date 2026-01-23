@@ -118,17 +118,13 @@ function isYouTubeUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)/i.test(url);
 }
 
-function getYtDlpConfig(): { type: "binary"; cmd: string } | { type: "module"; cwd: string } {
+function getYtDlpConfig(): { type: "binary"; cmd: string } {
   const raw = process.env.YT_DLP_PATH?.trim();
   const projectRoot = process.cwd();
-  const sourceDir = path.resolve(projectRoot, "yt-dlp-master");
 
   if (raw) {
     const resolved = path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
     try {
-      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
-        return { type: "module", cwd: resolved };
-      }
       if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
         return { type: "binary", cmd: resolved };
       }
@@ -141,9 +137,6 @@ function getYtDlpConfig(): { type: "binary"; cmd: string } | { type: "module"; c
   const defaultBin = path.resolve(projectRoot, "bin", "yt-dlp");
   if (fs.existsSync(defaultBin) && fs.statSync(defaultBin).isFile()) {
     return { type: "binary", cmd: defaultBin };
-  }
-  if (fs.existsSync(sourceDir) && fs.statSync(sourceDir).isDirectory()) {
-    return { type: "module", cwd: sourceDir };
   }
   return { type: "binary", cmd: "yt-dlp" };
 }
@@ -167,10 +160,7 @@ async function resolveYouTubeToStreamUrl(youtubeUrl: string): Promise<string | n
       encoding: "utf8",
       timeout: 30_000,
     };
-    const result =
-      config.type === "module"
-        ? spawnSync("python3", ["-m", "yt_dlp", ...args], { ...opts, cwd: config.cwd })
-        : spawnSync(config.cmd, args, opts);
+    const result = spawnSync(config.cmd, args, opts);
 
     const { status, stdout, stderr } = result;
     if (status !== 0) {
