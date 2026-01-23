@@ -6,7 +6,8 @@
 import { serve } from "bun";
 import app from "./backend/hono";
 
-const port = process.env.PORT || 3000;
+// Use port 3001 by default to avoid conflicts with Expo/Rork on 3000
+const port = Number(process.env.PORT) || 3001;
 
 console.log(`🚀 Starting backend server on port ${port}...`);
 console.log(`📍 API endpoint: http://localhost:${port}/api/trpc`);
