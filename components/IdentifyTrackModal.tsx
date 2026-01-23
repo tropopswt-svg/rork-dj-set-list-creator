@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Animated,
   Platform,
+  KeyboardAvoidingView,
+  ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { 
@@ -57,7 +59,9 @@ export default function IdentifyTrackModal({
   setTitle,
   audioUrl,
 }: IdentifyTrackModalProps) {
-  const [timestamp, setTimestamp] = useState('');
+  const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const [seconds, setSeconds] = useState('');
   const [isIdentifying, setIsIdentifying] = useState(false);
   const [identifiedTrack, setIdentifiedTrack] = useState<IdentifiedTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -68,9 +72,14 @@ export default function IdentifyTrackModal({
 
   useEffect(() => {
     if (visible) {
-      const mins = Math.floor(initialTimestamp / 60);
-      const secs = initialTimestamp % 60;
-      setTimestamp(`${mins}:${secs.toString().padStart(2, '0')}`);
+      const totalSeconds = initialTimestamp;
+      const hrs = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = totalSeconds % 60;
+      
+      setHours(hrs > 0 ? hrs.toString() : '');
+      setMinutes(mins.toString());
+      setSeconds(secs.toString().padStart(2, '0'));
       setIdentifiedTrack(null);
       setError(null);
       setNoMatch(false);
@@ -100,15 +109,60 @@ export default function IdentifyTrackModal({
     }
   }, [isIdentifying]);
 
-  const parseTimestamp = (ts: string): number => {
-    const parts = ts.split(':').map(Number);
-    if (parts.length === 3) {
-      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  const parseTimestamp = (): number => {
+    const hrs = parseInt(hours) || 0;
+    const mins = parseInt(minutes) || 0;
+    const secs = parseInt(seconds) || 0;
+    return hrs * 3600 + mins * 60 + secs;
+  };
+
+  const formatTimestamp = (): string => {
+    const hrs = parseInt(hours) || 0;
+    const mins = parseInt(minutes) || 0;
+    const secs = parseInt(seconds) || 0;
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-    if (parts.length === 2) {
-      return parts[0] * 60 + parts[1];
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleHoursChange = (text: string) => {
+    const num = text.replace(/[^0-9]/g, '');
+    if (num === '') {
+      setHours('');
+      return;
     }
-    return parseInt(ts) || 0;
+    const val = parseInt(num);
+    // Limit to max 3 hours (reasonable for a DJ set)
+    if (val <= 3) {
+      setHours(num);
+    }
+  };
+
+  const handleMinutesChange = (text: string) => {
+    const num = text.replace(/[^0-9]/g, '');
+    if (num === '') {
+      setMinutes('');
+      return;
+    }
+    const val = parseInt(num);
+    // Limit to max 59 minutes
+    if (val <= 59) {
+      setMinutes(num);
+    }
+  };
+
+  const handleSecondsChange = (text: string) => {
+    const num = text.replace(/[^0-9]/g, '');
+    if (num === '') {
+      setSeconds('');
+      return;
+    }
+    const val = parseInt(num);
+    // Limit to max 59 seconds
+    if (val <= 59) {
+      setSeconds(num.padStart(2, '0'));
+    }
   };
 
   const handleIdentify = async () => {
@@ -123,8 +177,8 @@ export default function IdentifyTrackModal({
     setNoMatch(false);
     setIdentifiedTrack(null);
 
-    const startSeconds = parseTimestamp(timestamp);
-    console.log(`[Identify] Starting identification at ${startSeconds}s from ${audioUrl}`);
+    const startSeconds = parseTimestamp();
+    console.log(`[Identify] Starting identification at ${startSeconds}s (${formatTimestamp()}) from ${audioUrl}`);
 
     try {
       const result = await identifyMutation.mutateAsync({
@@ -143,7 +197,14 @@ export default function IdentifyTrackModal({
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       } else {
         console.error('[Identify] Error:', result.error);
-        setError(result.error || 'Failed to identify track');
+        // Show more detailed error message to help debug
+        let errorMessage = result.error || 'Failed to identify track';
+        if (result.error?.includes('Could not resolve')) {
+          errorMessage = `${result.error}\n\nCheck:\n- YouTube: Is yt-dlp installed? (YT_DLP_PATH in .env)\n- SoundCloud: Is SOUNDCLOUD_CLIENT_ID set?`;
+        } else if (result.error?.includes('ACRCloud')) {
+          errorMessage = `${result.error}\n\nPossible causes:\n- Stream URL not accessible to ACRCloud\n- Track not in ACRCloud database\n- Network/API issue`;
+        }
+        setError(errorMessage);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } catch (err) {
@@ -157,7 +218,7 @@ export default function IdentifyTrackModal({
 
   const handleConfirm = () => {
     if (identifiedTrack) {
-      onIdentified(identifiedTrack, parseTimestamp(timestamp));
+      onIdentified(identifiedTrack, parseTimestamp());
       onClose();
     }
   };
@@ -169,33 +230,73 @@ export default function IdentifyTrackModal({
       transparent
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Identify Track</Text>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <X size={24} color={Colors.dark.textSecondary} />
-            </Pressable>
-          </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.overlay}
+      >
+        <Pressable style={styles.overlayInner} onPress={onClose}>
+          <Pressable style={styles.content} onPress={(e) => e.stopPropagation()}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.header}>
+                <Text style={styles.title}>Identify Track</Text>
+                <Pressable onPress={onClose} hitSlop={8}>
+                  <X size={24} color={Colors.dark.textSecondary} />
+                </Pressable>
+              </View>
 
-          {setTitle && (
-            <Text style={styles.setTitle}>From: {setTitle}</Text>
-          )}
+              {setTitle && (
+                <Text style={styles.setTitle}>From: {setTitle}</Text>
+              )}
 
-          <View style={styles.timestampSection}>
-            <Text style={styles.label}>Timestamp</Text>
-            <TextInput
-              style={styles.timestampInput}
-              value={timestamp}
-              onChangeText={setTimestamp}
-              placeholder="0:00"
-              placeholderTextColor={Colors.dark.textMuted}
-              keyboardType="numbers-and-punctuation"
-            />
-            <Text style={styles.hint}>
-              Enter the time in the set where you want to identify a track
-            </Text>
-          </View>
+              <View style={styles.timestampSection}>
+                <Text style={styles.label}>Timestamp</Text>
+                <View style={styles.timestampInputs}>
+                  <View style={styles.timestampField}>
+                    <TextInput
+                      style={[styles.timestampInput, !hours && styles.timestampInputOptional]}
+                      value={hours}
+                      onChangeText={handleHoursChange}
+                      placeholder="0"
+                      placeholderTextColor={Colors.dark.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={1}
+                    />
+                    <Text style={styles.timestampLabel}>hr</Text>
+                  </View>
+                  <Text style={styles.timestampColon}>:</Text>
+                  <View style={styles.timestampField}>
+                    <TextInput
+                      style={styles.timestampInput}
+                      value={minutes}
+                      onChangeText={handleMinutesChange}
+                      placeholder="0"
+                      placeholderTextColor={Colors.dark.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                    <Text style={styles.timestampLabel}>min</Text>
+                  </View>
+                  <Text style={styles.timestampColon}>:</Text>
+                  <View style={styles.timestampField}>
+                    <TextInput
+                      style={styles.timestampInput}
+                      value={seconds}
+                      onChangeText={handleSecondsChange}
+                      placeholder="00"
+                      placeholderTextColor={Colors.dark.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={2}
+                    />
+                    <Text style={styles.timestampLabel}>sec</Text>
+                  </View>
+                </View>
+                <Text style={styles.hint}>
+                  Enter the time in the set where you want to identify a track (max 3 hours)
+                </Text>
+              </View>
 
           {!identifiedTrack && !isIdentifying && !noMatch && !error && (
             <Pressable 
@@ -214,7 +315,7 @@ export default function IdentifyTrackModal({
               </Animated.View>
               <Text style={styles.identifyingText}>Listening...</Text>
               <Text style={styles.identifyingSubtext}>
-                Analyzing audio at {timestamp}
+                Analyzing audio at {formatTimestamp()}
               </Text>
               <ActivityIndicator color={Colors.dark.primary} style={{ marginTop: 16 }} />
             </View>
@@ -338,14 +439,20 @@ export default function IdentifyTrackModal({
               </Pressable>
             </View>
           )}
+            </ScrollView>
+          </Pressable>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  overlayInner: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
     justifyContent: 'flex-end',
@@ -356,7 +463,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 28,
     padding: 24,
     paddingBottom: 40,
-    maxHeight: '85%',
+    maxHeight: '90%',
   },
   header: {
     flexDirection: 'row',
@@ -383,15 +490,40 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     marginBottom: 8,
   },
+  timestampInputs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  timestampField: {
+    alignItems: 'center',
+  },
   timestampInput: {
     backgroundColor: Colors.dark.background,
     borderRadius: 12,
     padding: 16,
+    width: 80,
     fontSize: 24,
     fontWeight: '600' as const,
     color: Colors.dark.text,
     textAlign: 'center',
     fontVariant: ['tabular-nums'],
+  },
+  timestampInputOptional: {
+    opacity: 0.6,
+  },
+  timestampLabel: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    marginTop: 4,
+    fontWeight: '500' as const,
+  },
+  timestampColon: {
+    fontSize: 24,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
+    marginHorizontal: 4,
   },
   hint: {
     fontSize: 12,
