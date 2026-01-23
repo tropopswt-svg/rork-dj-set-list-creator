@@ -1113,17 +1113,25 @@ async function identifyTrackFromUrlInternal(
     links: { spotify?: string; youtube?: string; isrc?: string };
   } | null;
 }> {
+  console.log(`[ACRCloud] ===== IDENTIFICATION TRACE START =====`);
+  console.log(`[ACRCloud] Input URL: ${audioUrl}`);
+  console.log(`[ACRCloud] Start time: ${startSeconds}s, Duration: ${durationSeconds}s`);
+  
   const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
   const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
   const host = process.env.ACRCLOUD_HOST || "identify-us-west-2.acrcloud.com";
 
   if (!accessKey || !accessSecret) {
+    console.log(`[ACRCloud] ❌ ERROR: ACRCloud credentials not configured`);
     return { success: false, error: "ACRCloud credentials not configured", result: null };
   }
 
   let urlToIdentify = audioUrl;
+  
   if (isSoundCloudUrl(audioUrl)) {
+    console.log(`[ACRCloud] Detected SoundCloud URL`);
     if (!process.env.SOUNDCLOUD_CLIENT_ID?.trim()) {
+      console.log(`[ACRCloud] ❌ ERROR: SOUNDCLOUD_CLIENT_ID not set`);
       return {
         success: false,
         error:
@@ -1131,8 +1139,10 @@ async function identifyTrackFromUrlInternal(
         result: null,
       };
     }
+    console.log(`[ACRCloud] Resolving SoundCloud URL to stream...`);
     const streamUrl = await resolveSoundCloudToStreamUrl(audioUrl);
     if (!streamUrl) {
+      console.log(`[ACRCloud] ❌ ERROR: Could not resolve SoundCloud URL to stream`);
       return {
         success: false,
         error: "Could not resolve SoundCloud URL to a stream. Check the link and SOUNDCLOUD_CLIENT_ID.",
@@ -1140,12 +1150,13 @@ async function identifyTrackFromUrlInternal(
       };
     }
     urlToIdentify = streamUrl;
-    console.log("[ACRCloud] Using resolved SoundCloud stream URL for identification");
-  }
-
-  if (isYouTubeUrl(audioUrl)) {
+    console.log(`[ACRCloud] ✅ Resolved SoundCloud stream URL: ${streamUrl.substring(0, 100)}...`);
+  } else if (isYouTubeUrl(audioUrl)) {
+    console.log(`[ACRCloud] Detected YouTube URL`);
+    console.log(`[ACRCloud] Resolving YouTube URL to stream using yt-dlp...`);
     const streamUrl = await resolveYouTubeToStreamUrl(audioUrl);
     if (!streamUrl) {
+      console.log(`[ACRCloud] ❌ ERROR: Could not resolve YouTube URL to stream`);
       return {
         success: false,
         error:
@@ -1154,8 +1165,12 @@ async function identifyTrackFromUrlInternal(
       };
     }
     urlToIdentify = streamUrl;
-    console.log("[ACRCloud] Using resolved YouTube stream URL for identification");
+    console.log(`[ACRCloud] ✅ Resolved YouTube stream URL: ${streamUrl.substring(0, 100)}...`);
+  } else {
+    console.log(`[ACRCloud] Direct URL (not YouTube/SoundCloud), using as-is`);
   }
+  
+  console.log(`[ACRCloud] Final URL sent to ACRCloud: ${urlToIdentify.substring(0, 150)}...`);
 
   try {
     const httpMethod = "POST";
@@ -1191,6 +1206,8 @@ async function identifyTrackFromUrlInternal(
       const spotifyId = externalMetadata.spotify?.track?.id;
       const youtubeId = externalMetadata.youtube?.vid;
       
+      console.log(`[ACRCloud] ✅ Match found: ${artists} - ${title}`);
+      
       // Validate links by checking if they exist via API
       const validatedLinks: { spotify?: string; youtube?: string; isrc?: string } = {};
       
@@ -1199,8 +1216,9 @@ async function identifyTrackFromUrlInternal(
         const isValid = await validateSpotifyTrack(spotifyId);
         if (isValid) {
           validatedLinks.spotify = spotifyUrl;
+          console.log(`[ACRCloud] ✅ Validated Spotify link: ${spotifyUrl}`);
         } else {
-          console.warn(`[ACRCloud] Spotify track ${spotifyId} not found or inaccessible`);
+          console.warn(`[ACRCloud] ⚠️  Spotify track ${spotifyId} not found or inaccessible`);
         }
       }
       
@@ -1209,8 +1227,9 @@ async function identifyTrackFromUrlInternal(
         const isValid = await validateYouTubeVideo(youtubeId);
         if (isValid) {
           validatedLinks.youtube = youtubeUrl;
+          console.log(`[ACRCloud] ✅ Validated YouTube link: ${youtubeUrl}`);
         } else {
-          console.warn(`[ACRCloud] YouTube video ${youtubeId} not found or inaccessible`);
+          console.warn(`[ACRCloud] ⚠️  YouTube video ${youtubeId} not found or inaccessible`);
         }
       }
       
@@ -1218,6 +1237,7 @@ async function identifyTrackFromUrlInternal(
         validatedLinks.isrc = music.external_ids.isrc;
       }
       
+      console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (SUCCESS) =====`);
       return {
         success: true,
         error: null,
@@ -1234,14 +1254,20 @@ async function identifyTrackFromUrlInternal(
       };
     }
     if (result.status?.code === 1001) {
+      console.log(`[ACRCloud] ⚠️  No match found (code 1001)`);
+      console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (NO MATCH) =====`);
       return { success: true, error: null, result: null };
     }
+    console.log(`[ACRCloud] ❌ ACRCloud error: ${result.status?.msg ?? "Unknown error"}`);
+    console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (ERROR) =====`);
     return {
       success: false,
       error: result.status?.msg ?? "Unknown error from ACRCloud",
       result: null,
     };
   } catch (e) {
+    console.log(`[ACRCloud] ❌ Exception: ${e instanceof Error ? e.message : "Unknown error"}`);
+    console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (EXCEPTION) =====`);
     return {
       success: false,
       error: e instanceof Error ? e.message : "Failed to identify track",
