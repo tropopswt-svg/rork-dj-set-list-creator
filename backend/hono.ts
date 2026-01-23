@@ -19,7 +19,7 @@ app.use(
 );
 
 app.get("/", (c) => {
-  return c.json({ status: "ok", message: "SetList API is running" });
+  return c.json({ status: "ok", message: "SetList API is running", version: "1.0.1" });
 });
 
 export default app;

@@ -175,46 +175,6 @@ export const mockTracks: Track[] = [
 ];
 
 export const mockSetLists: SetList[] = [
-  {
-    id: "luke-dean-1769138660894-0",
-    name: "Luke - NYE 2026",
-    artist: "Luke Dean",
-    date: new Date("2026-01-01"),
-    tracks: [],
-    sourceLinks: [{ platform: "1001tracklists", url: "https://www.1001tracklists.com/tracklist/23n9z9xk/luke-nye-2026-2026-01-01.html" }],
-    totalDuration: 0,
-    aiProcessed: false,
-    commentsScraped: 0,
-    tracksIdentified: 0,
-    plays: 0,
-  },
-  {
-    id: "luke-dean-1769138664041-1",
-    name: "Max Dean & Luke Dean @ WYLD, LAB11 Birmingham",
-    artist: "Luke Dean",
-    venue: "WYLD, LAB11 Birmingham",
-    date: new Date("2023-09-09"),
-    tracks: [],
-    sourceLinks: [{ platform: "1001tracklists", url: "https://www.1001tracklists.com/tracklist/26b26jut/max-dean-luke-dean-wyld-lab11-birmingham-united-kingdom-2023-09-09.html" }],
-    totalDuration: 0,
-    aiProcessed: false,
-    commentsScraped: 0,
-    tracksIdentified: 0,
-    plays: 0,
-  },
-  {
-    id: "luke-dean-1769138665216-2",
-    name: "Max Dean & Luke Dean & Joss Dean - Radio 1's Essential Mix",
-    artist: "Luke Dean",
-    date: new Date("2025-12-20"),
-    tracks: [],
-    sourceLinks: [{ platform: "1001tracklists", url: "https://www.1001tracklists.com/tracklist/14wrxfdt/max-dean-luke-dean-joss-dean-radio-1s-essential-mix-2025-12-20.html" }],
-    totalDuration: 0,
-    aiProcessed: false,
-    commentsScraped: 0,
-    tracksIdentified: 0,
-    plays: 0,
-  },
 // Auto-generated imported sets
 // Generated: 2026-01-22T23:50:12.958Z
 
@@ -3215,8 +3175,8 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(0, 6),
     coverUrl: 'https://i1.sndcdn.com/artworks-xr5WW4hEKPpR-0-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=D4jgu_fOlng', label: 'Full Set' },
-      { platform: 'soundcloud', url: 'https://soundcloud.com/user-820329560/chris-stussy-dj-set-from-the', label: 'Audio Only' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example1', label: 'Full Set' },
+      { platform: 'soundcloud', url: 'https://soundcloud.com/chris-stussy/straat', label: 'Audio Only' },
       { platform: '1001tracklists', url: 'https://www.1001tracklists.com/tracklist/example1' },
     ],
     totalDuration: 5400,
@@ -3234,7 +3194,7 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(0, 4),
     coverUrl: 'https://i1.sndcdn.com/artworks-000149102513-l3t2u4-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=E9Fy3880O-s', label: 'Boiler Room' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example2', label: 'Boiler Room' },
       { platform: '1001tracklists', url: 'https://www.1001tracklists.com/tracklist/example2' },
     ],
     totalDuration: 7200,
@@ -3252,7 +3212,7 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(0, 3),
     coverUrl: 'https://i1.sndcdn.com/artworks-000234453723-p3t7hm-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=I1mhJjxtJx4', label: 'Cercle' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example3', label: 'Cercle' },
       { platform: 'soundcloud', url: 'https://soundcloud.com/ame/cercle-alps' },
     ],
     totalDuration: 5400,
@@ -3270,7 +3230,7 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(2, 8),
     coverUrl: 'https://i1.sndcdn.com/artworks-000544159498-2ebsn3-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=FWgeyN8e01U', label: 'HÖR Berlin' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example4', label: 'HÖR Berlin' },
       { platform: '1001tracklists', url: 'https://www.1001tracklists.com/tracklist/example4' },
     ],
     totalDuration: 3600,
@@ -3288,7 +3248,7 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(1, 7),
     coverUrl: 'https://i1.sndcdn.com/artworks-000595485498-5s3c0o-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=kiy05zewUpg' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example5' },
       { platform: 'soundcloud', url: 'https://soundcloud.com/hunee/dekmantel-2024' },
       { platform: 'mixcloud', url: 'https://www.mixcloud.com/hunee/dekmantel-2024/' },
     ],
@@ -3307,7 +3267,7 @@ export const mockSetLists: SetList[] = [
     tracks: mockTracks.slice(0, 5),
     coverUrl: 'https://i1.sndcdn.com/artworks-000629486092-w8ckly-t500x500.jpg',
     sourceLinks: [
-      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=D4jgu_fOlng' },
+      { platform: 'youtube', url: 'https://www.youtube.com/watch?v=example6' },
     ],
     totalDuration: 5400,
     aiProcessed: false,
