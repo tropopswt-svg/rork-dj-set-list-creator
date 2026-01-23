@@ -35,28 +35,14 @@ export default function DiscoverScreen() {
     }, 1000);
   }, []);
 
-  const handleImport = (url: string, platform: 'youtube' | 'soundcloud' | 'mixcloud') => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    const newSet: SetList = {
-      id: Date.now().toString(),
-      name: 'New Imported Set',
-      artist: 'Unknown Artist',
-      venue: 'Processing...',
-      date: new Date(),
-      tracks: [],
-      sourceLinks: [{ platform, url }],
-      totalDuration: 0,
-      aiProcessed: false,
-      commentsScraped: 0,
-      tracksIdentified: 0,
-      plays: 0,
-    };
-    
-    const result = addSet(newSet);
+  const handleImport = async (url: string, platform: 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists') => {
+    // The ImportSetModal now handles the scraping internally
+    // This callback is called after successful scrape
+    // We'll use the library screen's import logic as reference
     setShowImportModal(false);
     
-    router.push(`/(tabs)/(discover)/${result.set.id}`);
+    // The modal will handle the actual import and navigation
+    // This is just a placeholder - the real work happens in ImportSetModal
   };
 
   const handleArtistPress = (artistName: string) => {
