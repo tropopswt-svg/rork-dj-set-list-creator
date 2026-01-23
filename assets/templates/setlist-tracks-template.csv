@@ -1,0 +1,8 @@
+type,set_name,set_artist,set_venue,set_date,set_cover_url,set_source_url,track_title,track_artist,timestamp_seconds,duration_seconds,bpm,key,album,track_cover_url,track_source_url
+SET,Chris Stussy at STRAAT Museum,Chris Stussy,STRAAT Museum Amsterdam,2024-08-12,https://i1.sndcdn.com/artworks-xr5WW4hEKPpR-0-t500x500.jpg,https://www.youtube.com/watch?v=example1,,,,,,,,,
+TRACK,,,,,,,One More Time,Daft Punk,0,320,122,Bb min,Discovery,https://i1.sndcdn.com/artworks-000062904581-w9lucq-t500x500.jpg,https://open.spotify.com/track/0DiWol3AO6WpXZgp0goxAV
+TRACK,,,,,,,Strobe,deadmau5,320,637,128,F# min,For Lack of a Better Name,https://i1.sndcdn.com/artworks-000028793003-z4bxxz-t500x500.jpg,https://soundcloud.com/deadmau5/strobe
+TRACK,,,,,,,Opus,Eric Prydz,957,540,126,A min,Opus,https://i1.sndcdn.com/artworks-000147925498-8aoj5b-t500x500.jpg,https://open.spotify.com/track/0U0ldCRmgCqhVvD6ksG63j
+SET,Boiler Room Berlin,Dixon,Tresor Berlin,2024-07-15,https://i1.sndcdn.com/artworks-000149102513-l3t2u4-t500x500.jpg,https://www.youtube.com/watch?v=example2,,,,,,,,,
+TRACK,,,,,,,Cola,CamelPhat & Elderbrook,0,285,124,G min,,https://i1.sndcdn.com/artworks-000230295498-yq8hxr-t500x500.jpg,https://www.beatport.com/track/cola/9876543
+TRACK,,,,,,,Insomnia,Faithless,285,480,130,D min,,https://i1.sndcdn.com/artworks-000054093498-9t0c5v-t500x500.jpg,https://open.spotify.com/track/1rHiWcv8m9C7FMqzYYW6MR

@@ -39,6 +39,23 @@ interface PendingTrack {
   timestamp: string;
   confidence?: 'high' | 'medium' | 'low';
   source?: string;
+  durationSeconds?: number;
+  bpm?: number;
+  key?: string;
+  album?: string;
+  coverUrl?: string;
+  sourceUrl?: string;
+}
+
+interface ParsedSet {
+  id: string;
+  name: string;
+  artist: string;
+  venue?: string;
+  date?: string;
+  coverUrl?: string;
+  sourceUrl?: string;
+  tracks: PendingTrack[];
 }
 
 interface ScrapedLinks {
@@ -62,6 +79,10 @@ export default function SubmitScreen() {
   const [thumbnail, setThumbnail] = useState('');
   const [platform, setPlatform] = useState('');
   const [links, setLinks] = useState<ScrapedLinks>({});
+
+  const [devCsvText, setDevCsvText] = useState('');
+  const [devParsedSets, setDevParsedSets] = useState<ParsedSet[]>([]);
+  const [devCsvError, setDevCsvError] = useState('');
   
   const [showArtistSuggestions, setShowArtistSuggestions] = useState(false);
   const [artistSuggestions, setArtistSuggestions] = useState<Artist[]>([]);
@@ -260,20 +281,27 @@ export default function SubmitScreen() {
       artist: artistName.trim(),
       venue: venue.trim() || undefined,
       date: new Date(),
-      tracks: tracks.map((t, i) => ({
-        id: `track-${Date.now()}-${i}`,
-        title: t.title,
-        artist: t.artist,
-        timestamp: parseTimestamp(t.timestamp),
-        duration: 0,
-        coverUrl: thumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
-        addedAt: new Date(),
-        source: 'manual' as const,
-        verified: false,
-      })),
+      tracks: tracks.map((t, i) => {
+        const hasSource = Boolean(t.sourceUrl);
+        return {
+          id: `track-${Date.now()}-${i}`,
+          title: t.title,
+          artist: t.artist,
+          timestamp: parseTimestamp(t.timestamp),
+          duration: t.durationSeconds || 0,
+          bpm: t.bpm,
+          key: t.key,
+          album: t.album,
+          coverUrl: t.coverUrl || thumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+          addedAt: new Date(),
+          source: hasSource ? 'link' : 'manual',
+          trackLinks: t.sourceUrl ? [{ platform: detectTrackLinkPlatform(t.sourceUrl), url: t.sourceUrl }] : undefined,
+          verified: false,
+        };
+      }),
       coverUrl: thumbnail || undefined,
       sourceLinks,
-      totalDuration: 0,
+      totalDuration: tracks.reduce((sum, track) => sum + (track.durationSeconds || 0), 0),
       aiProcessed: false,
       commentsScraped: 0,
       tracksIdentified: tracks.length,
@@ -303,6 +331,350 @@ export default function SubmitScreen() {
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
     return 0;
+  };
+
+  const formatTimestamp = (seconds: number): string => {
+    if (!Number.isFinite(seconds) || seconds <= 0) return '0:00';
+    const total = Math.round(seconds);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const normalizeHeader = (header: string): string =>
+    header.trim().toLowerCase().replace(/\s+/g, '_');
+
+  const parseCsvRows = (csvText: string): string[][] => {
+    const rows: string[][] = [];
+    let current = '';
+    let row: string[] = [];
+    let inQuotes = false;
+
+    for (let i = 0; i < csvText.length; i += 1) {
+      const char = csvText[i];
+      const next = csvText[i + 1];
+      if (char === '"' && next === '"') {
+        current += '"';
+        i += 1;
+        continue;
+      }
+      if (char === '"') {
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (char === ',' && !inQuotes) {
+        row.push(current.trim());
+        current = '';
+        continue;
+      }
+      if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') i += 1;
+        row.push(current.trim());
+        current = '';
+        const hasValues = row.some(value => value.length > 0);
+        if (hasValues) rows.push(row);
+        row = [];
+        continue;
+      }
+      current += char;
+    }
+
+    if (current.length > 0 || row.length > 0) {
+      row.push(current.trim());
+      const hasValues = row.some(value => value.length > 0);
+      if (hasValues) rows.push(row);
+    }
+
+    return rows;
+  };
+
+  const parseNumber = (value?: string): number | undefined => {
+    if (!value) return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  };
+
+  const detectTrackLinkPlatform = (
+    url: string
+  ): 'spotify' | 'beatport' | 'soundcloud' | 'bandcamp' | 'youtube' | 'apple_music' | 'other' => {
+    const lower = url.toLowerCase();
+    if (lower.includes('spotify.com')) return 'spotify';
+    if (lower.includes('beatport.com')) return 'beatport';
+    if (lower.includes('soundcloud.com')) return 'soundcloud';
+    if (lower.includes('bandcamp.com')) return 'bandcamp';
+    if (lower.includes('music.apple.com') || lower.includes('itunes.apple.com')) return 'apple_music';
+    if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+    return 'other';
+  };
+
+  const detectSourcePlatform = (
+    url: string
+  ): 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists' | undefined => {
+    const lower = url.toLowerCase();
+    if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+    if (lower.includes('soundcloud.com')) return 'soundcloud';
+    if (lower.includes('mixcloud.com')) return 'mixcloud';
+    if (lower.includes('1001tracklists.com')) return '1001tracklists';
+    return undefined;
+  };
+
+  const parseCsvSets = (csvText: string): { sets: ParsedSet[]; error?: string } => {
+    if (!csvText.trim()) {
+      return { sets: [], error: 'Paste CSV content first.' };
+    }
+
+    const rows = parseCsvRows(csvText);
+    if (rows.length < 2) {
+      return { sets: [], error: 'CSV needs a header row and at least one data row.' };
+    }
+
+    const headerRow = rows[0].map(normalizeHeader);
+    const headerIndex = new Map<string, number>();
+    headerRow.forEach((header, index) => {
+      if (header) headerIndex.set(header, index);
+    });
+
+    const headerLookup = (aliases: string[]): number | undefined => {
+      for (const alias of aliases) {
+        const normalized = normalizeHeader(alias);
+        if (headerIndex.has(normalized)) return headerIndex.get(normalized);
+      }
+      return undefined;
+    };
+
+    // Column indexes
+    const typeIndex = headerLookup(['type']);
+    const setNameIndex = headerLookup(['set_name']);
+    const setArtistIndex = headerLookup(['set_artist']);
+    const setVenueIndex = headerLookup(['set_venue']);
+    const setDateIndex = headerLookup(['set_date']);
+    const setCoverIndex = headerLookup(['set_cover_url']);
+    const setSourceIndex = headerLookup(['set_source_url']);
+    const trackTitleIndex = headerLookup(['track_title', 'track_name', 'title']);
+    const trackArtistIndex = headerLookup(['track_artist', 'artist']);
+    const timestampIndex = headerLookup(['timestamp_seconds', 'timestamp', 'track_time', 'time']);
+    const durationIndex = headerLookup(['duration_seconds', 'duration']);
+    const bpmIndex = headerLookup(['bpm']);
+    const keyIndex = headerLookup(['key']);
+    const albumIndex = headerLookup(['album']);
+    const trackCoverIndex = headerLookup(['track_cover_url', 'cover_url', 'cover']);
+    const trackSourceIndex = headerLookup(['track_source_url', 'source_url', 'track_url', 'url']);
+
+    // Check if using hierarchical format (SET/TRACK rows)
+    const hasTypeColumn = typeIndex !== undefined;
+
+    if (hasTypeColumn) {
+      // Hierarchical format: SET rows followed by TRACK rows
+      const sets: ParsedSet[] = [];
+      let currentSet: ParsedSet | null = null;
+      let trackIndex = 0;
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const rowType = row[typeIndex]?.trim().toUpperCase();
+
+        if (rowType === 'SET') {
+          // Save previous set if exists
+          if (currentSet && currentSet.name && currentSet.artist) {
+            sets.push(currentSet);
+          }
+          // Start new set
+          currentSet = {
+            id: `set-${Date.now()}-${sets.length}`,
+            name: setNameIndex !== undefined ? row[setNameIndex]?.trim() || '' : '',
+            artist: setArtistIndex !== undefined ? row[setArtistIndex]?.trim() || '' : '',
+            venue: setVenueIndex !== undefined ? row[setVenueIndex]?.trim() || undefined : undefined,
+            date: setDateIndex !== undefined ? row[setDateIndex]?.trim() || undefined : undefined,
+            coverUrl: setCoverIndex !== undefined ? row[setCoverIndex]?.trim() || undefined : undefined,
+            sourceUrl: setSourceIndex !== undefined ? row[setSourceIndex]?.trim() || undefined : undefined,
+            tracks: [],
+          };
+          trackIndex = 0;
+        } else if (rowType === 'TRACK' && currentSet) {
+          // Add track to current set
+          const title = trackTitleIndex !== undefined ? row[trackTitleIndex]?.trim() || '' : '';
+          const artist = trackArtistIndex !== undefined ? row[trackArtistIndex]?.trim() || '' : '';
+
+          if (title && artist) {
+            const timestampRaw = timestampIndex !== undefined ? row[timestampIndex]?.trim() : '';
+            let timestampValue = timestampRaw || '0:00';
+            if (timestampRaw && !timestampRaw.includes(':')) {
+              const seconds = parseNumber(timestampRaw);
+              if (seconds !== undefined) {
+                timestampValue = formatTimestamp(seconds);
+              }
+            }
+
+            currentSet.tracks.push({
+              id: `track-${Date.now()}-${i}-${trackIndex}`,
+              title,
+              artist,
+              timestamp: timestampValue,
+              durationSeconds: durationIndex !== undefined ? parseNumber(row[durationIndex]?.trim()) : undefined,
+              bpm: bpmIndex !== undefined ? parseNumber(row[bpmIndex]?.trim()) : undefined,
+              key: keyIndex !== undefined ? row[keyIndex]?.trim() || undefined : undefined,
+              album: albumIndex !== undefined ? row[albumIndex]?.trim() || undefined : undefined,
+              coverUrl: trackCoverIndex !== undefined ? row[trackCoverIndex]?.trim() || undefined : undefined,
+              sourceUrl: trackSourceIndex !== undefined ? row[trackSourceIndex]?.trim() || undefined : undefined,
+            });
+            trackIndex++;
+          }
+        }
+      }
+
+      // Don't forget the last set
+      if (currentSet && currentSet.name && currentSet.artist) {
+        sets.push(currentSet);
+      }
+
+      if (sets.length === 0) {
+        return { sets: [], error: 'No valid SET rows found. Each SET row needs set_name and set_artist.' };
+      }
+
+      return { sets };
+    } else {
+      // Flat format: all tracks belong to one set (legacy support)
+      if (trackTitleIndex === undefined || trackArtistIndex === undefined) {
+        return { sets: [], error: 'CSV must include type column with SET/TRACK rows, or track_title and track_artist columns.' };
+      }
+
+      const tracks: PendingTrack[] = rows.slice(1).map((row, index) => {
+        const title = row[trackTitleIndex]?.trim() || '';
+        const artist = row[trackArtistIndex]?.trim() || '';
+        const timestampRaw = timestampIndex !== undefined ? row[timestampIndex]?.trim() : '';
+
+        let timestampValue = timestampRaw || '0:00';
+        if (timestampRaw && !timestampRaw.includes(':')) {
+          const seconds = parseNumber(timestampRaw);
+          if (seconds !== undefined) {
+            timestampValue = formatTimestamp(seconds);
+          }
+        }
+
+        return {
+          id: `dev-${Date.now()}-${index}`,
+          title,
+          artist,
+          timestamp: timestampValue,
+          durationSeconds: durationIndex !== undefined ? parseNumber(row[durationIndex]?.trim()) : undefined,
+          bpm: bpmIndex !== undefined ? parseNumber(row[bpmIndex]?.trim()) : undefined,
+          key: keyIndex !== undefined ? row[keyIndex]?.trim() || undefined : undefined,
+          album: albumIndex !== undefined ? row[albumIndex]?.trim() || undefined : undefined,
+          coverUrl: trackCoverIndex !== undefined ? row[trackCoverIndex]?.trim() || undefined : undefined,
+          sourceUrl: trackSourceIndex !== undefined ? row[trackSourceIndex]?.trim() || undefined : undefined,
+        };
+      }).filter(track => track.title && track.artist);
+
+      if (tracks.length === 0) {
+        return { sets: [], error: 'No valid tracks found. Make sure rows have track_title and track_artist values.' };
+      }
+
+      // Return as single unnamed set (user will need to fill in set info)
+      return {
+        sets: [{
+          id: `set-${Date.now()}`,
+          name: 'Untitled Set',
+          artist: 'Unknown Artist',
+          tracks,
+        }],
+        error: 'Note: No SET rows found. Created one set with all tracks. Edit set name/artist before importing.',
+      };
+    }
+  };
+
+  const handleDevParseCsv = () => {
+    const { sets: parsedSets, error } = parseCsvSets(devCsvText);
+    if (error && parsedSets.length === 0) {
+      setDevCsvError(error);
+      setDevParsedSets([]);
+      return;
+    }
+    setDevCsvError(error || '');
+    setDevParsedSets(parsedSets);
+    const totalTracks = parsedSets.reduce((sum, set) => sum + set.tracks.length, 0);
+    Alert.alert('CSV Parsed', `Found ${parsedSets.length} set(s) with ${totalTracks} total tracks.`);
+  };
+
+  const handleDevCreateSets = () => {
+    if (devParsedSets.length === 0) {
+      Alert.alert('No Sets', 'Parse a CSV with SET/TRACK rows first.');
+      return;
+    }
+
+    const invalidSets = devParsedSets.filter(s => !s.name.trim() || !s.artist.trim() || s.name === 'Untitled Set');
+    if (invalidSets.length > 0) {
+      Alert.alert('Missing Info', 'All sets need a valid name and artist. Check your CSV SET rows.');
+      return;
+    }
+
+    let created = 0;
+    let duplicates = 0;
+    const fallbackCover = 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop';
+
+    for (const parsedSet of devParsedSets) {
+      const sourceLinks: SetList['sourceLinks'] = [];
+      if (parsedSet.sourceUrl) {
+        const platform = detectSourcePlatform(parsedSet.sourceUrl);
+        if (platform) {
+          sourceLinks.push({ platform, url: parsedSet.sourceUrl });
+        }
+      }
+
+      const parsedDate = parsedSet.date ? new Date(parsedSet.date) : new Date();
+      const totalDuration = parsedSet.tracks.reduce((sum, track) => sum + (track.durationSeconds || 0), 0);
+
+      const newSet: SetList = {
+        id: `${Date.now()}-${created}`,
+        name: parsedSet.name.trim(),
+        artist: parsedSet.artist.trim(),
+        venue: parsedSet.venue || undefined,
+        date: Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate,
+        tracks: parsedSet.tracks.map((track, index) => ({
+          id: `track-${Date.now()}-${created}-${index}`,
+          title: track.title,
+          artist: track.artist,
+          timestamp: parseTimestamp(track.timestamp),
+          duration: track.durationSeconds || 0,
+          bpm: track.bpm,
+          key: track.key,
+          album: track.album,
+          coverUrl: track.coverUrl || parsedSet.coverUrl || fallbackCover,
+          addedAt: new Date(),
+          source: track.sourceUrl ? 'link' : 'manual',
+          trackLinks: track.sourceUrl ? [{ platform: detectTrackLinkPlatform(track.sourceUrl), url: track.sourceUrl }] : undefined,
+          verified: false,
+        })),
+        coverUrl: parsedSet.coverUrl || undefined,
+        sourceLinks,
+        totalDuration,
+        aiProcessed: false,
+        commentsScraped: 0,
+        tracksIdentified: parsedSet.tracks.length,
+        plays: 0,
+      };
+
+      const result = addSet(newSet);
+      if (result.success) {
+        created++;
+      } else if (result.duplicate) {
+        duplicates++;
+      }
+    }
+
+    if (created > 0) {
+      setDevCsvText('');
+      setDevParsedSets([]);
+      setDevCsvError('');
+    }
+
+    Alert.alert(
+      'Import Complete',
+      `Created ${created} set(s).${duplicates > 0 ? ` ${duplicates} duplicate(s) skipped.` : ''}`
+    );
   };
 
   const resetForm = () => {
@@ -629,6 +1001,61 @@ export default function SubmitScreen() {
             </Text>
           </View>
         </View>
+
+        {__DEV__ && (
+          <View style={styles.devSection}>
+            <Text style={styles.devTitle}>Dev Tools: CSV Import</Text>
+            <Text style={styles.devSubtitle}>
+              Bulk import sets with tracks. Use SET rows for set info, TRACK rows for tracks.
+            </Text>
+            <View style={styles.devDivider} />
+            <Text style={styles.devLabel}>CSV Format</Text>
+            <Text style={styles.devHint}>
+              type, set_name, set_artist, set_venue, set_date, set_cover_url, set_source_url, track_title, track_artist, timestamp_seconds, ...
+            </Text>
+            <Text style={styles.devHint}>
+              SET rows define a set. TRACK rows below belong to that set.
+            </Text>
+            <TextInput
+              style={styles.devCsvInput}
+              placeholder="Paste CSV with SET and TRACK rows here..."
+              placeholderTextColor={Colors.dark.textMuted}
+              value={devCsvText}
+              onChangeText={setDevCsvText}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+            />
+            {devCsvError ? <Text style={styles.devError}>{devCsvError}</Text> : null}
+            
+            {devParsedSets.length > 0 && (
+              <View style={styles.devParsedPreview}>
+                <Text style={styles.devLabel}>Parsed Sets Preview</Text>
+                {devParsedSets.map((set, index) => (
+                  <View key={set.id} style={styles.devSetPreview}>
+                    <Text style={styles.devSetName}>{index + 1}. {set.name}</Text>
+                    <Text style={styles.devSetMeta}>
+                      {set.artist} • {set.tracks.length} tracks
+                      {set.venue ? ` • ${set.venue}` : ''}
+                      {set.date ? ` • ${set.date}` : ''}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
+            
+            <View style={styles.devActions}>
+              <Pressable style={styles.devSecondaryButton} onPress={handleDevParseCsv}>
+                <Text style={styles.devSecondaryButtonText}>
+                  Parse CSV ({devParsedSets.length} sets)
+                </Text>
+              </Pressable>
+              <Pressable style={styles.devPrimaryButton} onPress={handleDevCreateSets}>
+                <Text style={styles.devPrimaryButtonText}>Import All Sets</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         <Pressable 
           style={[styles.submitButton, duplicateWarning && styles.submitButtonWarning]} 
@@ -1062,5 +1489,124 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.text,
     fontWeight: '500' as const,
+  },
+  devSection: {
+    marginHorizontal: 16,
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.surface,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  devTitle: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+  },
+  devSubtitle: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginTop: 4,
+  },
+  devDivider: {
+    height: 1,
+    backgroundColor: Colors.dark.border,
+    marginVertical: 12,
+  },
+  devLabel: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    fontWeight: '600' as const,
+    marginBottom: 6,
+  },
+  devGrid: {
+    gap: 10,
+    marginBottom: 12,
+  },
+  devInput: {
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    height: 44,
+    color: Colors.dark.text,
+    fontSize: 13,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  devCsvInput: {
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    minHeight: 120,
+    color: Colors.dark.text,
+    fontSize: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    marginBottom: 10,
+  },
+  devError: {
+    color: Colors.dark.error,
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  devActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  devSecondaryButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  devSecondaryButtonText: {
+    color: Colors.dark.text,
+    fontWeight: '600' as const,
+    fontSize: 13,
+  },
+  devPrimaryButton: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    backgroundColor: Colors.dark.primary,
+  },
+  devPrimaryButtonText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+    fontSize: 13,
+  },
+  devHint: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    marginBottom: 6,
+    fontFamily: 'monospace',
+  },
+  devParsedPreview: {
+    marginBottom: 12,
+    padding: 10,
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 8,
+  },
+  devSetPreview: {
+    marginBottom: 8,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  devSetName: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  devSetMeta: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    marginTop: 2,
   },
 });

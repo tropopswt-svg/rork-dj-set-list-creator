@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "1001Tracklists Exporter",
+  "version": "1.0",
+  "description": "Export tracklists from 1001tracklists.com to CSV for DJ Set List Creator",
+  "permissions": ["clipboardWrite"],
+  "host_permissions": ["*://www.1001tracklists.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://www.1001tracklists.com/tracklist/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"]
+    }
+  ]
+}
