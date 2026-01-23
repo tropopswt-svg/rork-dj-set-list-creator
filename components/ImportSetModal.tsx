@@ -10,16 +10,20 @@ import {
   FlatList,
   Image,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { X, Link2, Youtube, Music2, Sparkles, CheckCircle, MessageSquare, Search, ExternalLink, ListMusic } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
+import { useSets } from '@/contexts/SetsContext';
+import { useRouter } from 'expo-router';
+import { SetList, Track } from '@/types';
 
 interface ImportSetModalProps {
   visible: boolean;
   onClose: () => void;
-  onImport: (url: string, platform: 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists') => void;
+  onImport?: (url: string, platform: 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists', scrapedData?: any) => void;
 }
 
 type ProcessingStep = 'idle' | 'detecting' | 'fetching' | 'scraping' | 'analyzing' | 'building' | 'complete';
@@ -44,6 +48,8 @@ const STEP_MESSAGES: Record<ProcessingStep, string> = {
 };
 
 export default function ImportSetModal({ visible, onClose, onImport }: ImportSetModalProps) {
+  const router = useRouter();
+  const { addSet, findDuplicateSet, normalizeArtistName } = useSets();
   const [url, setUrl] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<SearchTab>('url');
@@ -52,8 +58,132 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
   const [commentsFound, setCommentsFound] = useState(0);
   const [tracksFound, setTracksFound] = useState(0);
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  const parseTimestamp = (ts: string): number => {
+    const parts = ts.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
+  };
+
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
+    onSuccess: (result) => {
+      console.log('[ImportModal] Scrape result:', result);
+      
+      // Clear progress interval
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      
+      if (result.success && result.data) {
+        setStep('complete');
+        setTracksFound(result.data.tracks.length);
+        setCommentsFound(result.data.comments?.length || 0);
+        
+        Animated.timing(progressAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: false,
+        }).start();
+        
+        // Create the set from scraped data
+        const sourceLinks: SetList['sourceLinks'] = [];
+        if (result.data.links.youtube) sourceLinks.push({ platform: 'youtube', url: result.data.links.youtube });
+        if (result.data.links.soundcloud) sourceLinks.push({ platform: 'soundcloud', url: result.data.links.soundcloud });
+        if (result.data.links.mixcloud) sourceLinks.push({ platform: 'mixcloud', url: result.data.links.mixcloud });
+        
+        // Add the original URL if not already in links
+        const platform = detectPlatform(url);
+        if (platform && !sourceLinks.some(l => l.platform === platform)) {
+          sourceLinks.push({ platform, url });
+        }
+
+        const normalizedArtist = result.data.artist && result.data.artist !== 'Unknown Artist' 
+          ? normalizeArtistName(result.data.artist) 
+          : result.data.artist || 'Unknown Artist';
+
+        const newSet: SetList = {
+          id: `imported-${Date.now()}`,
+          name: result.data.title || 'Imported Set',
+          artist: normalizedArtist,
+          venue: result.data.venue,
+          date: result.data.date ? (typeof result.data.date === 'string' ? new Date(result.data.date) : new Date()) : new Date(),
+          tracks: result.data.tracks.map((t, i) => ({
+            id: `track-${Date.now()}-${i}`,
+            title: t.title,
+            artist: t.artist,
+            timestamp: parseTimestamp(t.timestamp),
+            duration: 0,
+            coverUrl: result.data.thumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+            addedAt: new Date(),
+            source: 'ai' as const,
+            verified: false,
+          })),
+          coverUrl: result.data.thumbnail,
+          sourceLinks: sourceLinks.length > 0 ? sourceLinks : [{ platform: platform as 'youtube' | 'soundcloud' | 'mixcloud', url }],
+          totalDuration: result.data.duration ? parseDuration(result.data.duration) : 0,
+          aiProcessed: true,
+          commentsScraped: result.data.comments?.length || 0,
+          tracksIdentified: result.data.tracks.length,
+          plays: 0,
+        };
+
+        const addResult = addSet(newSet);
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        setTimeout(() => {
+          if (onImport) {
+            onImport(url, platform || 'youtube', result.data);
+          }
+          resetState();
+          onClose();
+          
+          // Navigate to the set detail page
+          if (addResult.success) {
+            router.push(`/(tabs)/(discover)/${addResult.set.id}`);
+          } else if (addResult.duplicate) {
+            router.push(`/(tabs)/(discover)/${addResult.duplicate.id}`);
+          }
+        }, 1000);
+      } else {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        setError(result.error || 'Failed to import set');
+        setStep('idle');
+        setProcessing(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    },
+    onError: (error) => {
+      console.error('[ImportModal] Scrape error:', error);
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setError(error.message || 'Failed to scrape URL');
+      setStep('idle');
+      setProcessing(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
+
+  const parseDuration = (durationStr: string): number => {
+    // Parse duration string like "1:15:30" or "75:30" or "4530"
+    const parts = durationStr.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    const seconds = parseInt(durationStr);
+    return isNaN(seconds) ? 0 : seconds;
+  };
 
   const soundcloudSearch = trpc.scraper.searchSoundCloudSets.useMutation({
     onSuccess: (data) => {
@@ -109,6 +239,65 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     return null;
   };
 
+  const handleImport = async () => {
+    const platform = detectPlatform(url);
+    if (!platform) {
+      setError('Unsupported URL. Please use YouTube, SoundCloud, Mixcloud, or 1001tracklists.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (!url.trim()) {
+      setError('Please enter a URL');
+      return;
+    }
+
+    let urlToScrape = url.trim();
+    if (!urlToScrape.startsWith('http://') && !urlToScrape.startsWith('https://')) {
+      urlToScrape = 'https://' + urlToScrape;
+    }
+
+    setProcessing(true);
+    setError(null);
+    setStep('detecting');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    // Animate progress through steps
+    const steps: ProcessingStep[] = ['detecting', 'fetching', 'scraping', 'analyzing', 'building'];
+    let currentStepIndex = 0;
+
+    progressIntervalRef.current = setInterval(() => {
+      if (currentStepIndex < steps.length - 1) {
+        currentStepIndex++;
+        setStep(steps[currentStepIndex]);
+        Animated.timing(progressAnim, {
+          toValue: (currentStepIndex + 1) / (steps.length + 1),
+          duration: 500,
+          useNativeDriver: false,
+        }).start();
+      } else {
+        // Clear interval when we reach the last step
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+      }
+    }, 1500);
+
+    // Start the actual scrape
+    try {
+      scrapeMutation.mutate({ url: urlToScrape });
+    } catch (err) {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+      setError('Failed to start import');
+      setProcessing(false);
+      setStep('idle');
+    }
+  };
+
   const handleSearch = () => {
     if (!searchQuery.trim()) return;
     
@@ -124,64 +313,19 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
 
   const handleSelectResult = (result: SearchResult) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const platform = detectPlatform(result.url);
-    if (platform) {
-      onImport(result.url, platform);
-      resetState();
-      onClose();
-    }
-  };
-
-  const simulateProcessing = async () => {
-    const platform = detectPlatform(url);
-    if (!platform) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
-
-    setProcessing(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    const steps: ProcessingStep[] = ['detecting', 'fetching', 'scraping', 'analyzing', 'building', 'complete'];
-    
-    for (let i = 0; i < steps.length; i++) {
-      setStep(steps[i]);
-      
-      Animated.timing(progressAnim, {
-        toValue: (i + 1) / steps.length,
-        duration: 400,
-        useNativeDriver: false,
-      }).start();
-
-      if (steps[i] === 'scraping') {
-        const targetComments = Math.floor(Math.random() * 500) + 200;
-        for (let c = 0; c < targetComments; c += Math.floor(Math.random() * 30) + 10) {
-          setCommentsFound(Math.min(c, targetComments));
-          await new Promise(r => setTimeout(r, 50));
-        }
-        setCommentsFound(targetComments);
-      }
-
-      if (steps[i] === 'analyzing') {
-        const targetTracks = Math.floor(Math.random() * 12) + 8;
-        for (let t = 0; t < targetTracks; t++) {
-          setTracksFound(t + 1);
-          await new Promise(r => setTimeout(r, 200));
-        }
-      }
-
-      await new Promise(r => setTimeout(r, steps[i] === 'complete' ? 500 : 1200));
-    }
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
+    setUrl(result.url);
+    // Switch to URL tab and trigger import
+    setActiveTab('url');
     setTimeout(() => {
-      onImport(url, platform);
-      resetState();
-    }, 800);
+      handleImport();
+    }, 100);
   };
 
   const resetState = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
     setUrl('');
     setSearchQuery('');
     setProcessing(false);
@@ -189,6 +333,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     setCommentsFound(0);
     setTracksFound(0);
     setSearchResults([]);
+    setError(null);
     progressAnim.setValue(0);
   };
 
@@ -318,13 +463,25 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
                     </View>
                   </View>
 
+                  {error && (
+                    <View style={styles.errorContainer}>
+                      <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                  )}
+
                   <Pressable
-                    style={[styles.importButton, !isValidUrl && styles.importButtonDisabled]}
-                    onPress={simulateProcessing}
-                    disabled={!isValidUrl}
+                    style={[styles.importButton, (!isValidUrl || processing) && styles.importButtonDisabled]}
+                    onPress={handleImport}
+                    disabled={!isValidUrl || processing}
                   >
-                    <Sparkles size={18} color="#fff" />
-                    <Text style={styles.importButtonText}>Build Tracklist with AI</Text>
+                    {processing ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Sparkles size={18} color="#fff" />
+                    )}
+                    <Text style={styles.importButtonText}>
+                      {processing ? 'Importing...' : 'Build Tracklist with AI'}
+                    </Text>
                   </Pressable>
                 </>
               ) : (
@@ -714,5 +871,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
     marginTop: 2,
+  },
+  errorContainer: {
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.3)',
+  },
+  errorText: {
+    fontSize: 13,
+    color: Colors.dark.error,
+    textAlign: 'center',
   },
 });

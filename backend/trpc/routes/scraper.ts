@@ -4,6 +4,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawnSync } from "child_process";
 import { createTRPCRouter, publicProcedure } from "../create-context";
+import { tmpdir } from "os";
 
 const ScrapedTrack = z.object({
   title: z.string(),
@@ -118,11 +119,24 @@ function isYouTubeUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)/i.test(url);
 }
 
-function getYtDlpConfig(): { type: "binary"; cmd: string } {
+function getYtDlpConfig(): { type: "binary" | "python"; cmd: string; args?: string[] } {
   const raw = process.env.YT_DLP_PATH?.trim();
   const projectRoot = process.cwd();
 
   if (raw) {
+    // Check if it's a Python module command (e.g., "python3 -m yt_dlp")
+    if (raw.includes("python") || raw.includes("yt_dlp") || raw.includes("-m")) {
+      // Parse python command (e.g., "python3 -m yt_dlp" or "python3 -m yt_dlp")
+      const parts = raw.split(/\s+/);
+      const pythonCmd = parts[0] || "python3";
+      const moduleIndex = parts.indexOf("-m");
+      const module = moduleIndex >= 0 && parts[moduleIndex + 1] 
+        ? parts[moduleIndex + 1] 
+        : "yt_dlp";
+      return { type: "python", cmd: pythonCmd, args: ["-m", module] };
+    }
+    
+    // It's a binary path
     const resolved = path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
     try {
       if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
@@ -134,11 +148,80 @@ function getYtDlpConfig(): { type: "binary"; cmd: string } {
     return { type: "binary", cmd: path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw) };
   }
 
+  // Try default binary first
   const defaultBin = path.resolve(projectRoot, "bin", "yt-dlp");
   if (fs.existsSync(defaultBin) && fs.statSync(defaultBin).isFile()) {
     return { type: "binary", cmd: defaultBin };
   }
-  return { type: "binary", cmd: "yt-dlp" };
+  
+  // Fallback to Python module if binary doesn't exist
+  return { type: "python", cmd: "python3", args: ["-m", "yt_dlp"] };
+}
+
+/**
+ * Download an audio segment from YouTube using yt-dlp
+ * Returns the path to the downloaded audio file (WAV format for ACRCloud compatibility)
+ */
+async function downloadYouTubeAudioSegment(
+  youtubeUrl: string,
+  startSeconds: number,
+  durationSeconds: number
+): Promise<string | null> {
+  const config = getYtDlpConfig();
+  const tempDir = tmpdir();
+  const outputPath = path.join(tempDir, `acrcloud_${Date.now()}_${Math.random().toString(36).substring(7)}.wav`);
+  
+  // yt-dlp can extract segments using --download-sections or postprocessor args
+  // Using --postprocessor-args with ffmpeg to extract segment and convert to WAV
+  const ytDlpArgs = [
+    "-x", // Extract audio only
+    "--audio-format", "wav", // Convert to WAV (ACRCloud compatible)
+    "--audio-quality", "0", // Best quality
+    "--no-check-certificates",
+    "--postprocessor-args", `ffmpeg:-ss ${startSeconds} -t ${durationSeconds}`, // Extract segment
+    "-o", outputPath,
+    youtubeUrl,
+  ];
+  
+  const cmd = config.cmd;
+  const args = config.type === "python" && config.args 
+    ? [...config.args, ...ytDlpArgs]
+    : ytDlpArgs;
+  
+  try {
+    console.log(`[Scraper] Downloading audio segment: ${startSeconds}s-${startSeconds + durationSeconds}s`);
+    console.log(`[Scraper] Running: ${cmd} ${args.join(' ')}`);
+    
+    const startTime = Date.now();
+    const result = spawnSync(cmd, args, {
+      encoding: "utf8",
+      timeout: 60_000, // 60 second timeout for download
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const elapsed = Date.now() - startTime;
+    
+    console.log(`[Scraper] Download completed in ${elapsed}ms, exit status: ${result.status}`);
+    
+    if (result.status !== 0) {
+      const errorMsg = result.stderr?.toString() || result.stdout?.toString() || "Unknown error";
+      console.error(`[Scraper] yt-dlp download failed: ${errorMsg.substring(0, 500)}`);
+      return null;
+    }
+    
+    // Check if file was created
+    if (fs.existsSync(outputPath)) {
+      const stats = fs.statSync(outputPath);
+      console.log(`[Scraper] ✅ Audio segment downloaded: ${outputPath} (${stats.size} bytes)`);
+      return outputPath;
+    } else {
+      console.error(`[Scraper] ❌ Audio file not found at ${outputPath}`);
+      return null;
+    }
+  } catch (e) {
+    console.error(`[Scraper] Exception downloading audio:`, e);
+    return null;
+  }
 }
 
 /**
@@ -148,33 +231,129 @@ function getYtDlpConfig(): { type: "binary"; cmd: string } {
  */
 async function resolveYouTubeToStreamUrl(youtubeUrl: string): Promise<string | null> {
   const config = getYtDlpConfig();
-  const args = [
+  
+  // ACRCloud may not support HLS manifests - try to get direct stream URLs
+  // Use format selector that prefers non-HLS formats
+  const ytDlpArgs = [
     "-g",
-    "-f", "bestaudio/best",
-    "--no-warnings",
+    "-f", "worstaudio/worst[height<=480]/bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best[ext=m4a]/best[ext=webm]/best",
     "--no-check-certificates",
     youtubeUrl,
   ];
+  
+  // Build command and args based on type
+  const cmd = config.cmd;
+  const args = config.type === "python" && config.args 
+    ? [...config.args, ...ytDlpArgs]
+    : ytDlpArgs;
+  
   try {
-    const opts: { encoding: "utf8"; timeout: number; cwd?: string } = {
+    console.log(`[Scraper] Running yt-dlp (${config.type}): ${cmd} ${args.join(' ')}`);
+    console.log(`[Scraper] Starting yt-dlp execution (timeout: 30s)...`);
+    
+    // Use spawnSync but ignore stderr (warnings) - only check stdout for the URL
+    // This matches the manual test that works
+    const startTime = Date.now();
+    const result = spawnSync(cmd, args, {
       encoding: "utf8",
       timeout: 30_000,
-    };
-    const result = spawnSync(config.cmd, args, opts);
+      cwd: process.cwd(),
+      stdio: ['ignore', 'pipe', 'pipe'], // stdin: ignore, stdout: capture, stderr: capture but ignore warnings
+    });
+    const elapsed = Date.now() - startTime;
+    
+    console.log(`[Scraper] yt-dlp completed in ${elapsed}ms`);
 
     const { status, stdout, stderr } = result;
+    console.log(`[Scraper] yt-dlp exit status: ${status}`);
+    console.log(`[Scraper] stdout length: ${stdout?.toString().length || 0} bytes`);
+    console.log(`[Scraper] stderr length: ${stderr?.toString().length || 0} bytes`);
+    
+    // Extract URL from stdout first - yt-dlp outputs warnings to stderr, URL to stdout
+    // Even if exit code is non-zero, it might still output the URL (semaphore errors are warnings)
+    const output = stdout?.toString() || "";
+    const lines = output.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    // Find first line starting with http (the stream URL)
+    const streamUrl = lines.find(line => line.startsWith('http')) || lines[lines.length - 1] || "";
+    
+    // Log stderr for debugging but don't fail on warnings
+    if (stderr) {
+      const stderrStr = stderr.toString();
+      const isSemaphoreError = stderrStr.includes('ERROR] Failed to initialize sync semaphore') || 
+                               stderrStr.includes('Failed to initialize sync semaphore');
+      
+      if (isSemaphoreError) {
+        console.warn(`[Scraper] ⚠️  yt-dlp semaphore error (this is usually harmless if URL is extracted)`);
+        console.warn(`[Scraper] stderr: ${stderrStr.substring(0, 200)}`);
+      } else if (!stderrStr.includes('WARNING:')) {
+        console.warn(`[Scraper] yt-dlp stderr: ${stderrStr.substring(0, 500)}`);
+      }
+    }
+    
+    // If we found a valid URL, check if it's an HLS manifest
+    // ACRCloud may not support HLS manifests, so we should try to get a direct stream
+    if (streamUrl && streamUrl.startsWith("http")) {
+      // Check if it's an HLS manifest (.m3u8)
+      if (streamUrl.includes('.m3u8') || streamUrl.includes('manifest') || streamUrl.includes('hls')) {
+        console.warn(`[Scraper] ⚠️  Got HLS manifest URL - ACRCloud may not support this format`);
+        console.warn(`[Scraper] Trying to get direct audio stream instead...`);
+        
+        // Try again with format that excludes HLS
+        const directArgs = [
+          "-g",
+          "-f", "bestaudio[protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=m4a]/bestaudio[ext=webm]/best[ext=m4a]/best[ext=webm]",
+          "--no-check-certificates",
+          youtubeUrl,
+        ];
+        
+        const directResult = spawnSync(cmd, config.type === "python" && config.args 
+          ? [...config.args, ...directArgs]
+          : directArgs, {
+          encoding: "utf8",
+          timeout: 30_000,
+          cwd: process.cwd(),
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        
+        const directOutput = directResult.stdout?.toString() || "";
+        const directLines = directOutput.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+        const directStreamUrl = directLines.find(line => line.startsWith('http') && !line.includes('.m3u8') && !line.includes('manifest') && !line.includes('hls'));
+        
+        if (directStreamUrl && directStreamUrl.startsWith("http")) {
+          console.log(`[Scraper] ✅ Got direct audio stream URL (non-HLS)`);
+          console.log(`[Scraper] Stream URL: ${directStreamUrl.substring(0, 100)}...`);
+          return directStreamUrl;
+        } else {
+          console.warn(`[Scraper] ⚠️  Could not get direct stream, using HLS manifest (ACRCloud may reject it)`);
+        }
+      }
+      
+      console.log(`[Scraper] ✅ yt-dlp successfully extracted stream URL (exit status: ${status})`);
+      console.log(`[Scraper] Stream URL: ${streamUrl.substring(0, 100)}...`);
+      return streamUrl;
+    }
+    
+    // No URL found - check exit code and log error
     if (status !== 0) {
-      console.warn("[Scraper] yt-dlp failed:", stderr?.slice(0, 500) || stdout?.slice(0, 500));
+      const errorMsg = stderr?.toString() || stdout?.toString() || "Unknown error";
+      console.error(`[Scraper] ❌ yt-dlp failed with status ${status} and no URL extracted:`);
+      console.error(`[Scraper] stderr: ${errorMsg.slice(0, 1000)}`);
+      console.error(`[Scraper] stdout: ${stdout?.toString().slice(0, 500) || 'none'}`);
       return null;
     }
-    const streamUrl = stdout?.trim();
-    if (!streamUrl || !streamUrl.startsWith("http")) {
-      console.warn("[Scraper] yt-dlp did not return a valid stream URL");
-      return null;
+    
+    // Exit code is 0 but no URL found
+    console.error(`[Scraper] ❌ yt-dlp completed but did not return a valid stream URL`);
+    console.error(`[Scraper] stdout lines: ${lines.length}, content: ${output.substring(0, 500)}`);
+    if (stderr) {
+      console.error(`[Scraper] stderr: ${stderr.toString().substring(0, 500)}`);
     }
+    return null;
+    console.log(`[Scraper] ✅ yt-dlp successfully extracted stream URL`);
+    console.log(`[Scraper] Stream URL: ${streamUrl.substring(0, 100)}...`);
     return streamUrl;
   } catch (e) {
-    console.warn("[Scraper] YouTube resolve (yt-dlp) error:", e);
+    console.error(`[Scraper] YouTube resolve (yt-dlp) exception:`, e);
     return null;
   }
 }
@@ -200,7 +379,12 @@ async function resolveSoundCloudToStreamUrl(soundcloudUrl: string): Promise<stri
       },
     });
     if (!resolveRes.ok) {
-      console.warn("[Scraper] SoundCloud resolve failed:", resolveRes.status, await resolveRes.text());
+      const errorText = await resolveRes.text();
+      console.error(`[Scraper] ❌ SoundCloud resolve failed: ${resolveRes.status}`);
+      console.error(`[Scraper] Error response: ${errorText.substring(0, 500)}`);
+      if (resolveRes.status === 403) {
+        console.error(`[Scraper] 💡 403 Forbidden - Check if SOUNDCLOUD_CLIENT_ID is valid and has proper permissions`);
+      }
       return null;
     }
 
@@ -349,42 +533,49 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
   const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
   let comments: z.infer<typeof ScrapedComment>[] = [];
   let tracks: z.infer<typeof ScrapedTrack>[] = [];
+  let title = "Unknown Set";
+  let artist = "Unknown Artist";
+  let thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
   
   try {
-    const oembedUrl = `https://www.youtube.com/oembed?url=${youtubeUrl}&format=json`;
-    const response = await fetch(oembedUrl);
+    // Try to fetch comments (don't fail if this doesn't work)
+    try {
+      comments = await fetchYouTubeComments(videoId);
+      tracks = extractTracksFromComments(comments);
+    } catch (commentError) {
+      console.warn(`[Scraper] Failed to fetch YouTube comments, continuing:`, commentError);
+    }
     
-    comments = await fetchYouTubeComments(videoId);
-    tracks = extractTracksFromComments(comments);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[Scraper] YouTube oEmbed data:`, data);
+    // Try to fetch metadata via oEmbed
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${youtubeUrl}&format=json`;
+      const response = await fetch(oembedUrl, {
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
       
-      const titleParts = data.title?.split(' - ') || [];
-      const artist = data.author_name || titleParts[0] || 'Unknown Artist';
-      const title = titleParts.length > 1 ? titleParts.slice(1).join(' - ') : data.title || 'Unknown Set';
-      
-      return {
-        title,
-        artist,
-        thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-        platform: "youtube",
-        tracks,
-        comments,
-        links: {
-          youtube: youtubeUrl,
-        },
-      };
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[Scraper] YouTube oEmbed data:`, data);
+        
+        const titleParts = data.title?.split(' - ') || [];
+        artist = data.author_name || titleParts[0] || 'Unknown Artist';
+        title = titleParts.length > 1 ? titleParts.slice(1).join(' - ') : data.title || 'Unknown Set';
+        thumbnail = data.thumbnail_url || thumbnail;
+      } else {
+        console.warn(`[Scraper] YouTube oEmbed returned ${response.status}, using defaults`);
+      }
+    } catch (oembedError) {
+      console.warn(`[Scraper] YouTube oEmbed failed, using defaults:`, oembedError);
     }
   } catch (error) {
-    console.error(`[Scraper] YouTube oEmbed error:`, error);
+    console.error(`[Scraper] YouTube fetch error:`, error);
+    // Continue with defaults
   }
 
   return {
-    title: "Unknown Set",
-    artist: "Unknown Artist",
-    thumbnail: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    title,
+    artist,
+    thumbnail,
     platform: "youtube",
     tracks,
     comments,
@@ -519,38 +710,49 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
   const soundcloudUrl = `https://soundcloud.com/${trackPath}`;
   let comments: z.infer<typeof ScrapedComment>[] = [];
   let tracks: z.infer<typeof ScrapedTrack>[] = [];
+  const parts = trackPath.split('/');
+  let title = parts[1]?.replace(/-/g, ' ') || "Unknown Set";
+  let artist = parts[0]?.replace(/-/g, ' ') || "Unknown Artist";
+  let thumbnail: string | undefined;
   
   try {
-    const oembedUrl = `https://soundcloud.com/oembed?url=${soundcloudUrl}&format=json`;
-    const response = await fetch(oembedUrl);
+    // Try to fetch comments (don't fail if this doesn't work)
+    try {
+      comments = await fetchSoundCloudComments(soundcloudUrl);
+      tracks = extractTracksFromComments(comments);
+    } catch (commentError) {
+      console.warn(`[Scraper] Failed to fetch SoundCloud comments, continuing:`, commentError);
+    }
     
-    comments = await fetchSoundCloudComments(soundcloudUrl);
-    tracks = extractTracksFromComments(comments);
-    
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`[Scraper] SoundCloud oEmbed data:`, data);
+    // Try to fetch metadata via oEmbed
+    try {
+      const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(soundcloudUrl)}&format=json`;
+      const response = await fetch(oembedUrl, {
+        signal: AbortSignal.timeout(10000), // 10 second timeout
+      });
       
-      return {
-        title: data.title || "Unknown Set",
-        artist: data.author_name || "Unknown Artist",
-        thumbnail: data.thumbnail_url,
-        platform: "soundcloud",
-        tracks,
-        comments,
-        links: {
-          soundcloud: soundcloudUrl,
-        },
-      };
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[Scraper] SoundCloud oEmbed data:`, data);
+        
+        title = data.title || title;
+        artist = data.author_name || artist;
+        thumbnail = data.thumbnail_url;
+      } else {
+        console.warn(`[Scraper] SoundCloud oEmbed returned ${response.status}, using defaults`);
+      }
+    } catch (oembedError) {
+      console.warn(`[Scraper] SoundCloud oEmbed failed, using defaults:`, oembedError);
     }
   } catch (error) {
-    console.error(`[Scraper] SoundCloud oEmbed error:`, error);
+    console.error(`[Scraper] SoundCloud fetch error:`, error);
+    // Continue with defaults
   }
 
-  const parts = trackPath.split('/');
   return {
-    title: parts[1]?.replace(/-/g, ' ') || "Unknown Set",
-    artist: parts[0]?.replace(/-/g, ' ') || "Unknown Artist",
+    title,
+    artist,
+    thumbnail,
     platform: "soundcloud",
     tracks,
     comments,
@@ -563,33 +765,35 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
 async function fetchMixcloudData(trackPath: string): Promise<z.infer<typeof ScrapedSetData>> {
   console.log(`[Scraper] Fetching Mixcloud data for: ${trackPath}`);
   
+  const parts = trackPath.split('/');
+  let title = parts[1]?.replace(/-/g, ' ') || "Unknown Set";
+  let artist = parts[0]?.replace(/-/g, ' ') || "Unknown Artist";
+  let thumbnail: string | undefined;
+  
   try {
     const oembedUrl = `https://www.mixcloud.com/oembed/?url=https://www.mixcloud.com/${trackPath}/&format=json`;
-    const response = await fetch(oembedUrl);
+    const response = await fetch(oembedUrl, {
+      signal: AbortSignal.timeout(10000), // 10 second timeout
+    });
     
     if (response.ok) {
       const data = await response.json();
       console.log(`[Scraper] Mixcloud oEmbed data:`, data);
       
-      return {
-        title: data.title || "Unknown Set",
-        artist: data.author_name || "Unknown Artist",
-        thumbnail: data.image,
-        platform: "mixcloud",
-        tracks: [],
-        links: {
-          mixcloud: `https://www.mixcloud.com/${trackPath}/`,
-        },
-      };
+      title = data.title || title;
+      artist = data.author_name || artist;
+      thumbnail = data.image;
+    } else {
+      console.warn(`[Scraper] Mixcloud oEmbed returned ${response.status}, using defaults`);
     }
   } catch (error) {
-    console.error(`[Scraper] Mixcloud oEmbed error:`, error);
+    console.warn(`[Scraper] Mixcloud oEmbed failed, using defaults:`, error);
   }
 
-  const parts = trackPath.split('/');
   return {
-    title: parts[1]?.replace(/-/g, ' ') || "Unknown Set",
-    artist: parts[0]?.replace(/-/g, ' ') || "Unknown Artist",
+    title,
+    artist,
+    thumbnail,
     platform: "mixcloud",
     tracks: [],
     links: {
@@ -818,6 +1022,12 @@ async function fetch1001TracklistDirect(url: string): Promise<Fetch1001Result> {
   const result: Fetch1001Result = {
     tracks: [],
     links: {},
+    title: undefined,
+    artist: undefined,
+    thumbnail: undefined,
+    venue: undefined,
+    date: undefined,
+    duration: undefined,
   };
   
   try {
@@ -827,6 +1037,7 @@ async function fetch1001TracklistDirect(url: string): Promise<Fetch1001Result> {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
       },
+      signal: AbortSignal.timeout(15000), // 15 second timeout
     });
     
     if (response.ok) {
@@ -1153,29 +1364,41 @@ async function identifyTrackFromUrlInternal(
     console.log(`[ACRCloud] ✅ Resolved SoundCloud stream URL: ${streamUrl.substring(0, 100)}...`);
   } else if (isYouTubeUrl(audioUrl)) {
     console.log(`[ACRCloud] Detected YouTube URL`);
-    console.log(`[ACRCloud] Resolving YouTube URL to stream using yt-dlp...`);
-    const streamUrl = await resolveYouTubeToStreamUrl(audioUrl);
-    if (!streamUrl) {
-      console.log(`[ACRCloud] ❌ ERROR: Could not resolve YouTube URL to stream`);
-      return {
-        success: false,
-        error:
-          "Could not resolve YouTube URL to a stream. Install yt-dlp (brew install yt-dlp) and ensure it is on PATH, or set YT_DLP_PATH.",
-        result: null,
-      };
-    }
-    urlToIdentify = streamUrl;
-    console.log(`[ACRCloud] ✅ Resolved YouTube stream URL: ${streamUrl.substring(0, 100)}...`);
+    // ACRCloud may support YouTube watch URLs directly
+    // Try using the original YouTube URL first, as videoplayback URLs often return 403
+    console.log(`[ACRCloud] Using YouTube watch URL directly (ACRCloud may support it)`);
+    urlToIdentify = audioUrl;
+    console.log(`[ACRCloud] ✅ Using YouTube URL: ${audioUrl}`);
+    
+    // Note: If ACRCloud doesn't support direct YouTube URLs, we could fall back to stream URL resolution
+    // But videoplayback URLs often return 403, so direct YouTube URL is preferred
   } else {
     console.log(`[ACRCloud] Direct URL (not YouTube/SoundCloud), using as-is`);
   }
   
   console.log(`[ACRCloud] Final URL sent to ACRCloud: ${urlToIdentify.substring(0, 150)}...`);
 
+  // Test if the resolved URL is accessible before sending to ACRCloud
+  try {
+    console.log(`[ACRCloud] Testing if stream URL is accessible...`);
+    const testResponse = await fetch(urlToIdentify, { 
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000) // 5 second timeout
+    });
+    if (!testResponse.ok) {
+      console.log(`[ACRCloud] ⚠️  Stream URL returned status ${testResponse.status}, but continuing anyway`);
+    } else {
+      console.log(`[ACRCloud] ✅ Stream URL is accessible (status ${testResponse.status})`);
+    }
+  } catch (testError) {
+    console.log(`[ACRCloud] ⚠️  Could not verify stream URL accessibility: ${testError instanceof Error ? testError.message : 'Unknown error'}`);
+    console.log(`[ACRCloud] Continuing with ACRCloud request anyway...`);
+  }
+
   try {
     const httpMethod = "POST";
     const httpUri = "/v1/identify";
-    const dataType = "url";
+    const dataType = "audio_url"; // Must be "audio_url" for URL identification, not "url"
     const signatureVersion = "1";
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const stringToSign = [httpMethod, httpUri, accessKey, dataType, signatureVersion, timestamp].join("\n");
@@ -1188,15 +1411,67 @@ async function identifyTrackFromUrlInternal(
     formData.append("signature", signature);
     formData.append("data_type", dataType);
     formData.append("signature_version", signatureVersion);
-    formData.append("start_time_seconds", startSeconds.toString());
-    formData.append("rec_length", durationSeconds.toString());
+    
+    // Add timestamp parameters if provided (may be optional for audio_url)
+    if (startSeconds > 0) {
+      formData.append("start_time_seconds", startSeconds.toString());
+    }
+    if (durationSeconds !== 15) {
+      formData.append("rec_length", durationSeconds.toString());
+    }
 
+    console.log(`[ACRCloud] Sending request to ACRCloud API...`);
+    console.log(`[ACRCloud] Request details:`);
+    console.log(`  - Stream URL: ${urlToIdentify.substring(0, 150)}...`);
+    console.log(`  - URL type: ${urlToIdentify.includes('.m3u8') || urlToIdentify.includes('manifest') || urlToIdentify.includes('hls') ? 'HLS Manifest (may not be supported)' : 'Direct stream'}`);
+    console.log(`  - Start time: ${startSeconds}s (${Math.floor(startSeconds / 60)}:${String(startSeconds % 60).padStart(2, '0')})`);
+    console.log(`  - Duration: ${durationSeconds}s`);
+    console.log(`  - This will analyze audio from ${startSeconds}s to ${startSeconds + durationSeconds}s`);
+    console.log(`[ACRCloud] Request parameters:`);
+    console.log(`  - access_key: ${accessKey.substring(0, 10)}...`);
+    console.log(`  - url: ${urlToIdentify.substring(0, 100)}...`);
+    console.log(`  - start_time_seconds: ${startSeconds} (type: ${typeof startSeconds})`);
+    console.log(`  - rec_length: ${durationSeconds} (type: ${typeof durationSeconds})`);
+    console.log(`  - data_type: ${dataType}`);
+    console.log(`  - signature_version: ${signatureVersion}`);
+    
     const response = await fetch(`https://${host}${httpUri}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formData.toString(),
     });
+    
+    console.log(`[ACRCloud] ACRCloud response status: ${response.status}`);
     const result = await response.json();
+    console.log(`[ACRCloud] ACRCloud full response:`, JSON.stringify(result, null, 2));
+    console.log(`[ACRCloud] ACRCloud response code: ${result.status?.code}, message: ${result.status?.msg || 'N/A'}`);
+    
+    // Log if we get "invalid arguments" error
+    if (result.status?.msg?.toLowerCase().includes('invalid arguments') || 
+        result.status?.msg?.toLowerCase().includes('invalid argument')) {
+      console.error(`[ACRCloud] ⚠️  "Invalid arguments" error detected!`);
+      console.error(`[ACRCloud] Full error response:`, JSON.stringify(result, null, 2));
+      console.error(`[ACRCloud] Request parameters sent:`);
+      console.error(`  - url: ${urlToIdentify.substring(0, 100)}...`);
+      console.error(`  - start_time_seconds: ${startSeconds}`);
+      console.error(`  - rec_length: ${durationSeconds}`);
+      console.error(`  - data_type: ${dataType}`);
+    }
+    
+    if (result.status?.code === 0) {
+      if (result.metadata?.music?.length > 0) {
+        console.log(`[ACRCloud] ✅ Successfully analyzed audio segment and found match!`);
+        console.log(`[ACRCloud] 🎵 ACRCloud listened to audio from ${startSeconds}s to ${startSeconds + durationSeconds}s`);
+      } else {
+        console.log(`[ACRCloud] ✅ Successfully analyzed audio segment (code 0 but no music data)`);
+      }
+    } else if (result.status?.code === 1001) {
+      console.log(`[ACRCloud] ⚠️  Audio was analyzed (listened to ${startSeconds}s-${startSeconds + durationSeconds}s) but no match found in database`);
+      console.log(`[ACRCloud] 💡 This means ACRCloud successfully processed the audio, but the track isn't in their database`);
+    } else {
+      console.log(`[ACRCloud] ❌ Error analyzing audio: ${result.status?.msg || 'Unknown error'}`);
+      console.log(`[ACRCloud] 💡 ACRCloud may not have been able to access or process the audio stream`);
+    }
 
     if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
       const music = result.metadata.music[0];
@@ -1297,54 +1572,69 @@ export const scraperRouter = createTRPCRouter({
 
       let setData: z.infer<typeof ScrapedSetData>;
 
-      switch (extracted.platform) {
-        case "youtube":
-          setData = await fetchYouTubeData(extracted.id);
-          break;
-        case "soundcloud":
-          setData = await fetchSoundCloudData(extracted.id);
-          break;
-        case "mixcloud":
-          setData = await fetchMixcloudData(extracted.id);
-          break;
-        case "1001tracklists":
-          const result1001 = await fetch1001TracklistDirect(input.url);
-          setData = {
-            title: result1001.title || "Set from 1001tracklists",
-            artist: result1001.artist || "Unknown Artist",
-            thumbnail: result1001.thumbnail,
-            venue: result1001.venue,
-            date: result1001.date,
-            duration: result1001.duration,
-            platform: "1001tracklists",
-            tracks: result1001.tracks,
-            links: {
-              youtube: result1001.links.youtube,
-              soundcloud: result1001.links.soundcloud,
-              mixcloud: result1001.links.mixcloud,
-            },
-          };
-          break;
-        default:
-          return {
-            success: false,
-            error: "Unsupported platform",
-            data: null,
-          };
+      try {
+        switch (extracted.platform) {
+          case "youtube":
+            setData = await fetchYouTubeData(extracted.id);
+            break;
+          case "soundcloud":
+            setData = await fetchSoundCloudData(extracted.id);
+            break;
+          case "mixcloud":
+            setData = await fetchMixcloudData(extracted.id);
+            break;
+          case "1001tracklists":
+            const result1001 = await fetch1001TracklistDirect(input.url);
+            setData = {
+              title: result1001.title || "Set from 1001tracklists",
+              artist: result1001.artist || "Unknown Artist",
+              thumbnail: result1001.thumbnail,
+              venue: result1001.venue,
+              date: result1001.date,
+              duration: result1001.duration,
+              platform: "1001tracklists",
+              tracks: result1001.tracks,
+              links: {
+                youtube: result1001.links.youtube,
+                soundcloud: result1001.links.soundcloud,
+                mixcloud: result1001.links.mixcloud,
+              },
+            };
+            break;
+          default:
+            return {
+              success: false,
+              error: "Unsupported platform",
+              data: null,
+            };
+        }
+
+        // Try to enhance with 1001tracklists data, but don't fail if it doesn't work
+        if (setData.title && setData.artist) {
+          try {
+            const tracksFrom1001 = await search1001Tracklists(`${setData.artist} ${setData.title}`);
+            setData.tracks = [...setData.tracks, ...tracksFrom1001];
+          } catch (err) {
+            console.warn(`[Scraper] Failed to search 1001tracklists, continuing with existing tracks:`, err);
+          }
+        }
+
+        console.log(`[Scraper] Final scraped data:`, setData);
+
+        return {
+          success: true,
+          error: null,
+          data: setData,
+        };
+      } catch (error) {
+        console.error(`[Scraper] Error during scraping:`, error);
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        return {
+          success: false,
+          error: `Failed to scrape URL: ${errorMessage}`,
+          data: null,
+        };
       }
-
-      if (setData.title && setData.artist) {
-        const tracksFrom1001 = await search1001Tracklists(`${setData.artist} ${setData.title}`);
-        setData.tracks = [...setData.tracks, ...tracksFrom1001];
-      }
-
-      console.log(`[Scraper] Final scraped data:`, setData);
-
-      return {
-        success: true,
-        error: null,
-        data: setData,
-      };
     }),
 
   searchTracks: publicProcedure
@@ -1725,14 +2015,23 @@ export const scraperRouter = createTRPCRouter({
       durationSeconds: z.number().optional(),
     }))
     .mutation(async ({ input }) => {
+      console.log(`[ACRCloud] ===== PROCEDURE CALLED =====`);
+      console.log(`[ACRCloud] Received input:`, JSON.stringify(input, null, 2));
+      console.log(`[ACRCloud] audioUrl type: ${typeof input.audioUrl}, value: ${input.audioUrl}`);
+      console.log(`[ACRCloud] startSeconds type: ${typeof input.startSeconds}, value: ${input.startSeconds}`);
+      console.log(`[ACRCloud] durationSeconds type: ${typeof input.durationSeconds}, value: ${input.durationSeconds}`);
       console.log(`[ACRCloud] Identifying track from URL: ${input.audioUrl}`);
-      console.log(`[ACRCloud] Start: ${input.startSeconds || 0}s, Duration: ${input.durationSeconds || 10}s`);
+      console.log(`[ACRCloud] Start: ${input.startSeconds ?? 0}s, Duration: ${input.durationSeconds ?? 15}s`);
       
       // Use the internal helper which handles SoundCloud/YouTube URL resolution
-      return await identifyTrackFromUrlInternal(
+      const result = await identifyTrackFromUrlInternal(
         input.audioUrl,
         input.startSeconds ?? 0,
         input.durationSeconds ?? 15
       );
+      
+      console.log(`[ACRCloud] ===== PROCEDURE RETURNING =====`);
+      console.log(`[ACRCloud] Result:`, JSON.stringify(result, null, 2));
+      return result;
     }),
 });
