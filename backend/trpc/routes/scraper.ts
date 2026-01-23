@@ -1,4 +1,5 @@
 import * as z from "zod";
+import * as crypto from "crypto";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
 const ScrapedTrack = z.object({
@@ -788,6 +789,74 @@ export const scraperRouter = createTRPCRouter({
       };
     }),
 
+  searchSoundCloudTracks: publicProcedure
+    .input(z.object({ query: z.string() }))
+    .mutation(async ({ input }) => {
+      console.log(`[Scraper] Searching SoundCloud for tracks: ${input.query}`);
+      
+      const results: Array<{ 
+        title: string; 
+        artist: string; 
+        url: string; 
+        thumbnail?: string;
+        duration?: number;
+        playCount?: number;
+        genre?: string;
+      }> = [];
+      
+      try {
+        const searchQuery = encodeURIComponent(input.query);
+        const searchUrl = `https://soundcloud.com/search/sounds?q=${searchQuery}`;
+        
+        const response = await fetch(searchUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          
+          const hydrationMatch = html.match(/window\.__sc_hydration\s*=\s*(\[[\s\S]*?\]);/);
+          if (hydrationMatch) {
+            try {
+              const hydrationData = JSON.parse(hydrationMatch[1]);
+              
+              for (const item of hydrationData) {
+                if (item.hydratable === 'search' && item.data?.collection) {
+                  for (const track of item.data.collection.slice(0, 20)) {
+                    if (track.title && track.user?.username && track.kind === 'track') {
+                      const durationSeconds = track.duration ? Math.floor(track.duration / 1000) : undefined;
+                      results.push({
+                        title: track.title,
+                        artist: track.user.username,
+                        url: track.permalink_url || `https://soundcloud.com/${track.user.permalink}/${track.permalink}`,
+                        thumbnail: track.artwork_url?.replace('-large', '-t500x500'),
+                        duration: durationSeconds,
+                        playCount: track.playback_count,
+                        genre: track.genre,
+                      });
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('[Scraper] SoundCloud hydration parse error:', e);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Scraper] SoundCloud track search error:', error);
+      }
+      
+      console.log(`[Scraper] Found ${results.length} tracks from SoundCloud`);
+      return {
+        success: true,
+        results,
+      };
+    }),
+
   search1001Tracklists: publicProcedure
     .input(z.object({ query: z.string() }))
     .mutation(async ({ input }) => {
@@ -836,5 +905,280 @@ export const scraperRouter = createTRPCRouter({
         success: true,
         results,
       };
+    }),
+
+  identifyTrack: publicProcedure
+    .input(z.object({ 
+      audioBase64: z.string(),
+      timestamp: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log(`[ACRCloud] Starting track identification at timestamp: ${input.timestamp || 0}`);
+      
+      const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
+      const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
+      const host = process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com';
+      
+      if (!accessKey || !accessSecret) {
+        console.error('[ACRCloud] Missing credentials');
+        return {
+          success: false,
+          error: 'ACRCloud credentials not configured',
+          result: null,
+        };
+      }
+      
+      try {
+        const httpMethod = 'POST';
+        const httpUri = '/v1/identify';
+        const dataType = 'audio';
+        const signatureVersion = '1';
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        
+        const stringToSign = [
+          httpMethod,
+          httpUri,
+          accessKey,
+          dataType,
+          signatureVersion,
+          timestamp,
+        ].join('\n');
+        
+        const signature = crypto
+          .createHmac('sha1', accessSecret)
+          .update(stringToSign)
+          .digest('base64');
+        
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+        
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        const formParts: string[] = [];
+        
+        const addField = (name: string, value: string) => {
+          formParts.push(`--${boundary}\r\n`);
+          formParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+          formParts.push(`${value}\r\n`);
+        };
+        
+        addField('access_key', accessKey);
+        addField('sample_bytes', audioBuffer.length.toString());
+        addField('timestamp', timestamp);
+        addField('signature', signature);
+        addField('data_type', dataType);
+        addField('signature_version', signatureVersion);
+        
+        const headerPart = formParts.join('');
+        const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="sample"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`;
+        const endPart = `\r\n--${boundary}--\r\n`;
+        
+        const headerBuffer = Buffer.from(headerPart);
+        const filePartBuffer = Buffer.from(filePart);
+        const endBuffer = Buffer.from(endPart);
+        
+        const body = Buffer.concat([headerBuffer, filePartBuffer, audioBuffer, endBuffer]);
+        
+        console.log(`[ACRCloud] Sending request to ${host}`);
+        
+        const response = await fetch(`https://${host}${httpUri}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          },
+          body,
+        });
+        
+        const result = await response.json();
+        console.log('[ACRCloud] Response:', JSON.stringify(result, null, 2));
+        
+        if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
+          const music = result.metadata.music[0];
+          const artists = music.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
+          const title = music.title || 'Unknown Track';
+          const album = music.album?.name;
+          const releaseDate = music.release_date;
+          const label = music.label;
+          const externalIds = music.external_ids || {};
+          const externalMetadata = music.external_metadata || {};
+          
+          const spotifyId = externalMetadata.spotify?.track?.id;
+          const youtubeId = externalMetadata.youtube?.vid;
+          
+          console.log(`[ACRCloud] Identified: ${artists} - ${title}`);
+          
+          return {
+            success: true,
+            error: null,
+            result: {
+              title,
+              artist: artists,
+              album,
+              releaseDate,
+              label,
+              confidence: music.score || 100,
+              duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
+              links: {
+                spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
+                youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
+                isrc: externalIds.isrc,
+              },
+            },
+          };
+        }
+        
+        if (result.status?.code === 1001) {
+          console.log('[ACRCloud] No match found');
+          return {
+            success: true,
+            error: null,
+            result: null,
+          };
+        }
+        
+        console.error('[ACRCloud] API error:', result.status);
+        return {
+          success: false,
+          error: result.status?.msg || 'Unknown error from ACRCloud',
+          result: null,
+        };
+      } catch (error) {
+        console.error('[ACRCloud] Request error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to identify track',
+          result: null,
+        };
+      }
+    }),
+
+  identifyTrackFromUrl: publicProcedure
+    .input(z.object({ 
+      audioUrl: z.string().url(),
+      startSeconds: z.number().optional(),
+      durationSeconds: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      console.log(`[ACRCloud] Identifying track from URL: ${input.audioUrl}`);
+      console.log(`[ACRCloud] Start: ${input.startSeconds || 0}s, Duration: ${input.durationSeconds || 10}s`);
+      
+      const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
+      const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
+      const host = process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com';
+      
+      if (!accessKey || !accessSecret) {
+        console.error('[ACRCloud] Missing credentials');
+        return {
+          success: false,
+          error: 'ACRCloud credentials not configured',
+          result: null,
+        };
+      }
+      
+      try {
+        const httpMethod = 'POST';
+        const httpUri = '/v1/identify';
+        const dataType = 'url';
+        const signatureVersion = '1';
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+        
+        const stringToSign = [
+          httpMethod,
+          httpUri,
+          accessKey,
+          dataType,
+          signatureVersion,
+          timestamp,
+        ].join('\n');
+        
+        const signature = crypto
+          .createHmac('sha1', accessSecret)
+          .update(stringToSign)
+          .digest('base64');
+        
+        const formData = new URLSearchParams();
+        formData.append('access_key', accessKey);
+        formData.append('url', input.audioUrl);
+        formData.append('timestamp', timestamp);
+        formData.append('signature', signature);
+        formData.append('data_type', dataType);
+        formData.append('signature_version', signatureVersion);
+        
+        if (input.startSeconds !== undefined) {
+          formData.append('start_time_seconds', input.startSeconds.toString());
+        }
+        if (input.durationSeconds !== undefined) {
+          formData.append('rec_length', input.durationSeconds.toString());
+        }
+        
+        console.log(`[ACRCloud] Sending URL identification request to ${host}`);
+        
+        const response = await fetch(`https://${host}${httpUri}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: formData.toString(),
+        });
+        
+        const result = await response.json();
+        console.log('[ACRCloud] Response:', JSON.stringify(result, null, 2));
+        
+        if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
+          const music = result.metadata.music[0];
+          const artists = music.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
+          const title = music.title || 'Unknown Track';
+          const album = music.album?.name;
+          const releaseDate = music.release_date;
+          const label = music.label;
+          const externalIds = music.external_ids || {};
+          const externalMetadata = music.external_metadata || {};
+          
+          const spotifyId = externalMetadata.spotify?.track?.id;
+          const youtubeId = externalMetadata.youtube?.vid;
+          
+          console.log(`[ACRCloud] Identified: ${artists} - ${title}`);
+          
+          return {
+            success: true,
+            error: null,
+            result: {
+              title,
+              artist: artists,
+              album,
+              releaseDate,
+              label,
+              confidence: music.score || 100,
+              duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
+              links: {
+                spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
+                youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
+                isrc: externalIds.isrc,
+              },
+            },
+          };
+        }
+        
+        if (result.status?.code === 1001) {
+          console.log('[ACRCloud] No match found');
+          return {
+            success: true,
+            error: null,
+            result: null,
+          };
+        }
+        
+        console.error('[ACRCloud] API error:', result.status);
+        return {
+          success: false,
+          error: result.status?.msg || 'Unknown error from ACRCloud',
+          result: null,
+        };
+      } catch (error) {
+        console.error('[ACRCloud] Request error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to identify track',
+          result: null,
+        };
+      }
     }),
 });

@@ -117,6 +117,14 @@ export default function TrackCard({
             )}
           </View>
           <Text style={styles.artist} numberOfLines={1}>{track.artist}</Text>
+          {featuredCount > 0 && (
+            <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
+              <Disc3 size={12} color="#F59E0B" />
+              <Text style={styles.featuredMainText}>
+                In {featuredCount} other set{featuredCount !== 1 ? 's' : ''}
+              </Text>
+            </Pressable>
+          )}
           <View style={styles.meta}>
             {sourceBadge && (
               <View style={[styles.sourceBadge, { backgroundColor: `${sourceBadge.color}20` }]}>
@@ -142,16 +150,7 @@ export default function TrackCard({
                 <Text style={styles.contributorText}>{track.contributedBy}</Text>
               </Pressable>
             )}
-            {featuredCount > 0 && (
-              <Pressable style={styles.featuredTag} onPress={handleFeaturedPress}>
-                <Disc3 size={10} color="#F59E0B" />
-                <Text style={styles.featuredText}>
-                  {featuredCount} set{featuredCount !== 1 ? 's' : ''}
-                </Text>
-              </Pressable>
-            )}
-            {track.bpm && <Text style={styles.metaText}>{track.bpm} BPM</Text>}
-            {track.key && <Text style={styles.metaText}>{track.key}</Text>}
+
           </View>
         </View>
         <View style={styles.actions}>
@@ -325,19 +324,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '500' as const,
   },
-  featuredTag: {
+  featuredRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    gap: 6,
+    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginBottom: 6,
+    alignSelf: 'flex-start',
   },
-  featuredText: {
+  featuredMainText: {
     color: '#F59E0B',
-    fontSize: 11,
-    fontWeight: '500' as const,
+    fontSize: 12,
+    fontWeight: '600' as const,
   },
   actions: {
     flexDirection: 'row',

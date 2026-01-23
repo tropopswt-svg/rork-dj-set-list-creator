@@ -238,7 +238,7 @@ export default function SocialScreen() {
                     contentFit="cover"
                   />
                   <View style={styles.friendOnline} />
-                  <Text style={styles.friendName} numberOfLines={1}>{friend.name.split(' ')[0]}</Text>
+                  <Text style={styles.friendName} numberOfLines={1}>@{friend.username}</Text>
                 </Pressable>
               ))}
               <Pressable style={styles.addFriendItem}>

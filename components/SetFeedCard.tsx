@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { Play, Music, Youtube, Music2, Radio, ListMusic, MessageSquare } from 'lucide-react-native';
@@ -52,10 +52,41 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${Math.floor(days / 365)}y ago`;
   };
 
-  const getCoverImage = () => {
+  const [imageError, setImageError] = useState(false);
+  const [triedHqFallback, setTriedHqFallback] = useState(false);
+
+  const getFallbackImage = useCallback(() => {
     const index = parseInt(setList.id) % coverImages.length;
     return coverImages[index] || coverImages[0];
-  };
+  }, [setList.id]);
+
+  const getCoverImage = useCallback(() => {
+    if (imageError && triedHqFallback) {
+      return getFallbackImage();
+    }
+    
+    if (setList.coverUrl) {
+      if (imageError && setList.coverUrl.includes('maxresdefault')) {
+        return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+      }
+      return setList.coverUrl;
+    }
+    
+    return getFallbackImage();
+  }, [setList.coverUrl, imageError, triedHqFallback, getFallbackImage]);
+
+  const handleImageError = useCallback(() => {
+    console.log(`[SetFeedCard] Image error for set: ${setList.name}`);
+    if (!triedHqFallback && setList.coverUrl?.includes('maxresdefault')) {
+      console.log('[SetFeedCard] Trying hqdefault fallback');
+      setTriedHqFallback(true);
+      setImageError(true);
+    } else {
+      console.log('[SetFeedCard] Using stock fallback image');
+      setTriedHqFallback(true);
+      setImageError(true);
+    }
+  }, [triedHqFallback, setList.coverUrl, setList.name]);
 
   const getPlatformIcons = () => {
     const platforms = setList.sourceLinks.map(l => l.platform);
@@ -89,6 +120,8 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
             source={{ uri: getCoverImage() }} 
             style={styles.cover}
             contentFit="cover"
+            onError={handleImageError}
+            cachePolicy="memory-disk"
           />
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
