@@ -1,5 +1,8 @@
 import * as z from "zod";
 import * as crypto from "crypto";
+import * as path from "path";
+import * as fs from "fs";
+import { spawnSync } from "child_process";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 
 const ScrapedTrack = z.object({
@@ -105,6 +108,154 @@ function extractVideoId(url: string): { platform: string; id: string } | null {
   }
 
   return null;
+}
+
+function isSoundCloudUrl(url: string): boolean {
+  return /^https?:\/\/(www\.)?soundcloud\.com\//i.test(url);
+}
+
+function isYouTubeUrl(url: string): boolean {
+  return /^https?:\/\/(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)/i.test(url);
+}
+
+function getYtDlpConfig(): { type: "binary"; cmd: string } | { type: "module"; cwd: string } {
+  const raw = process.env.YT_DLP_PATH?.trim();
+  const projectRoot = process.cwd();
+  const sourceDir = path.resolve(projectRoot, "yt-dlp-master");
+
+  if (raw) {
+    const resolved = path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw);
+    try {
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) {
+        return { type: "module", cwd: resolved };
+      }
+      if (fs.existsSync(resolved) && fs.statSync(resolved).isFile()) {
+        return { type: "binary", cmd: resolved };
+      }
+    } catch {
+      /* ignore */
+    }
+    return { type: "binary", cmd: path.isAbsolute(raw) ? raw : path.resolve(projectRoot, raw) };
+  }
+
+  const defaultBin = path.resolve(projectRoot, "bin", "yt-dlp");
+  if (fs.existsSync(defaultBin) && fs.statSync(defaultBin).isFile()) {
+    return { type: "binary", cmd: defaultBin };
+  }
+  if (fs.existsSync(sourceDir) && fs.statSync(sourceDir).isDirectory()) {
+    return { type: "module", cwd: sourceDir };
+  }
+  return { type: "binary", cmd: "yt-dlp" };
+}
+
+/**
+ * Resolve a YouTube watch URL to a direct stream URL for ACRCloud.
+ * Uses yt-dlp: either a yt-dlp binary (brew install yt-dlp) or the yt-dlp-master source
+ * (python3 -m yt_dlp). Set YT_DLP_PATH to the binary path, or to the yt-dlp-master directory.
+ */
+async function resolveYouTubeToStreamUrl(youtubeUrl: string): Promise<string | null> {
+  const config = getYtDlpConfig();
+  const args = [
+    "-g",
+    "-f", "bestaudio/best",
+    "--no-warnings",
+    "--no-check-certificates",
+    youtubeUrl,
+  ];
+  try {
+    const opts: { encoding: "utf8"; timeout: number; cwd?: string } = {
+      encoding: "utf8",
+      timeout: 30_000,
+    };
+    const result =
+      config.type === "module"
+        ? spawnSync("python3", ["-m", "yt_dlp", ...args], { ...opts, cwd: config.cwd })
+        : spawnSync(config.cmd, args, opts);
+
+    const { status, stdout, stderr } = result;
+    if (status !== 0) {
+      console.warn("[Scraper] yt-dlp failed:", stderr?.slice(0, 500) || stdout?.slice(0, 500));
+      return null;
+    }
+    const streamUrl = stdout?.trim();
+    if (!streamUrl || !streamUrl.startsWith("http")) {
+      console.warn("[Scraper] yt-dlp did not return a valid stream URL");
+      return null;
+    }
+    return streamUrl;
+  } catch (e) {
+    console.warn("[Scraper] YouTube resolve (yt-dlp) error:", e);
+    return null;
+  }
+}
+
+/**
+ * Resolve a SoundCloud track/set page URL to a direct stream URL for ACRCloud.
+ * Uses SoundCloud Widget API: resolve → transcodings → stream URL.
+ * Requires SOUNDCLOUD_CLIENT_ID (create app at https://developers.soundcloud.com/).
+ */
+async function resolveSoundCloudToStreamUrl(soundcloudUrl: string): Promise<string | null> {
+  const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+  if (!clientId?.trim()) {
+    console.warn("[Scraper] SOUNDCLOUD_CLIENT_ID not set; cannot resolve SoundCloud URLs.");
+    return null;
+  }
+
+  try {
+    const resolveUrl = `https://api-widget.soundcloud.com/resolve?url=${encodeURIComponent(soundcloudUrl)}&format=json&client_id=${clientId}`;
+    const resolveRes = await fetch(resolveUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; RorkSetList/1.0)",
+        Accept: "application/json",
+      },
+    });
+    if (!resolveRes.ok) {
+      console.warn("[Scraper] SoundCloud resolve failed:", resolveRes.status, await resolveRes.text());
+      return null;
+    }
+
+    const data = (await resolveRes.json()) as {
+      kind?: string;
+      media?: { transcodings?: Array<{ url: string; format?: { protocol?: string } }> };
+      track_authorization?: string;
+    };
+
+    const transcodings = data.media?.transcodings;
+    const trackAuth = data.track_authorization;
+    if (!transcodings?.length || !trackAuth) {
+      console.warn("[Scraper] SoundCloud resolve: no transcodings or track_authorization");
+      return null;
+    }
+
+    const progressive = transcodings.find((t) => t.format?.protocol === "progressive");
+    const chosen = progressive ?? transcodings[0];
+    let streamUrl = chosen.url;
+    if (!streamUrl.startsWith("http")) {
+      streamUrl = `https://api-v2.soundcloud.com${streamUrl.startsWith("/") ? "" : "/"}${streamUrl}`;
+    }
+    const withAuth = `${streamUrl}?client_id=${clientId}&track_authorization=${encodeURIComponent(trackAuth)}`;
+
+    const streamRes = await fetch(withAuth, { redirect: "follow" });
+    const contentType = streamRes.headers.get("content-type") ?? "";
+    let finalUrl: string | null = null;
+    if (contentType.includes("application/json")) {
+      const json = (await streamRes.json()) as { url?: string };
+      finalUrl = json?.url ?? null;
+    } else {
+      finalUrl = streamRes.url;
+    }
+    if (!finalUrl) {
+      console.warn("[Scraper] SoundCloud stream: no final URL from transcoding request");
+      return withAuth;
+    }
+    if (!/\.m3u8|\.mp3|audio|stream|cloudfront|sndcdn|soundcloud/i.test(finalUrl)) {
+      console.warn("[Scraper] SoundCloud stream URL did not look like audio:", finalUrl);
+    }
+    return finalUrl;
+  } catch (e) {
+    console.warn("[Scraper] SoundCloud resolve error:", e);
+    return null;
+  }
 }
 
 async function fetchYouTubeComments(videoId: string): Promise<z.infer<typeof ScrapedComment>[]> {
@@ -898,6 +1049,138 @@ function extractArtistFromTitle(title: string): { artist: string; cleanTitle: st
   }
   
   return { artist: '', cleanTitle: title };
+}
+
+/** Internal helper: identify track at a URL+timestamp via ACRCloud. No tab/playback needed. */
+async function identifyTrackFromUrlInternal(
+  audioUrl: string,
+  startSeconds: number = 0,
+  durationSeconds: number = 15
+): Promise<{
+  success: boolean;
+  error: string | null;
+  result: {
+    title: string;
+    artist: string;
+    album?: string;
+    releaseDate?: string;
+    label?: string;
+    confidence: number;
+    duration?: number;
+    links: { spotify?: string; youtube?: string; isrc?: string };
+  } | null;
+}> {
+  const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
+  const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
+  const host = process.env.ACRCLOUD_HOST || "identify-us-west-2.acrcloud.com";
+
+  if (!accessKey || !accessSecret) {
+    return { success: false, error: "ACRCloud credentials not configured", result: null };
+  }
+
+  let urlToIdentify = audioUrl;
+  if (isSoundCloudUrl(audioUrl)) {
+    if (!process.env.SOUNDCLOUD_CLIENT_ID?.trim()) {
+      return {
+        success: false,
+        error:
+          "SoundCloud URLs require SOUNDCLOUD_CLIENT_ID. Create an app at https://developers.soundcloud.com/ and add it to your environment.",
+        result: null,
+      };
+    }
+    const streamUrl = await resolveSoundCloudToStreamUrl(audioUrl);
+    if (!streamUrl) {
+      return {
+        success: false,
+        error: "Could not resolve SoundCloud URL to a stream. Check the link and SOUNDCLOUD_CLIENT_ID.",
+        result: null,
+      };
+    }
+    urlToIdentify = streamUrl;
+    console.log("[ACRCloud] Using resolved SoundCloud stream URL for identification");
+  }
+
+  if (isYouTubeUrl(audioUrl)) {
+    const streamUrl = await resolveYouTubeToStreamUrl(audioUrl);
+    if (!streamUrl) {
+      return {
+        success: false,
+        error:
+          "Could not resolve YouTube URL to a stream. Install yt-dlp (brew install yt-dlp) and ensure it is on PATH, or set YT_DLP_PATH.",
+        result: null,
+      };
+    }
+    urlToIdentify = streamUrl;
+    console.log("[ACRCloud] Using resolved YouTube stream URL for identification");
+  }
+
+  try {
+    const httpMethod = "POST";
+    const httpUri = "/v1/identify";
+    const dataType = "url";
+    const signatureVersion = "1";
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const stringToSign = [httpMethod, httpUri, accessKey, dataType, signatureVersion, timestamp].join("\n");
+    const signature = crypto.createHmac("sha1", accessSecret).update(stringToSign).digest("base64");
+
+    const formData = new URLSearchParams();
+    formData.append("access_key", accessKey);
+    formData.append("url", urlToIdentify);
+    formData.append("timestamp", timestamp);
+    formData.append("signature", signature);
+    formData.append("data_type", dataType);
+    formData.append("signature_version", signatureVersion);
+    formData.append("start_time_seconds", startSeconds.toString());
+    formData.append("rec_length", durationSeconds.toString());
+
+    const response = await fetch(`https://${host}${httpUri}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: formData.toString(),
+    });
+    const result = await response.json();
+
+    if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
+      const music = result.metadata.music[0];
+      const artists = music.artists?.map((a: { name: string }) => a.name).join(", ") || "Unknown Artist";
+      const title = music.title || "Unknown Track";
+      const externalMetadata = music.external_metadata || {};
+      const spotifyId = externalMetadata.spotify?.track?.id;
+      const youtubeId = externalMetadata.youtube?.vid;
+      return {
+        success: true,
+        error: null,
+        result: {
+          title,
+          artist: artists,
+          album: music.album?.name,
+          releaseDate: music.release_date,
+          label: music.label,
+          confidence: music.score ?? 100,
+          duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
+          links: {
+            spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
+            youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
+            isrc: music.external_ids?.isrc,
+          },
+        },
+      };
+    }
+    if (result.status?.code === 1001) {
+      return { success: true, error: null, result: null };
+    }
+    return {
+      success: false,
+      error: result.status?.msg ?? "Unknown error from ACRCloud",
+      result: null,
+    };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Failed to identify track",
+      result: null,
+    };
+  }
 }
 
 export const scraperRouter = createTRPCRouter({

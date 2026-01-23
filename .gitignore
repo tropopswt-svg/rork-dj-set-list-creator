@@ -42,3 +42,6 @@ yarn-error.*
 
 .env
 rork-eslint.config.js
+
+# yt-dlp standalone binary (run scripts/setup-yt-dlp-macos.sh)
+bin/
