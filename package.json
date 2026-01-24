@@ -9,8 +9,7 @@
     "server": "bun run server.ts",
     "lint": "expo lint",
     "import": "bun run scripts/import-csv.ts",
-        "build": "echo 'Build completed for Vercel'"
-  },
+    "build": "expo export --platform web"  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@hono/trpc-server": "^0.4.2",
