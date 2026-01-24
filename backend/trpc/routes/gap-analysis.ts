@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTRPCRouter, publicProcedure } from "../create-context";
+import { createTRPCRouter, publicProcedure } from "../create-context.js";
 
 const TrackInputSchema = z.object({
   id: z.string(),

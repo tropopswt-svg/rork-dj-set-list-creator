@@ -3,7 +3,7 @@ import * as crypto from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import { spawnSync } from "child_process";
-import { createTRPCRouter, publicProcedure } from "../create-context";
+import { createTRPCRouter, publicProcedure } from "../create-context.js";
 import { tmpdir } from "os";
 
 const ScrapedTrack = z.object({
