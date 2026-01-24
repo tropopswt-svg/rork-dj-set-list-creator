@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
+import ArtistLink from '@/components/ArtistLink';
 import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
@@ -267,7 +268,12 @@ export default function SetDetailScreen() {
           <View style={styles.titleSection}>
             <View style={styles.titleRow}>
               <View style={styles.titleInfo}>
-                <Text style={styles.artist}>{setList.artist}</Text>
+                <ArtistLink 
+                  name={setList.artist} 
+                  style={styles.artist}
+                  size="large"
+                  showBadge={true}
+                />
                 <Text style={styles.title}>{setList.name}</Text>
               </View>
               <Pressable style={styles.saveButton} onPress={handleSave}>

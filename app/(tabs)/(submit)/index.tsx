@@ -33,6 +33,7 @@ import { SetList, Track, SourceLink } from '@/types';
 import ArtistAutocomplete from '@/components/ArtistAutocomplete';
 import TrackAutocomplete from '@/components/TrackAutocomplete';
 import type { DbArtist, DbTrack } from '@/lib/supabase/types';
+import { linkImportedSet, enhanceTracksWithDatabase, artistExists } from '@/lib/supabase';
 
 type ImportStep = 'idle' | 'fetching_metadata' | 'fetching_comments' | 'extracting_tracks' | 'complete' | 'error';
 
@@ -52,6 +53,10 @@ interface PendingTrack {
   title: string;
   artist: string;
   timestamp: string;
+  isLinked?: boolean;       // Track matched in database
+  isUnreleased?: boolean;   // Marked as unreleased
+  dbTrackId?: string;       // Database track ID if linked
+  dbArtistId?: string;      // Database artist ID if linked
 }
 
 interface ScrapedSourceInfo {
@@ -198,13 +203,55 @@ export default function SubmitScreen() {
         // Convert scraped tracks to PendingTrack format
         const tracksFound = setList.tracks?.length || 0;
         if (setList.tracks && tracksFound > 0) {
-          const pendingTracks: PendingTrack[] = setList.tracks.map((t: any, i: number) => ({
+          // First create basic pending tracks
+          let pendingTracks: PendingTrack[] = setList.tracks.map((t: any, i: number) => ({
             id: `scraped-${Date.now()}-${i}`,
             title: t.title,
             artist: t.artist,
             timestamp: formatTimestamp(t.timestamp),
           }));
+          
           setTracks(pendingTracks);
+          
+          // Then enhance with database matches (async, updates after)
+          setImportProgress(prev => ({
+            ...prev,
+            step: 'extracting_tracks',
+            message: 'Linking to track database...',
+          }));
+          
+          try {
+            const enhanced = await enhanceTracksWithDatabase(
+              pendingTracks.map(t => ({ title: t.title, artist: t.artist }))
+            );
+            
+            // Update tracks with database matches
+            pendingTracks = pendingTracks.map((track, i) => ({
+              ...track,
+              isLinked: !!enhanced[i]?.dbTrack,
+              isUnreleased: enhanced[i]?.dbTrack?.is_unreleased || false,
+              dbTrackId: enhanced[i]?.dbTrack?.id,
+              dbArtistId: enhanced[i]?.dbArtist?.id,
+            }));
+            
+            setTracks(pendingTracks);
+            
+            const linkedCount = pendingTracks.filter(t => t.isLinked).length;
+            const unreleasedCount = pendingTracks.filter(t => t.isUnreleased).length;
+            console.log(`[Submit] Linked ${linkedCount} tracks, ${unreleasedCount} unreleased`);
+          } catch (linkError) {
+            console.warn('[Submit] Could not enhance tracks:', linkError);
+          }
+        }
+
+        // Also check if the DJ artist exists in database
+        try {
+          const artistCheck = await artistExists(setList.artist);
+          if (artistCheck.exists) {
+            console.log(`[Submit] Artist ${setList.artist} found in database`);
+          }
+        } catch (artistError) {
+          console.warn('[Submit] Could not check artist:', artistError);
         }
 
         // Show complete state
@@ -596,9 +643,19 @@ export default function SubmitScreen() {
           {tracks.length > 0 && (
             <View style={styles.tracksList}>
               {tracks.map((track, index) => (
-                <View key={track.id} style={styles.trackItem}>
-                  <View style={styles.trackIndex}>
-                    <Text style={styles.trackIndexText}>{index + 1}</Text>
+                <View key={track.id} style={[
+                  styles.trackItem,
+                  track.isLinked && styles.trackItemLinked,
+                ]}>
+                  <View style={[
+                    styles.trackIndex,
+                    track.isLinked && styles.trackIndexLinked,
+                  ]}>
+                    {track.isLinked ? (
+                      <CheckCircle size={14} color={Colors.dark.success} />
+                    ) : (
+                      <Text style={styles.trackIndexText}>{index + 1}</Text>
+                    )}
                   </View>
                   <View style={styles.trackInfo}>
                     <Text style={styles.trackTitle} numberOfLines={1}>
@@ -608,6 +665,11 @@ export default function SubmitScreen() {
                       {track.artist}
                     </Text>
                   </View>
+                  {track.isUnreleased && (
+                    <View style={styles.unreleasedBadge}>
+                      <Text style={styles.unreleasedText}>Unreleased</Text>
+                    </View>
+                  )}
                   <View style={styles.trackTimestamp}>
                     <Clock size={12} color={Colors.dark.textMuted} />
                     <Text style={styles.timestampText}>{track.timestamp}</Text>
@@ -914,6 +976,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
+  trackItemLinked: {
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+    backgroundColor: 'rgba(34, 197, 94, 0.05)',
+  },
   trackIndex: {
     width: 24,
     height: 24,
@@ -923,10 +989,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
+  trackIndexLinked: {
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+  },
   trackIndexText: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.dark.textMuted,
+  },
+  unreleasedBadge: {
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  unreleasedText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
   },
   trackInfo: {
     flex: 1,

@@ -32,3 +32,12 @@ export {
   getPopularTracks,
   incrementTrackPlays,
 } from './trackService';
+
+// Linking service (for auto-linking imports)
+export {
+  linkImportedSet,
+  enhanceTracksWithDatabase,
+  artistExists,
+  getArtistSlug,
+  batchCheckTracks,
+} from './linkingService';
