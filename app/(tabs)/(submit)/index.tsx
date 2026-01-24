@@ -35,7 +35,14 @@ import TrackAutocomplete from '@/components/TrackAutocomplete';
 import type { DbArtist, DbTrack } from '@/lib/supabase/types';
 import { linkImportedSet, enhanceTracksWithDatabase, artistExists } from '@/lib/supabase';
 
-type ImportStep = 'idle' | 'fetching_metadata' | 'fetching_comments' | 'extracting_tracks' | 'complete' | 'error';
+type ImportStep = 
+  | 'idle' 
+  | 'fetching_metadata' 
+  | 'scanning_comments' 
+  | 'extracting_tracks' 
+  | 'matching_database'
+  | 'complete' 
+  | 'error';
 
 interface ImportProgress {
   step: ImportStep;
@@ -43,8 +50,15 @@ interface ImportProgress {
   setName?: string;
   artistName?: string;
   thumbnail?: string;
-  commentsFound?: number;
+  // Phase 1: Comments scanned
+  commentsScanned?: number;
+  // Phase 2: Tracks extracted
   tracksFound?: number;
+  // Phase 3: Database matching
+  tracksLinked?: number;
+  tracksUnreleased?: number;
+  artistLinked?: boolean;
+  // Error
   error?: string;
 }
 
@@ -161,14 +175,21 @@ export default function SubmitScreen() {
       if (result.success && result.setList) {
         const setList = result.setList;
         const videoInfo = result.videoInfo;
+        const commentsCount = result.commentsCount || 0;
         
+        // ============================================
+        // PHASE 1: Show comments scanned
+        // ============================================
         setImportProgress(prev => ({
           ...prev,
-          step: 'fetching_comments',
-          message: 'Scanning comments for tracks...',
+          step: 'scanning_comments',
+          message: commentsCount > 0 
+            ? `Scanned ${commentsCount.toLocaleString()} comments` 
+            : 'Analyzing set metadata...',
           setName: setList.name,
           artistName: setList.artist,
           thumbnail: setList.coverUrl,
+          commentsScanned: commentsCount,
         }));
 
         // Auto-fill form with scraped data
@@ -200,11 +221,31 @@ export default function SubmitScreen() {
           uploaderName: videoInfo?.channelTitle || result.soundcloudInfo?.artist,
         });
 
-        // Convert scraped tracks to PendingTrack format
+        // Small delay to show Phase 1
+        await new Promise(resolve => setTimeout(resolve, 800));
+
+        // ============================================
+        // PHASE 2: Extract tracks
+        // ============================================
         const tracksFound = setList.tracks?.length || 0;
+        
+        setImportProgress(prev => ({
+          ...prev,
+          step: 'extracting_tracks',
+          message: tracksFound > 0 
+            ? `Extracted ${tracksFound} track${tracksFound !== 1 ? 's' : ''} from signals`
+            : 'No tracks identified yet',
+          tracksFound,
+        }));
+
+        let pendingTracks: PendingTrack[] = [];
+        let linkedCount = 0;
+        let unreleasedCount = 0;
+        let artistLinked = false;
+
         if (setList.tracks && tracksFound > 0) {
-          // First create basic pending tracks
-          let pendingTracks: PendingTrack[] = setList.tracks.map((t: any, i: number) => ({
+          // Create basic pending tracks
+          pendingTracks = setList.tracks.map((t: any, i: number) => ({
             id: `scraped-${Date.now()}-${i}`,
             title: t.title,
             artist: t.artist,
@@ -213,11 +254,16 @@ export default function SubmitScreen() {
           
           setTracks(pendingTracks);
           
-          // Then enhance with database matches (async, updates after)
+          // Small delay to show Phase 2
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          // ============================================
+          // PHASE 3: Match to database (IDentified core)
+          // ============================================
           setImportProgress(prev => ({
             ...prev,
-            step: 'extracting_tracks',
-            message: 'Linking to track database...',
+            step: 'matching_database',
+            message: 'IDentifying released & unreleased tracks...',
           }));
           
           try {
@@ -236,17 +282,29 @@ export default function SubmitScreen() {
             
             setTracks(pendingTracks);
             
-            const linkedCount = pendingTracks.filter(t => t.isLinked).length;
-            const unreleasedCount = pendingTracks.filter(t => t.isUnreleased).length;
+            linkedCount = pendingTracks.filter(t => t.isLinked).length;
+            unreleasedCount = pendingTracks.filter(t => t.isUnreleased).length;
+            
+            // Update progress with matching results
+            setImportProgress(prev => ({
+              ...prev,
+              message: linkedCount > 0 
+                ? `Matched ${linkedCount} track${linkedCount !== 1 ? 's' : ''} to database`
+                : 'Checking artist database...',
+              tracksLinked: linkedCount,
+              tracksUnreleased: unreleasedCount,
+            }));
+            
             console.log(`[Submit] Linked ${linkedCount} tracks, ${unreleasedCount} unreleased`);
           } catch (linkError) {
             console.warn('[Submit] Could not enhance tracks:', linkError);
           }
         }
 
-        // Also check if the DJ artist exists in database
+        // Check if the DJ artist exists in database
         try {
           const artistCheck = await artistExists(setList.artist);
+          artistLinked = artistCheck.exists;
           if (artistCheck.exists) {
             console.log(`[Submit] Artist ${setList.artist} found in database`);
           }
@@ -254,17 +312,23 @@ export default function SubmitScreen() {
           console.warn('[Submit] Could not check artist:', artistError);
         }
 
-        // Show complete state
-        setTimeout(() => {
-          setImportProgress(prev => ({
-            ...prev,
-            step: 'complete',
-            message: tracksFound > 0 ? `Found ${tracksFound} tracks!` : 'Set info loaded',
-            tracksFound,
-            commentsFound: result.commentsCount || 0,
-          }));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }, 500);
+        // Small delay before complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // ============================================
+        // COMPLETE: Show final results
+        // ============================================
+        setImportProgress(prev => ({
+          ...prev,
+          step: 'complete',
+          message: 'IDentified processing complete',
+          tracksFound,
+          tracksLinked: linkedCount,
+          tracksUnreleased: unreleasedCount,
+          artistLinked,
+          commentsScanned: commentsCount,
+        }));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       } else {
         setImportProgress({
@@ -715,7 +779,7 @@ export default function SubmitScreen() {
         <View style={styles.bottomPadding} />
       </ScrollView>
 
-      {/* Import Progress Modal */}
+      {/* Import Progress Modal - IDentified Processing */}
       <Modal
         visible={showImportModal}
         transparent
@@ -732,6 +796,12 @@ export default function SubmitScreen() {
                 contentFit="cover"
               />
             )}
+            
+            {/* IDentified Branding */}
+            <View style={styles.identifiedBranding}>
+              <Sparkles size={16} color={Colors.dark.primary} />
+              <Text style={styles.identifiedText}>IDentified</Text>
+            </View>
             
             {/* Loading Indicator */}
             {importProgress.step !== 'complete' && importProgress.step !== 'error' && (
@@ -756,10 +826,11 @@ export default function SubmitScreen() {
             
             {/* Step Title */}
             <Text style={styles.modalTitle}>
-              {importProgress.step === 'fetching_metadata' && 'Identifying Set...'}
-              {importProgress.step === 'fetching_comments' && 'Scanning Comments...'}
-              {importProgress.step === 'extracting_tracks' && 'Extracting Tracks...'}
-              {importProgress.step === 'complete' && 'Import Complete!'}
+              {importProgress.step === 'fetching_metadata' && 'Fetching Set Info...'}
+              {importProgress.step === 'scanning_comments' && 'Phase 1: Scanning'}
+              {importProgress.step === 'extracting_tracks' && 'Phase 2: Extracting'}
+              {importProgress.step === 'matching_database' && 'Phase 3: IDentifying'}
+              {importProgress.step === 'complete' && 'Processing Complete'}
               {importProgress.step === 'error' && 'Import Failed'}
             </Text>
             
@@ -767,7 +838,12 @@ export default function SubmitScreen() {
             {(importProgress.setName || importProgress.artistName) && (
               <View style={styles.modalSetInfo}>
                 {importProgress.artistName && (
-                  <Text style={styles.modalArtist}>{importProgress.artistName}</Text>
+                  <View style={styles.modalArtistRow}>
+                    <Text style={styles.modalArtist}>{importProgress.artistName}</Text>
+                    {importProgress.artistLinked && (
+                      <CheckCircle size={14} color={Colors.dark.success} />
+                    )}
+                  </View>
                 )}
                 {importProgress.setName && (
                   <Text style={styles.modalSetName} numberOfLines={2}>{importProgress.setName}</Text>
@@ -778,21 +854,111 @@ export default function SubmitScreen() {
             {/* Progress Message */}
             <Text style={styles.modalMessage}>{importProgress.message}</Text>
             
-            {/* Stats (on complete) */}
+            {/* Phase Progress Indicators */}
+            {importProgress.step !== 'fetching_metadata' && importProgress.step !== 'error' && (
+              <View style={styles.phaseIndicators}>
+                {/* Phase 1: Comments */}
+                <View style={[
+                  styles.phaseItem,
+                  (importProgress.step === 'scanning_comments' || 
+                   importProgress.step === 'extracting_tracks' || 
+                   importProgress.step === 'matching_database' ||
+                   importProgress.step === 'complete') && styles.phaseItemActive,
+                ]}>
+                  <View style={[
+                    styles.phaseIcon,
+                    (importProgress.step !== 'scanning_comments') && styles.phaseIconComplete,
+                  ]}>
+                    {importProgress.step === 'scanning_comments' ? (
+                      <ActivityIndicator size="small" color={Colors.dark.primary} />
+                    ) : (
+                      <MessageSquare size={14} color={
+                        importProgress.step === 'fetching_metadata' 
+                          ? Colors.dark.textMuted 
+                          : Colors.dark.success
+                      } />
+                    )}
+                  </View>
+                  <Text style={styles.phaseLabel}>Scan</Text>
+                  <Text style={styles.phaseValue}>
+                    {importProgress.commentsScanned?.toLocaleString() || '0'}
+                  </Text>
+                </View>
+                
+                {/* Phase 2: Tracks */}
+                <View style={[
+                  styles.phaseItem,
+                  (importProgress.step === 'extracting_tracks' || 
+                   importProgress.step === 'matching_database' ||
+                   importProgress.step === 'complete') && styles.phaseItemActive,
+                ]}>
+                  <View style={[
+                    styles.phaseIcon,
+                    (importProgress.step === 'matching_database' || importProgress.step === 'complete') && styles.phaseIconComplete,
+                  ]}>
+                    {importProgress.step === 'extracting_tracks' ? (
+                      <ActivityIndicator size="small" color={Colors.dark.primary} />
+                    ) : (
+                      <Music size={14} color={
+                        importProgress.step === 'scanning_comments' || importProgress.step === 'fetching_metadata'
+                          ? Colors.dark.textMuted 
+                          : Colors.dark.success
+                      } />
+                    )}
+                  </View>
+                  <Text style={styles.phaseLabel}>Extract</Text>
+                  <Text style={styles.phaseValue}>
+                    {importProgress.tracksFound || '0'}
+                  </Text>
+                </View>
+                
+                {/* Phase 3: Match */}
+                <View style={[
+                  styles.phaseItem,
+                  (importProgress.step === 'matching_database' ||
+                   importProgress.step === 'complete') && styles.phaseItemActive,
+                ]}>
+                  <View style={[
+                    styles.phaseIcon,
+                    importProgress.step === 'complete' && styles.phaseIconComplete,
+                  ]}>
+                    {importProgress.step === 'matching_database' ? (
+                      <ActivityIndicator size="small" color={Colors.dark.primary} />
+                    ) : (
+                      <Sparkles size={14} color={
+                        importProgress.step === 'complete' 
+                          ? Colors.dark.success 
+                          : Colors.dark.textMuted
+                      } />
+                    )}
+                  </View>
+                  <Text style={styles.phaseLabel}>IDentify</Text>
+                  <Text style={styles.phaseValue}>
+                    {importProgress.tracksLinked || '0'}
+                  </Text>
+                </View>
+              </View>
+            )}
+            
+            {/* Final Stats (on complete) */}
             {importProgress.step === 'complete' && (
-              <View style={styles.modalStats}>
-                <View style={styles.modalStatItem}>
-                  <MessageSquare size={16} color={Colors.dark.textMuted} />
-                  <Text style={styles.modalStatText}>
-                    {importProgress.commentsFound || 0} comments scanned
-                  </Text>
-                </View>
-                <View style={styles.modalStatItem}>
-                  <Music size={16} color={Colors.dark.primary} />
-                  <Text style={styles.modalStatText}>
-                    {importProgress.tracksFound || 0} tracks found
-                  </Text>
-                </View>
+              <View style={styles.modalFinalStats}>
+                {(importProgress.tracksLinked || 0) > 0 && (
+                  <View style={styles.finalStatBadge}>
+                    <CheckCircle size={12} color={Colors.dark.success} />
+                    <Text style={styles.finalStatText}>
+                      {importProgress.tracksLinked} matched
+                    </Text>
+                  </View>
+                )}
+                {(importProgress.tracksUnreleased || 0) > 0 && (
+                  <View style={[styles.finalStatBadge, styles.finalStatBadgeUnreleased]}>
+                    <AlertCircle size={12} color={Colors.dark.primary} />
+                    <Text style={[styles.finalStatText, styles.finalStatTextUnreleased]}>
+                      {importProgress.tracksUnreleased} unreleased
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
             
@@ -1194,5 +1360,93 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600' as const,
+  },
+  // IDentified Branding
+  identifiedBranding: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+  },
+  identifiedText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: Colors.dark.primary,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  // Artist row with badge
+  modalArtistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  // Phase Indicators
+  phaseIndicators: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginBottom: 20,
+    paddingHorizontal: 8,
+  },
+  phaseItem: {
+    alignItems: 'center',
+    opacity: 0.4,
+  },
+  phaseItemActive: {
+    opacity: 1,
+  },
+  phaseIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.dark.surfaceLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  phaseIconComplete: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  phaseLabel: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  phaseValue: {
+    fontSize: 16,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+    marginTop: 2,
+  },
+  // Final stats badges
+  modalFinalStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 20,
+  },
+  finalStatBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderRadius: 16,
+  },
+  finalStatBadgeUnreleased: {
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+  },
+  finalStatText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.dark.success,
+  },
+  finalStatTextUnreleased: {
+    color: Colors.dark.primary,
   },
 });
