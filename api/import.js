@@ -500,9 +500,18 @@ function toTitleCase(str) {
 function cleanSoundCloudComment(text) {
   let cleaned = cleanText(text);
   
-  // Strip @mentions at the start (SoundCloud replies like "@username: track info")
-  cleaned = cleaned.replace(/^@[\w-]+:?\s*/i, '').trim();
-  cleaned = cleaned.replace(/^@[\w-]+\s+/i, '').trim();
+  // SoundCloud @mention formats:
+  // 1. "@username: track info" (with colon)
+  // 2. "@username track info" (no colon, space separated)
+  
+  // First try to strip "@username:" format (with colon)
+  if (/^@[\w-]+\s*:/.test(cleaned)) {
+    cleaned = cleaned.replace(/^@[\w-]+\s*:\s*/, '').trim();
+  } 
+  // Then try "@username " format (no colon) - username ends at space
+  else if (/^@[\w-]+\s+/.test(cleaned)) {
+    cleaned = cleaned.replace(/^@[\w-]+\s+/, '').trim();
+  }
   
   // Strip common prefixes
   cleaned = cleaned.replace(/^(track\s*id|id|this\s+is|that's|it's|its)\s*:?\s*/i, '').trim();
@@ -520,11 +529,11 @@ function parseSoundCloudTrackInfo(text) {
   
   // Skip noise
   const noisePatterns = [
-    /^(id\??|track\s*id\??|what|anyone|need|fire|banger|heater|crazy|insane|unreal|tune\??|sick|wow|omg|yes+|finally)$/i,
-    /^(i need|anyone know|what song|what track|please id|need this)/i,
-    /^(best|love|great|amazing|perfect|incredible)\s*(set|track|tune|song|mix)?$/i,
+    /^(id\??|track\s*id\??|what|anyone|need|fire|banger|heater|crazy|insane|unreal|tune\??|sick|wow|omg|yes+|finally|sound dude)$/i,
+    /^(i need|anyone know|what song|what track|please id|need this|i'd|anyone got)/i,
+    /^(best|love|great|amazing|perfect|incredible)\s*(set|track|tune|song|mix|boiler)?$/i,
     /^\d+:\d+\s*$/,  // Just a timestamp
-    /^@/,  // Just an @mention
+    /^@/,  // Just an @mention (wasn't cleaned)
   ];
   
   for (const pattern of noisePatterns) {
@@ -537,7 +546,8 @@ function parseSoundCloudTrackInfo(text) {
   // Skip if ends with ? and doesn't look like track info
   if (/\?\s*$/.test(cleaned) && !/[-–—]/.test(cleaned)) return null;
   
-  // Try to parse "Title - Artist" or "Artist - Title" format
+  // Try to parse formats with dash: "Artist - Title" or "Title - Artist"
+  // Also handle formats like "closer -gaskin" (space before dash)
   const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
   if (dashMatch) {
     let part1 = dashMatch[1].trim();
@@ -548,32 +558,73 @@ function parseSoundCloudTrackInfo(text) {
     if (/^(id|unknown|tba|\?+)$/i.test(part1) || /^(id|unknown|tba|\?+)$/i.test(part2)) return null;
     
     // Determine which is artist vs title
-    // Remix/edit info usually in title
+    // Key insight: In DJ set comments, it's usually "Artist - Track" format
+    // BUT remix/edit info is usually in the track name
     const part1HasRemix = /remix|edit|vip|dub|bootleg|rework/i.test(part1);
     const part2HasRemix = /remix|edit|vip|dub|bootleg|rework/i.test(part2);
     
-    // Artist names often have fewer words than titles
+    // Count words
     const part1Words = part1.split(/\s+/).length;
     const part2Words = part2.split(/\s+/).length;
+    
+    // Heuristics for artist vs title:
+    // - Single-word names at end are often artist names (e.g., "come on - kosh", "closer - gaskin")
+    // - Remix/edit info is in the title
+    // - Artist names are typically 1-2 words
+    // - Common words like "come", "on", "closer" etc. are more likely title words
+    
+    const commonTitleWords = ['come', 'on', 'the', 'a', 'my', 'your', 'all', 'night', 'long', 'closer', 'higher', 'deeper'];
+    const part1HasCommonWords = part1.toLowerCase().split(/\s+/).some(w => commonTitleWords.includes(w));
+    const part2HasCommonWords = part2.toLowerCase().split(/\s+/).some(w => commonTitleWords.includes(w));
+    
+    // Single word that doesn't look like a common word = likely artist name
+    const part1IsSingleUncommonWord = part1Words === 1 && !part1HasCommonWords;
+    const part2IsSingleUncommonWord = part2Words === 1 && !part2HasCommonWords;
     
     let artist, title;
     
     if (part2HasRemix && !part1HasRemix) {
-      // "Artist - Track (Remix)" format
+      // "Artist - Track (Remix)" format - most common
       artist = toTitleCase(part1);
       title = toTitleCase(part2);
     } else if (part1HasRemix && !part2HasRemix) {
       // "Track (Remix) - Artist" format
       title = toTitleCase(part1);
       artist = toTitleCase(part2);
-    } else if (part1Words > part2Words + 1) {
-      // Longer first part is likely title
+    } else if (part2IsSingleUncommonWord && part1Words >= 2) {
+      // Second part is a single unusual word (likely artist): "come on - kosh"
+      title = toTitleCase(part1);
+      artist = toTitleCase(part2);
+    } else if (part1IsSingleUncommonWord && part2Words >= 2) {
+      // First part is a single unusual word (likely artist): "Gaskin - Me, Myself..."
+      artist = toTitleCase(part1);
+      title = toTitleCase(part2);
+    } else if (part1Words === 1 && part2Words === 1) {
+      // Both single words: common word is title, uncommon is artist
+      // e.g., "closer - gaskin" → Title: Closer, Artist: Gaskin
+      if (part1HasCommonWords && !part2HasCommonWords) {
+        title = toTitleCase(part1);
+        artist = toTitleCase(part2);
+      } else if (part2HasCommonWords && !part1HasCommonWords) {
+        artist = toTitleCase(part1);
+        title = toTitleCase(part2);
+      } else {
+        // Both common or both uncommon - default to Artist - Title
+        artist = toTitleCase(part1);
+        title = toTitleCase(part2);
+      }
+    } else if (part1Words === 1 && part2Words > 2) {
+      // Single word first, multi-word second: likely "Artist - Long Track Name"
+      artist = toTitleCase(part1);
+      title = toTitleCase(part2);
+    } else if (part2Words === 1 && part1Words > 2) {
+      // Multi-word first, single word second: likely "Long Track Name - Artist"
       title = toTitleCase(part1);
       artist = toTitleCase(part2);
     } else {
-      // Default: "Title - Artist" (common in SoundCloud comments)
-      title = toTitleCase(part1);
-      artist = toTitleCase(part2);
+      // Default to "Artist - Title" (most common in DJ set track IDs)
+      artist = toTitleCase(part1);
+      title = toTitleCase(part2);
     }
     
     return { artist, title };
@@ -586,6 +637,24 @@ function parseSoundCloudTrackInfo(text) {
       title: toTitleCase(byMatch[1].trim()), 
       artist: toTitleCase(byMatch[2].trim()) 
     };
+  }
+  
+  // Try slash format: "artist / track" or "artist track / version"
+  const slashMatch = cleaned.match(/^(.+?)\s*\/\s*(.+)$/);
+  if (slashMatch) {
+    const part1 = slashMatch[1].trim();
+    const part2 = slashMatch[2].trim();
+    if (part1.length >= 2 && part2.length >= 2) {
+      // Usually "artist track / extra info" - first part has both
+      // Try to split first part: "locklead i'm turning" -> Artist: Locklead, Title: I'm Turning
+      const firstWords = part1.split(/\s+/);
+      if (firstWords.length >= 2) {
+        return {
+          artist: toTitleCase(firstWords[0]),
+          title: toTitleCase(firstWords.slice(1).join(' ') + ' / ' + part2)
+        };
+      }
+    }
   }
   
   return null;
