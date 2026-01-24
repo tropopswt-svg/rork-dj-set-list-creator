@@ -1,5 +1,6 @@
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const SOUNDCLOUD_OEMBED = 'https://soundcloud.com/oembed';
+const SOUNDCLOUD_API_V2 = 'https://api-v2.soundcloud.com';
 
 // ============ PLATFORM DETECTION ============
 
@@ -309,6 +310,7 @@ async function fetchSoundCloudPage(url) {
         for (const item of hydrationData) {
           if (item.hydratable === 'sound' && item.data) {
             return {
+              trackId: item.data.id, // Important: we need this to fetch comments!
               title: item.data.title,
               artist: item.data.user?.username,
               description: item.data.description || '',
@@ -323,6 +325,12 @@ async function fetchSoundCloudPage(url) {
       } catch (e) {
         console.log('Hydration parse error:', e.message);
       }
+    }
+    
+    // Try to find track ID in other script tags
+    const trackIdMatch = html.match(/"id":(\d{5,15})/);
+    if (trackIdMatch) {
+      console.log('Found track ID from regex:', trackIdMatch[1]);
     }
     
     // Method 2: Extract from meta tags
@@ -354,10 +362,102 @@ async function fetchSoundCloudPage(url) {
   }
 }
 
+async function fetchSoundCloudComments(trackId, clientId) {
+  if (!trackId || !clientId) return [];
+  
+  try {
+    const commentsUrl = `${SOUNDCLOUD_API_V2}/tracks/${trackId}/comments?client_id=${clientId}&limit=200&offset=0`;
+    const response = await fetch(commentsUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+    
+    if (!response.ok) {
+      console.log('SoundCloud comments fetch failed:', response.status);
+      return [];
+    }
+    
+    const data = await response.json();
+    const comments = data.collection || [];
+    
+    // Map to our comment format
+    return comments.map(c => ({
+      id: c.id,
+      authorName: c.user?.username || 'Anonymous',
+      text: c.body || '',
+      timestamp: c.timestamp ? Math.floor(c.timestamp / 1000) : 0, // Convert ms to seconds
+      likeCount: 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch SoundCloud comments:', error);
+    return [];
+  }
+}
+
+function parseSoundCloudComments(comments) {
+  // SoundCloud comments are tied to timestamps, so we can extract track info
+  const tracks = [];
+  const seen = new Set();
+  
+  for (const comment of comments) {
+    const text = cleanText(comment.text);
+    
+    // Skip very short comments or questions
+    if (text.length < 5) continue;
+    if (/\?\s*$/.test(text) && !text.includes(' - ')) continue;
+    if (/^(id|track\s*id|what|anyone|need|fire|banger)/i.test(text)) continue;
+    
+    // Try to parse track info from comment
+    const info = parseTrackInfo(text);
+    if (info && info.artist && info.title) {
+      // Use the comment's timestamp (SoundCloud comments are positioned on the waveform)
+      const timestamp = comment.timestamp || 0;
+      const key = `${timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+      
+      if (!seen.has(key)) {
+        seen.add(key);
+        tracks.push({
+          timestamp,
+          timestampFormatted: formatSecondsToTimestamp(timestamp),
+          title: info.title,
+          artist: info.artist,
+          confidence: 0.7,
+          sourceAuthor: comment.authorName,
+          likes: comment.likeCount || 0,
+        });
+      }
+    }
+  }
+  
+  return tracks.sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function formatSecondsToTimestamp(seconds) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 async function importFromSoundCloud(url) {
   // Try page scraping first (more reliable), then fallback to oEmbed
   const pageInfo = await fetchSoundCloudPage(url);
   const oembedInfo = await fetchSoundCloudInfo(url);
+  
+  // Try to get SoundCloud comments using the client ID
+  const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+  let comments = [];
+  let commentTracks = [];
+  
+  if (clientId && pageInfo?.trackId) {
+    comments = await fetchSoundCloudComments(pageInfo.trackId, clientId);
+    commentTracks = parseSoundCloudComments(comments);
+    console.log(`Fetched ${comments.length} SoundCloud comments, found ${commentTracks.length} tracks`);
+  }
   
   // Combine info from both sources, preferring page info
   const title = pageInfo?.title || oembedInfo.title || 'Unknown Set';
@@ -367,7 +467,18 @@ async function importFromSoundCloud(url) {
   const artistFromPage = pageInfo?.artist || oembedInfo.artist;
   
   // Parse tracklist from description
-  const tracks = parseDescription(description);
+  const descTracks = parseDescription(description);
+  
+  // Merge description tracks and comment tracks
+  const merged = new Map();
+  for (const t of descTracks) merged.set(t.timestamp, t);
+  for (const t of commentTracks) {
+    // Only add if no similar timestamp exists (within 30 seconds)
+    const existing = Array.from(merged.keys()).find(ts => Math.abs(ts - t.timestamp) < 30);
+    if (!existing) merged.set(t.timestamp, t);
+  }
+  
+  const tracks = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
   
   // Parse artist/title 
   const { name, artist } = parseArtistFromTitle(title);
@@ -395,7 +506,7 @@ async function importFromSoundCloud(url) {
     sourceLinks: [{ platform: 'soundcloud', url }],
     totalDuration: duration,
     aiProcessed: true,
-    commentsScraped: 0, // SoundCloud comments aren't easily accessible
+    commentsScraped: comments.length,
     tracksIdentified: tracks.length,
     plays: pageInfo?.playbackCount || 0,
   };
@@ -410,7 +521,7 @@ async function importFromSoundCloud(url) {
       duration,
       genre: pageInfo?.genre,
     },
-    commentsCount: 0,
+    commentsCount: comments.length,
     tracksCount: tracks.length,
   };
 }
