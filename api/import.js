@@ -2,6 +2,85 @@ const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const SOUNDCLOUD_OEMBED = 'https://soundcloud.com/oembed';
 const SOUNDCLOUD_API_V2 = 'https://api-v2.soundcloud.com';
 
+// Cache for dynamic SoundCloud client_id
+let cachedSoundCloudClientId = null;
+let clientIdFetchedAt = 0;
+const CLIENT_ID_CACHE_DURATION = 3600000; // 1 hour
+
+// Dynamically fetch a fresh SoundCloud client_id from their JS files
+async function fetchSoundCloudClientId() {
+  // Return cached if still valid
+  if (cachedSoundCloudClientId && (Date.now() - clientIdFetchedAt) < CLIENT_ID_CACHE_DURATION) {
+    return cachedSoundCloudClientId;
+  }
+  
+  try {
+    // Step 1: Fetch SoundCloud homepage to find JS files
+    const homeResponse = await fetch('https://soundcloud.com', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+    
+    if (!homeResponse.ok) {
+      console.log('Failed to fetch SoundCloud homepage');
+      return null;
+    }
+    
+    const html = await homeResponse.text();
+    
+    // Step 2: Extract JS file URLs from <script crossorigin src="..."> tags
+    const scriptPattern = /<script crossorigin src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g;
+    const urls = [];
+    let match;
+    while ((match = scriptPattern.exec(html)) !== null) {
+      urls.push(match[1]);
+    }
+    
+    if (urls.length === 0) {
+      console.log('No SoundCloud JS files found');
+      return null;
+    }
+    
+    // Step 3: Fetch the last JS file (usually contains the client_id)
+    const jsUrl = urls[urls.length - 1];
+    console.log('Fetching SoundCloud JS:', jsUrl);
+    
+    const jsResponse = await fetch(jsUrl, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    
+    if (!jsResponse.ok) {
+      console.log('Failed to fetch SoundCloud JS file');
+      return null;
+    }
+    
+    const jsContent = await jsResponse.text();
+    
+    // Step 4: Extract client_id from the JS content
+    const clientIdMatch = jsContent.match(/,client_id:"([^"]+)"/);
+    if (clientIdMatch) {
+      cachedSoundCloudClientId = clientIdMatch[1];
+      clientIdFetchedAt = Date.now();
+      console.log('Found fresh SoundCloud client_id:', cachedSoundCloudClientId.substring(0, 10) + '...');
+      return cachedSoundCloudClientId;
+    }
+    
+    // Try alternative patterns
+    const altMatch = jsContent.match(/client_id=([a-zA-Z0-9]+)/);
+    if (altMatch) {
+      cachedSoundCloudClientId = altMatch[1];
+      clientIdFetchedAt = Date.now();
+      console.log('Found SoundCloud client_id (alt):', cachedSoundCloudClientId.substring(0, 10) + '...');
+      return cachedSoundCloudClientId;
+    }
+    
+    console.log('Could not find client_id in JS file');
+    return null;
+  } catch (error) {
+    console.error('Error fetching SoundCloud client_id:', error);
+    return null;
+  }
+}
+
 // ============ PLATFORM DETECTION ============
 
 function detectPlatform(url) {
@@ -448,15 +527,32 @@ async function importFromSoundCloud(url) {
   const pageInfo = await fetchSoundCloudPage(url);
   const oembedInfo = await fetchSoundCloudInfo(url);
   
-  // Try to get SoundCloud comments using the client ID
-  const clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+  // Try to get SoundCloud comments using a fresh client ID
   let comments = [];
   let commentTracks = [];
   
-  if (clientId && pageInfo?.trackId) {
-    comments = await fetchSoundCloudComments(pageInfo.trackId, clientId);
-    commentTracks = parseSoundCloudComments(comments);
-    console.log(`Fetched ${comments.length} SoundCloud comments, found ${commentTracks.length} tracks`);
+  if (pageInfo?.trackId) {
+    // First try env var, then dynamically fetch a fresh one
+    let clientId = process.env.SOUNDCLOUD_CLIENT_ID;
+    
+    // Try fetching comments with env client_id first
+    if (clientId) {
+      comments = await fetchSoundCloudComments(pageInfo.trackId, clientId);
+    }
+    
+    // If that failed, try to get a fresh client_id
+    if (comments.length === 0) {
+      console.log('Trying to fetch fresh SoundCloud client_id...');
+      const freshClientId = await fetchSoundCloudClientId();
+      if (freshClientId) {
+        comments = await fetchSoundCloudComments(pageInfo.trackId, freshClientId);
+      }
+    }
+    
+    if (comments.length > 0) {
+      commentTracks = parseSoundCloudComments(comments);
+      console.log(`Fetched ${comments.length} SoundCloud comments, found ${commentTracks.length} tracks`);
+    }
   }
   
   // Combine info from both sources, preferring page info
