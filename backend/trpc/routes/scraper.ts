@@ -587,12 +587,8 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
         if (lengthMatch) {
           const seconds = parseInt(lengthMatch[1], 10);
           if (seconds > 0) {
-            // Convert to ISO 8601 duration format (PT1H30M45S)
-            const hours = Math.floor(seconds / 3600);
-            const mins = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
-            duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
-            console.log(`[Scraper] Found YouTube duration: ${seconds}s -> ${duration}`);
+            duration = seconds.toString();
+            console.log(`[Scraper] Found YouTube duration: ${seconds} seconds`);
           }
         }
         
@@ -602,11 +598,8 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
           if (approxMatch) {
             const seconds = Math.floor(parseInt(approxMatch[1], 10) / 1000);
             if (seconds > 0) {
-              const hours = Math.floor(seconds / 3600);
-              const mins = Math.floor((seconds % 3600) / 60);
-              const secs = seconds % 60;
-              duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
-              console.log(`[Scraper] Found YouTube duration from approxDurationMs: ${seconds}s -> ${duration}`);
+              duration = seconds.toString();
+              console.log(`[Scraper] Found YouTube duration from approxDurationMs: ${seconds} seconds`);
             }
           }
         }
@@ -785,15 +778,12 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
             const hydrationData = JSON.parse(hydrationMatch[1]);
             for (const item of hydrationData) {
               if (item.hydratable === 'sound' && item.data) {
-                // Get duration in milliseconds, convert to ISO 8601
+                // Get duration in milliseconds, convert to seconds
                 if (item.data.duration) {
                   const seconds = Math.floor(item.data.duration / 1000);
                   if (seconds > 0) {
-                    const hours = Math.floor(seconds / 3600);
-                    const mins = Math.floor((seconds % 3600) / 60);
-                    const secs = seconds % 60;
-                    duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
-                    console.log(`[Scraper] Found SoundCloud duration: ${seconds}s -> ${duration}`);
+                    duration = seconds.toString();
+                    console.log(`[Scraper] Found SoundCloud duration: ${seconds} seconds`);
                   }
                 }
                 // Also get title and artist from hydration
