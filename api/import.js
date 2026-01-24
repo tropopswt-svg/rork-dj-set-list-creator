@@ -222,44 +222,62 @@ function parseDuration(isoDuration) {
 // ============ SOUNDCLOUD FUNCTIONS ============
 
 async function fetchSoundCloudInfo(url) {
-  // Use oEmbed to get basic track info
-  const oembedUrl = `${SOUNDCLOUD_OEMBED}?format=json&url=${encodeURIComponent(url)}`;
-  const response = await fetch(oembedUrl);
-  
-  if (!response.ok) {
-    throw new Error('Could not fetch SoundCloud track info');
+  // First try oEmbed
+  try {
+    const oembedUrl = `${SOUNDCLOUD_OEMBED}?format=json&url=${encodeURIComponent(url)}`;
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const text = await response.text();
+      if (text && text.trim()) {
+        const data = JSON.parse(text);
+        if (data.title) {
+          let title = data.title || 'Unknown Set';
+          let artist = data.author_name || 'Unknown Artist';
+          
+          const byMatch = title.match(/^(.+?)\s+by\s+(.+)$/i);
+          if (byMatch) {
+            title = byMatch[1].trim();
+            artist = byMatch[2].trim();
+          }
+          
+          return {
+            id: url.split('/').pop() || Date.now().toString(),
+            title: data.title || title,
+            artist,
+            description: data.description || '',
+            thumbnailUrl: data.thumbnail_url,
+            duration: 0,
+            authorUrl: data.author_url,
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.log('oEmbed failed, falling back to page scraping:', e.message);
   }
   
-  const data = await response.json();
+  // Fallback: return basic info from URL
+  const urlParts = url.split('/');
+  const trackSlug = urlParts[urlParts.length - 1] || 'unknown';
+  const artistSlug = urlParts[urlParts.length - 2] || 'unknown';
   
-  // Extract thumbnail from the HTML embed (it contains an img tag)
-  let thumbnailUrl = null;
-  const imgMatch = data.html?.match(/src="([^"]+)"/);
-  if (imgMatch) {
-    // Try to get artwork from the visual
-    thumbnailUrl = data.thumbnail_url || null;
-  }
-  
-  // Parse artist and title from the oEmbed title
-  // Format is usually "Track Title by Artist Name"
-  let title = data.title || 'Unknown Set';
-  let artist = data.author_name || 'Unknown Artist';
-  
-  // If title contains " by ", split it
-  const byMatch = title.match(/^(.+?)\s+by\s+(.+)$/i);
-  if (byMatch) {
-    title = byMatch[1].trim();
-    artist = byMatch[2].trim();
-  }
+  // Convert slugs to readable names
+  const formatSlug = (slug) => slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   
   return {
-    id: url.split('/').pop() || Date.now().toString(),
-    title: data.title || title,
-    artist,
-    description: data.description || '',
-    thumbnailUrl: data.thumbnail_url,
-    duration: 0, // oEmbed doesn't provide duration
-    authorUrl: data.author_url,
+    id: trackSlug,
+    title: formatSlug(trackSlug),
+    artist: formatSlug(artistSlug),
+    description: '',
+    thumbnailUrl: null,
+    duration: 0,
+    authorUrl: `https://soundcloud.com/${artistSlug}`,
   };
 }
 
@@ -268,23 +286,31 @@ async function fetchSoundCloudPage(url) {
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
       },
     });
     
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.log('SoundCloud page fetch failed:', response.status);
+      return null;
+    }
     
     const html = await response.text();
     
-    // Try to extract description from the page
-    // SoundCloud stores data in a script tag with JSON
-    const scriptMatch = html.match(/<script>window\.__sc_hydration\s*=\s*(\[[\s\S]*?\]);<\/script>/);
-    if (scriptMatch) {
+    // Try multiple methods to extract data
+    
+    // Method 1: Look for hydration data
+    const hydrationMatch = html.match(/<script>window\.__sc_hydration\s*=\s*(\[[\s\S]*?\]);<\/script>/);
+    if (hydrationMatch) {
       try {
-        const hydrationData = JSON.parse(scriptMatch[1]);
+        const hydrationData = JSON.parse(hydrationMatch[1]);
         for (const item of hydrationData) {
           if (item.hydratable === 'sound' && item.data) {
             return {
+              title: item.data.title,
+              artist: item.data.user?.username,
               description: item.data.description || '',
               duration: item.data.duration ? Math.floor(item.data.duration / 1000) : 0,
               artworkUrl: item.data.artwork_url?.replace('-large', '-t500x500') || item.data.user?.avatar_url,
@@ -295,14 +321,30 @@ async function fetchSoundCloudPage(url) {
           }
         }
       } catch (e) {
-        console.error('Failed to parse SoundCloud hydration data:', e);
+        console.log('Hydration parse error:', e.message);
       }
     }
     
-    // Fallback: try to find description in meta tags
+    // Method 2: Extract from meta tags
+    const result = {};
+    
+    const titleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+    if (titleMatch) result.title = titleMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"');
+    
     const descMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
-    if (descMatch) {
-      return { description: descMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') };
+    if (descMatch) result.description = descMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'");
+    
+    const imageMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]+)"/i);
+    if (imageMatch) result.artworkUrl = imageMatch[1];
+    
+    // Try to extract from twitter:title as well
+    const twitterTitleMatch = html.match(/<meta\s+name="twitter:title"\s+content="([^"]+)"/i);
+    if (twitterTitleMatch && !result.title) {
+      result.title = twitterTitleMatch[1].replace(/&amp;/g, '&');
+    }
+    
+    if (Object.keys(result).length > 0) {
+      return result;
     }
     
     return null;
@@ -313,26 +355,28 @@ async function fetchSoundCloudPage(url) {
 }
 
 async function importFromSoundCloud(url) {
-  const [oembedInfo, pageInfo] = await Promise.all([
-    fetchSoundCloudInfo(url),
-    fetchSoundCloudPage(url),
-  ]);
+  // Try page scraping first (more reliable), then fallback to oEmbed
+  const pageInfo = await fetchSoundCloudPage(url);
+  const oembedInfo = await fetchSoundCloudInfo(url);
   
-  // Combine info from both sources
+  // Combine info from both sources, preferring page info
+  const title = pageInfo?.title || oembedInfo.title || 'Unknown Set';
   const description = pageInfo?.description || oembedInfo.description || '';
   const duration = pageInfo?.duration || 0;
   const thumbnailUrl = pageInfo?.artworkUrl || oembedInfo.thumbnailUrl;
+  const artistFromPage = pageInfo?.artist || oembedInfo.artist;
   
   // Parse tracklist from description
   const tracks = parseDescription(description);
   
-  // Parse artist/title from the oEmbed data
-  const { name, artist } = parseArtistFromTitle(oembedInfo.title);
-  const finalArtist = artist !== 'Unknown Artist' ? artist : oembedInfo.artist;
+  // Parse artist/title 
+  const { name, artist } = parseArtistFromTitle(title);
+  const finalArtist = artist !== 'Unknown Artist' ? artist : artistFromPage;
+  const finalName = name || title;
   
   const setList = {
     id: `sc-${oembedInfo.id}-${Date.now()}`,
-    name: name || oembedInfo.title,
+    name: finalName,
     artist: finalArtist,
     date: pageInfo?.createdAt || new Date().toISOString(),
     tracks: tracks.map((pt, i) => ({
@@ -360,7 +404,7 @@ async function importFromSoundCloud(url) {
     success: true,
     setList,
     soundcloudInfo: {
-      title: oembedInfo.title,
+      title: finalName,
       artist: finalArtist,
       thumbnailUrl,
       duration,
