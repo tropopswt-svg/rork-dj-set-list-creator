@@ -1,15 +1,56 @@
 {
   "manifest_version": 3,
-  "name": "1001Tracklists Exporter",
-  "version": "1.0",
-  "description": "Export tracklists from 1001tracklists.com to CSV for DJ Set List Creator",
-  "permissions": ["clipboardWrite"],
-  "host_permissions": ["*://www.1001tracklists.com/*"],
+  "name": "IDentified - Track Scraper",
+  "version": "2.0",
+  "description": "Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists for the IDentified app",
+  "permissions": [
+    "clipboardWrite",
+    "storage"
+  ],
+  "host_permissions": [
+    "*://www.1001tracklists.com/*",
+    "*://www.beatport.com/*",
+    "*://beatport.com/*",
+    "*://soundcloud.com/*",
+    "*://www.soundcloud.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
   "content_scripts": [
     {
       "matches": ["*://www.1001tracklists.com/tracklist/*"],
-      "js": ["content.js"],
+      "js": ["extractors/1001tracklists.js"],
+      "css": ["styles.css"]
+    },
+    {
+      "matches": [
+        "*://www.beatport.com/*",
+        "*://beatport.com/*"
+      ],
+      "js": ["extractors/beatport.js"],
+      "css": ["styles.css"]
+    },
+    {
+      "matches": [
+        "*://soundcloud.com/*",
+        "*://www.soundcloud.com/*"
+      ],
+      "js": ["extractors/soundcloud.js"],
       "css": ["styles.css"]
     }
-  ]
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
 }

@@ -1,3 +1,79 @@
+/* IDentified Chrome Extension Styles */
+
+#identified-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 999999;
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.4);
+  transition: all 0.2s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+#identified-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 107, 53, 0.5);
+  background: linear-gradient(135deg, #FF8C42 0%, #FF6B35 100%);
+}
+
+#identified-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
+}
+
+#identified-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+  transform: none;
+}
+
+.identified-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999999;
+  padding: 14px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  animation: identified-slide-in 0.3s ease;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.identified-notification.success {
+  background: linear-gradient(135deg, #00C853 0%, #00E676 100%);
+}
+
+.identified-notification.error {
+  background: linear-gradient(135deg, #FF5252 0%, #FF1744 100%);
+}
+
+.identified-notification.info {
+  background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+}
+
+@keyframes identified-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Legacy support for old button ID */
 #tl-exporter-btn {
   position: fixed;
   bottom: 20px;
@@ -19,12 +95,6 @@
 #tl-exporter-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(255, 107, 53, 0.5);
-  background: linear-gradient(135deg, #FF8C42 0%, #FF6B35 100%);
-}
-
-#tl-exporter-btn:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(255, 107, 53, 0.4);
 }
 
 .tl-exporter-notification {
@@ -38,7 +108,7 @@
   color: #fff;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  animation: tl-slide-in 0.3s ease;
+  animation: identified-slide-in 0.3s ease;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -48,15 +118,4 @@
 
 .tl-exporter-notification.error {
   background: linear-gradient(135deg, #FF5252 0%, #FF1744 100%);
-}
-
-@keyframes tl-slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(100px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
 }
