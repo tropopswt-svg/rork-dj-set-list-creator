@@ -28,7 +28,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useFormValidation, validationRules } from '@/utils/hooks';
-import { trpc } from '@/lib/trpc';
 import { useSets } from '@/contexts/SetsContext';
 import { SetList, Track, SourceLink } from '@/types';
 
@@ -125,71 +124,84 @@ export default function SubmitScreen() {
     }
   }, [showImportModal, importProgress.step, pulseAnim]);
 
-  // tRPC mutation for scraping URLs
-  const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
-    onMutate: () => {
-      setShowImportModal(true);
-      setImportProgress({
-        step: 'fetching_metadata',
-        message: 'Fetching set info...',
+  // State for import loading
+  const [isImporting, setIsImporting] = useState(false);
+
+  // API base URL from environment
+  const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
+
+  // Function to import from URL using the Vercel /api/import endpoint
+  const scrapeUrl = async (url: string) => {
+    setIsImporting(true);
+    setShowImportModal(true);
+    setImportProgress({
+      step: 'fetching_metadata',
+      message: 'Fetching set info...',
+    });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
       });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    },
-    onSuccess: (result) => {
-      console.log('[Submit] Scrape result:', result);
-      
-      if (result.success && result.data) {
+
+      const result = await response.json();
+      console.log('[Submit] Import result:', result);
+
+      if (result.success && result.setList) {
+        const setList = result.setList;
+        const videoInfo = result.videoInfo;
+        
         setImportProgress(prev => ({
           ...prev,
           step: 'fetching_comments',
           message: 'Scanning comments for tracks...',
-          setName: result.data.title,
-          artistName: result.data.artist,
-          thumbnail: result.data.thumbnail,
+          setName: setList.name,
+          artistName: setList.artist,
+          thumbnail: setList.coverUrl,
         }));
-        
+
         // Auto-fill form with scraped data
-        if (result.data.title) {
-          form.setValue('setName', result.data.title);
+        if (setList.name) {
+          form.setValue('setName', setList.name);
         }
-        if (result.data.artist) {
-          form.setValue('artistName', result.data.artist);
+        if (setList.artist) {
+          form.setValue('artistName', setList.artist);
         }
-        if (result.data.venue) {
-          form.setValue('venue', result.data.venue);
+        if (setList.venue) {
+          form.setValue('venue', setList.venue);
         }
-        
+
         // Store additional data
-        setScrapedThumbnail(result.data.thumbnail || null);
-        setScrapedDuration(result.data.duration || null);
-        setScrapedDurationSeconds(result.data.durationSeconds || null);
-        setScrapedDate(result.data.date || null);
-        setSourceLinks(result.data.links || {});
-        
+        setScrapedThumbnail(setList.coverUrl || null);
+        setScrapedDurationSeconds(setList.totalDuration || null);
+        setScrapedDate(setList.date || null);
+        if (setList.sourceLinks?.[0]) {
+          setSourceLinks({ [setList.sourceLinks[0].platform]: setList.sourceLinks[0].url });
+        }
+
         // Store source info
-        const platform = result.data.platform as 'youtube' | 'soundcloud' | 'mixcloud';
-        const sourceUrl = result.data.links[platform] || form.values.setUrl;
         setScrapedSourceInfo({
-          url: sourceUrl,
-          platform,
-          duration: result.data.durationSeconds,
-          uploaderName: result.data.uploaderName,
-          isOfficial: result.data.isOfficialUpload,
-          isUserRip: result.data.isUserRip,
+          url: url,
+          platform: 'youtube',
+          duration: setList.totalDuration,
+          uploaderName: videoInfo?.channelTitle,
         });
-        
+
         // Convert scraped tracks to PendingTrack format
-        const tracksFound = result.data.tracks?.length || 0;
-        if (result.data.tracks && tracksFound > 0) {
-          const pendingTracks: PendingTrack[] = result.data.tracks.map((t, i) => ({
+        const tracksFound = setList.tracks?.length || 0;
+        if (setList.tracks && tracksFound > 0) {
+          const pendingTracks: PendingTrack[] = setList.tracks.map((t: any, i: number) => ({
             id: `scraped-${Date.now()}-${i}`,
             title: t.title,
             artist: t.artist,
-            timestamp: t.timestamp,
+            timestamp: formatTimestamp(t.timestamp),
           }));
           setTracks(pendingTracks);
         }
-        
+
         // Show complete state
         setTimeout(() => {
           setImportProgress(prev => ({
@@ -197,30 +209,42 @@ export default function SubmitScreen() {
             step: 'complete',
             message: tracksFound > 0 ? `Found ${tracksFound} tracks!` : 'Set info loaded',
             tracksFound,
-            commentsFound: result.data.comments?.length || 0,
+            commentsFound: result.commentsCount || 0,
           }));
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         }, 500);
-        
+
       } else {
         setImportProgress({
           step: 'error',
-          message: result.error || 'Could not scrape the URL',
+          message: result.error || 'Could not import the URL',
           error: result.error,
         });
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
-    },
-    onError: (error) => {
-      console.error('[Submit] Scrape error:', error);
+    } catch (error: any) {
+      console.error('[Submit] Import error:', error);
       setImportProgress({
         step: 'error',
         message: error.message || 'Failed to connect to server',
         error: error.message,
       });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-  });
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // Helper to format timestamp from seconds to string
+  const formatTimestamp = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
 
   const closeImportModal = () => {
     setShowImportModal(false);
@@ -245,7 +269,7 @@ export default function SubmitScreen() {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    scrapeMutation.mutate({ url: form.values.setUrl.trim() });
+    scrapeUrl(form.values.setUrl.trim());
   };
 
   const handleAddTrack = () => {
@@ -437,17 +461,17 @@ export default function SubmitScreen() {
               />
             </View>
             <Pressable
-              style={[styles.importButton, scrapeMutation.isPending && styles.importButtonDisabled]}
+              style={[styles.importButton, isImporting && styles.importButtonDisabled]}
               onPress={handleImportFromUrl}
-              disabled={scrapeMutation.isPending}
+              disabled={isImporting}
             >
-              {scrapeMutation.isPending ? (
+              {isImporting ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Sparkles size={16} color="#fff" />
               )}
               <Text style={styles.importButtonText}>
-                {scrapeMutation.isPending ? 'Scanning...' : 'Import'}
+                {isImporting ? 'Scanning...' : 'Import'}
               </Text>
             </Pressable>
           </View>
