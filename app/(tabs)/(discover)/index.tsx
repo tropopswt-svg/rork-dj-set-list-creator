@@ -79,7 +79,7 @@ const IDentifiedLogo = () => {
             style={[
               logoStyles.bar,
               { 
-                height: 14 + i * 4,
+                height: 10 + i * 3,
                 transform: [{ scaleY: anim }],
                 opacity: anim,
               }
@@ -117,7 +117,7 @@ const IDentifiedLogo = () => {
             style={[
               logoStyles.bar,
               { 
-                height: 18 - i * 3,
+                height: 14 - i * 2,
                 transform: [{ scaleY: anim }],
                 opacity: anim,
               }
@@ -133,18 +133,18 @@ const logoStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   barsContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 3,
-    height: 24,
+    gap: 2,
+    height: 18,
   },
   bar: {
-    width: 3,
+    width: 2.5,
     backgroundColor: Colors.dark.primary,
-    borderRadius: 1.5,
+    borderRadius: 1.25,
   },
   logoWrapper: {
     flexDirection: 'row',
@@ -153,30 +153,30 @@ const logoStyles = StyleSheet.create({
   },
   glowBg: {
     position: 'absolute',
-    left: -10,
-    right: -10,
-    top: -8,
-    bottom: -8,
+    left: -8,
+    right: -8,
+    top: -6,
+    bottom: -6,
     backgroundColor: Colors.dark.primary,
-    borderRadius: 20,
+    borderRadius: 16,
     opacity: 0.15,
   },
   idContainer: {
-    marginRight: -2,
+    marginRight: -1,
   },
   idGradient: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
   },
   idText: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
     color: Colors.dark.background,
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   entifiedText: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.5,
@@ -237,16 +237,19 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
+          <View style={styles.headerSpacer} />
           <IDentifiedLogo />
-          <Pressable 
-            style={styles.addButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              setShowImportModal(true);
-            }}
-          >
-            <Link2 size={20} color={Colors.dark.background} />
-          </Pressable>
+          <View style={styles.headerSpacer}>
+            <Pressable 
+              style={styles.addButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setShowImportModal(true);
+              }}
+            >
+              <Link2 size={18} color={Colors.dark.background} />
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.searchContainer}>
@@ -338,14 +341,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  headerSpacer: {
+    width: 44,
+    alignItems: 'flex-end',
   },
   addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
