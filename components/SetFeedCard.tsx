@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, Radio, ListMusic, MessageSquare } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, MessageSquare } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -99,8 +99,6 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
           return <Youtube key={index} {...iconProps} color="#FF0000" />;
         case 'soundcloud':
           return <Music2 key={index} {...iconProps} color="#FF5500" />;
-        case 'mixcloud':
-          return <Radio key={index} {...iconProps} color="#5000FF" />;
         case '1001tracklists':
           return <ListMusic key={index} {...iconProps} color={Colors.dark.primary} />;
         default:

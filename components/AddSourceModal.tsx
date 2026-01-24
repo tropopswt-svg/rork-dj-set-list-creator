@@ -9,13 +9,13 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import { X, Youtube, Music2, Radio, Sparkles, Check, AlertCircle } from 'lucide-react-native';
+import { X, Youtube, Music2, Sparkles, Check, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 
 interface AddSourceModalProps {
   visible: boolean;
-  platform: 'youtube' | 'soundcloud' | 'mixcloud';
+  platform: 'youtube' | 'soundcloud';
   setName: string;
   onClose: () => void;
   onImport: (url: string) => Promise<{ success: boolean; stats?: any; error?: string }>;
@@ -67,12 +67,6 @@ export default function AddSourceModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    if (platform === 'mixcloud' && !urlLower.includes('mixcloud.com')) {
-      setError('Please enter a valid Mixcloud URL');
-      setStep('error');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
 
     setStep('importing');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -110,8 +104,6 @@ export default function AddSourceModal({
         return <Youtube size={32} color="#FF0000" />;
       case 'soundcloud':
         return <Music2 size={32} color="#FF5500" />;
-      case 'mixcloud':
-        return <Radio size={32} color="#5000FF" />;
     }
   };
 
@@ -119,7 +111,6 @@ export default function AddSourceModal({
     switch (platform) {
       case 'youtube': return 'YouTube';
       case 'soundcloud': return 'SoundCloud';
-      case 'mixcloud': return 'Mixcloud';
     }
   };
 
@@ -127,7 +118,6 @@ export default function AddSourceModal({
     switch (platform) {
       case 'youtube': return '#FF0000';
       case 'soundcloud': return '#FF5500';
-      case 'mixcloud': return '#5000FF';
     }
   };
 
@@ -135,7 +125,6 @@ export default function AddSourceModal({
     switch (platform) {
       case 'youtube': return 'https://youtube.com/watch?v=...';
       case 'soundcloud': return 'https://soundcloud.com/...';
-      case 'mixcloud': return 'https://mixcloud.com/...';
     }
   };
 

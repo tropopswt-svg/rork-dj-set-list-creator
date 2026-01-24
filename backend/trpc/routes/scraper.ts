@@ -1563,7 +1563,7 @@ export const scraperRouter = createTRPCRouter({
         console.log(`[Scraper] Could not extract video ID from URL`);
         return {
           success: false,
-          error: "Unsupported URL format. Please use YouTube, SoundCloud, or Mixcloud links.",
+          error: "Unsupported URL format. Please use YouTube or SoundCloud links.",
           data: null,
         };
       }

@@ -27,7 +27,7 @@ interface ParsedTrack {
   timestamp: number;
   confidence: number;
   contributedBy?: string;
-  source: 'youtube' | 'soundcloud' | 'mixcloud';
+  source: 'youtube' | 'soundcloud';
 }
 
 // Duration tolerance: allow 5% difference before scaling

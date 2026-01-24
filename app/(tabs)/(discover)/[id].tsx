@@ -11,7 +11,6 @@ import {
   ExternalLink, 
   Youtube, 
   Music2,
-  Radio,
   ListMusic,
   MessageSquare,
   Sparkles,
@@ -49,7 +48,7 @@ export default function SetDetailScreen() {
   
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
-  const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud' | 'mixcloud'>('youtube');
+  const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud'>('youtube');
   
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -222,8 +221,6 @@ export default function SetDetailScreen() {
         return <Youtube size={size} color="#FF0000" />;
       case 'soundcloud':
         return <Music2 size={size} color="#FF5500" />;
-      case 'mixcloud':
-        return <Radio size={size} color="#5000FF" />;
       case '1001tracklists':
         return <ListMusic size={size} color="#00D4AA" />;
       default:
@@ -235,7 +232,6 @@ export default function SetDetailScreen() {
     switch (platform) {
       case 'youtube': return 'YouTube';
       case 'soundcloud': return 'SoundCloud';
-      case 'mixcloud': return 'Mixcloud';
       case '1001tracklists': return '1001Tracklists';
       default: return 'Link';
     }
@@ -310,10 +306,10 @@ export default function SetDetailScreen() {
                     onPress={() => handleOpenSource(ytLink)}
                   >
                     <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
-                      <Youtube size={22} color="#FF0000" />
+                      <Youtube size={16} color="#FF0000" />
                     </View>
                     <Text style={styles.linkPlatform}>YouTube</Text>
-                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                    <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                   </Pressable>
                 ) : (
                   <Pressable 
@@ -325,10 +321,10 @@ export default function SetDetailScreen() {
                     }}
                   >
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Youtube size={22} color={Colors.dark.textMuted} />
+                      <Youtube size={16} color={Colors.dark.textMuted} />
                     </View>
                     <Text style={styles.linkPlatformEmpty}>YouTube</Text>
-                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
+                    <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
                   </Pressable>
                 );
               })()}
@@ -342,10 +338,10 @@ export default function SetDetailScreen() {
                     onPress={() => handleOpenSource(scLink)}
                   >
                     <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
-                      <Music2 size={22} color="#FF5500" />
+                      <Music2 size={16} color="#FF5500" />
                     </View>
                     <Text style={styles.linkPlatform}>SoundCloud</Text>
-                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                    <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                   </Pressable>
                 ) : (
                   <Pressable 
@@ -357,42 +353,10 @@ export default function SetDetailScreen() {
                     }}
                   >
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Music2 size={22} color={Colors.dark.textMuted} />
+                      <Music2 size={16} color={Colors.dark.textMuted} />
                     </View>
                     <Text style={styles.linkPlatformEmpty}>SoundCloud</Text>
-                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
-                  </Pressable>
-                );
-              })()}
-
-              {/* Mixcloud */}
-              {(() => {
-                const mcLink = setList.sourceLinks.find(l => l.platform === 'mixcloud');
-                return mcLink ? (
-                  <Pressable 
-                    style={[styles.linkCard, styles.linkCardFilled]}
-                    onPress={() => handleOpenSource(mcLink)}
-                  >
-                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(80, 0, 255, 0.1)' }]}>
-                      <Radio size={22} color="#5000FF" />
-                    </View>
-                    <Text style={styles.linkPlatform}>Mixcloud</Text>
-                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                  </Pressable>
-                ) : (
-                  <Pressable 
-                    style={[styles.linkCard, styles.linkCardEmpty]}
-                    onPress={() => {
-                      setSelectedPlatform('mixcloud');
-                      setShowSourceModal(true);
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    }}
-                  >
-                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Radio size={22} color={Colors.dark.textMuted} />
-                    </View>
-                    <Text style={styles.linkPlatformEmpty}>Mixcloud</Text>
-                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
+                    <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
                   </Pressable>
                 );
               })()}
@@ -402,15 +366,15 @@ export default function SetDetailScreen() {
           <View style={styles.statsSection}>
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.15)' }]}>
-                <Sparkles size={18} color={Colors.dark.primary} />
+                <Sparkles size={14} color={Colors.dark.primary} />
               </View>
               <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
-              <Text style={styles.statLabel}>Identified</Text>
+              <Text style={styles.statLabel}>ID'd</Text>
             </View>
             
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
-                <CheckCircle size={18} color={Colors.dark.success} />
+                <CheckCircle size={14} color={Colors.dark.success} />
               </View>
               <Text style={styles.statValue}>{verifiedCount}</Text>
               <Text style={styles.statLabel}>Verified</Text>
@@ -418,15 +382,15 @@ export default function SetDetailScreen() {
             
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
-                <Users size={18} color="#8B5CF6" />
+                <Users size={14} color="#8B5CF6" />
               </View>
               <Text style={styles.statValue}>{communityCount}</Text>
-              <Text style={styles.statLabel}>Community</Text>
+              <Text style={styles.statLabel}>Comm.</Text>
             </View>
             
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.15)' }]}>
-                <MessageSquare size={18} color="#FB923C" />
+                <MessageSquare size={14} color="#FB923C" />
               </View>
               <Text style={styles.statValue}>{setList.commentsScraped || 0}</Text>
               <Text style={styles.statLabel}>Scraped</Text>
@@ -435,9 +399,9 @@ export default function SetDetailScreen() {
 
           {setList.aiProcessed && (
             <View style={styles.aiInfoBanner}>
-              <Sparkles size={16} color={Colors.dark.primary} />
+              <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                Tracklist built from {setList.commentsScraped?.toLocaleString()} comments & 1001Tracklists
+                IDentified • {setList.commentsScraped?.toLocaleString()} signals processed
               </Text>
             </View>
           )}
@@ -748,10 +712,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.dark.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 12,
-    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 8,
     flex: 1,
   },
   linkCardFilled: {
@@ -764,9 +728,9 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
   },
   linkIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 6,
     backgroundColor: Colors.dark.surfaceLight,
     alignItems: 'center',
     justifyContent: 'center',
@@ -777,12 +741,12 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.surfaceLight,
   },
   linkPlatform: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.dark.text,
   },
   linkPlatformEmpty: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500' as const,
     color: Colors.dark.textMuted,
   },
@@ -810,44 +774,44 @@ const styles = StyleSheet.create({
   },
   statsSection: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 20,
+    gap: 6,
+    marginBottom: 16,
   },
   statCard: {
     flex: 1,
     backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
-    padding: 12,
+    borderRadius: 10,
+    padding: 8,
     alignItems: 'center',
   },
   statIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   statValue: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '700' as const,
     color: Colors.dark.text,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   statLabel: {
-    fontSize: 10,
+    fontSize: 8,
     color: Colors.dark.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   aiInfoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(0, 212, 170, 0.1)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 16,
-    gap: 10,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   playInAppButton: {
     flexDirection: 'row',

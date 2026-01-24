@@ -37,12 +37,11 @@ export interface ImportResult {
   tracksCount?: number;
 }
 
-export type Platform = 'youtube' | 'soundcloud' | 'mixcloud';
+export type Platform = 'youtube' | 'soundcloud';
 
 export function detectPlatform(url: string): Platform | null {
   if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
   if (url.includes('soundcloud.com')) return 'soundcloud';
-  if (url.includes('mixcloud.com')) return 'mixcloud';
   return null;
 }
 
@@ -114,7 +113,7 @@ export async function importSet(
   if (!platform) {
     return {
       success: false,
-      error: 'Unsupported platform. Please use a YouTube, SoundCloud, or Mixcloud link.',
+      error: 'Unsupported platform. Please use a YouTube or SoundCloud link.',
     };
   }
 
@@ -123,13 +122,8 @@ export async function importSet(
   try {
     if (platform === 'youtube') {
       return await importFromYouTubeUrl(url, onProgress);
-    } else if (platform === 'soundcloud') {
-      return await importFromSoundCloudUrl(url, onProgress);
     } else {
-      return {
-        success: false,
-        error: 'Mixcloud import is not yet supported.',
-      };
+      return await importFromSoundCloudUrl(url, onProgress);
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error occurred';

@@ -35,7 +35,7 @@ export interface Track {
 
 // Track identification from a specific platform
 export interface TrackSource {
-  platform: 'youtube' | 'soundcloud' | 'mixcloud';
+  platform: 'youtube' | 'soundcloud';
   timestamp: number;
   contributedBy?: string;
   confidence: number;
@@ -43,7 +43,7 @@ export interface TrackSource {
 }
 
 export interface SourceLink {
-  platform: 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists';
+  platform: 'youtube' | 'soundcloud' | '1001tracklists';
   url: string;
   label?: string;
 }
@@ -156,7 +156,7 @@ export interface ConflictOption {
   id: string;
   title: string;
   artist: string;
-  source: 'youtube' | 'soundcloud' | 'mixcloud';
+  source: 'youtube' | 'soundcloud';
   confidence: number;
   contributedBy?: string;
   duration?: number; // Track duration in seconds

@@ -9,7 +9,7 @@ const STORAGE_KEYS = {
 
 export interface UserPreferences {
   theme?: 'dark' | 'light';
-  defaultPlatform?: 'youtube' | 'soundcloud' | 'mixcloud';
+  defaultPlatform?: 'youtube' | 'soundcloud';
   notificationsEnabled?: boolean;
 }
 

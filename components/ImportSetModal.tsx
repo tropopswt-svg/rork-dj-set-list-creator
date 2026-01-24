@@ -79,7 +79,6 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
         const sourceLinks: SetList['sourceLinks'] = [];
         if (result.data.links.youtube) sourceLinks.push({ platform: 'youtube', url: result.data.links.youtube });
         if (result.data.links.soundcloud) sourceLinks.push({ platform: 'soundcloud', url: result.data.links.soundcloud });
-        if (result.data.links.mixcloud) sourceLinks.push({ platform: 'mixcloud', url: result.data.links.mixcloud });
         
         // Add the original URL if not already in links
         const platform = detectPlatform(url);
@@ -109,7 +108,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
             verified: false,
           })),
           coverUrl: result.data.thumbnail,
-          sourceLinks: sourceLinks.length > 0 ? sourceLinks : [{ platform: platform as 'youtube' | 'soundcloud' | 'mixcloud', url }],
+          sourceLinks: sourceLinks.length > 0 ? sourceLinks : [{ platform: platform as 'youtube' | 'soundcloud', url }],
           totalDuration: result.data.duration ? parseDuration(result.data.duration) : 0,
           aiProcessed: true,
           commentsScraped: result.data.comments?.length || 0,
@@ -236,10 +235,9 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     }
   }, [processing]);
 
-  const detectPlatform = (inputUrl: string): 'youtube' | 'soundcloud' | 'mixcloud' | null => {
+  const detectPlatform = (inputUrl: string): 'youtube' | 'soundcloud' | null => {
     if (inputUrl.includes('youtube.com') || inputUrl.includes('youtu.be')) return 'youtube';
     if (inputUrl.includes('soundcloud.com')) return 'soundcloud';
-    if (inputUrl.includes('mixcloud.com')) return 'mixcloud';
     return null;
   };
 

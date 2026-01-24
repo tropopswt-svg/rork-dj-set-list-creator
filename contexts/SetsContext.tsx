@@ -392,7 +392,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   const addSourceToSet = useCallback(async (
     setId: string,
     url: string,
-    platform: 'youtube' | 'soundcloud' | 'mixcloud'
+    platform: 'youtube' | 'soundcloud'
   ): Promise<{ success: boolean; stats?: any; error?: string }> => {
     const existingSet = sets.find(s => s.id === setId);
     if (!existingSet) {

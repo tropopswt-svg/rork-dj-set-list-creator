@@ -53,7 +53,7 @@ interface PendingTrack {
 
 interface ScrapedSourceInfo {
   url: string;
-  platform: 'youtube' | 'soundcloud' | 'mixcloud';
+  platform: 'youtube' | 'soundcloud';
   duration?: number;
   uploaderName?: string;
   isOfficial?: boolean;
@@ -87,7 +87,7 @@ export default function SubmitScreen() {
   const [scrapedDurationSeconds, setScrapedDurationSeconds] = useState<number | null>(null);
   const [scrapedDate, setScrapedDate] = useState<string | null>(null);
   const [scrapedSourceInfo, setScrapedSourceInfo] = useState<ScrapedSourceInfo | null>(null);
-  const [sourceLinks, setSourceLinks] = useState<{ youtube?: string; soundcloud?: string; mixcloud?: string }>({});
+  const [sourceLinks, setSourceLinks] = useState<{ youtube?: string; soundcloud?: string }>({});
   const [newTrackTitle, setNewTrackTitle] = useState('');
   const [newTrackArtist, setNewTrackArtist] = useState('');
   const [newTrackTimestamp, setNewTrackTimestamp] = useState('');
@@ -187,7 +187,7 @@ export default function SubmitScreen() {
           (url.includes('soundcloud.com') ? 'soundcloud' : 'youtube');
         setScrapedSourceInfo({
           url: url,
-          platform: detectedPlatform as 'youtube' | 'soundcloud' | 'mixcloud',
+          platform: detectedPlatform as 'youtube' | 'soundcloud',
           duration: setList.totalDuration,
           uploaderName: videoInfo?.channelTitle || result.soundcloudInfo?.artist,
         });
@@ -336,8 +336,7 @@ export default function SubmitScreen() {
     } else if (form.values.setUrl) {
       const url = form.values.setUrl;
       const platform = url.includes('youtube.com') || url.includes('youtu.be') ? 'youtube' 
-        : url.includes('soundcloud.com') ? 'soundcloud'
-        : url.includes('mixcloud.com') ? 'mixcloud' : null;
+        : url.includes('soundcloud.com') ? 'soundcloud' : null;
       if (platform) {
         links.push({ platform, url });
       }
@@ -454,7 +453,7 @@ export default function SubmitScreen() {
               <Link2 size={18} color={Colors.dark.textMuted} />
               <TextInput
                 style={styles.urlInput}
-                placeholder="YouTube, SoundCloud, or Mixcloud URL"
+                placeholder="YouTube or SoundCloud URL"
                 placeholderTextColor={Colors.dark.textMuted}
                 value={form.values.setUrl}
                 onChangeText={(text) => form.setValue('setUrl', text)}

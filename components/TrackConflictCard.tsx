@@ -13,7 +13,6 @@ import {
   Zap, 
   Youtube, 
   Music2, 
-  Radio, 
   Check, 
   Trophy,
   Sparkles,
@@ -169,8 +168,6 @@ export default function TrackConflictCard({
         return <Youtube size={size} color="#FF0000" />;
       case 'soundcloud':
         return <Music2 size={size} color="#FF5500" />;
-      case 'mixcloud':
-        return <Radio size={size} color="#5000FF" />;
       default:
         return <Music2 size={size} color={Colors.dark.textMuted} />;
     }
