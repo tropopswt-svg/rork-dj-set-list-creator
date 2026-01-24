@@ -7,6 +7,8 @@ import {
   Animated,
   Easing,
   Linking,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { 
   Zap, 
@@ -18,11 +20,19 @@ import {
   Trophy,
   Sparkles,
   Play,
-  ExternalLink,
+  Pause,
+  ChevronLeft,
+  ChevronRight,
+  Timer,
+  Volume2,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { TrackConflict, ConflictOption } from '@/types';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const CARD_WIDTH = SCREEN_WIDTH - 32;
+const OPTION_WIDTH = CARD_WIDTH - 40;
 
 interface TrackConflictCardProps {
   conflict: TrackConflict;
@@ -33,142 +43,141 @@ interface TrackConflictCardProps {
   soundcloudUrl?: string;
 }
 
-// Mini waveform visualization component
-const WaveformBar = ({ platform, timestamp, onListen }: { platform: string; timestamp: number; onListen?: () => void }) => {
-  const markerPosition = Math.min(95, Math.max(5, (timestamp / 3600) * 100)); // Assume 1hr set max
-  
-  const getPlatformColor = () => {
-    switch (platform) {
-      case 'youtube': return '#FF0000';
-      case 'soundcloud': return '#FF5500';
-      default: return Colors.dark.primary;
-    }
-  };
-  
-  const getPlatformIcon = () => {
-    switch (platform) {
-      case 'youtube': return <Youtube size={14} color="#FF0000" />;
-      case 'soundcloud': return <Music2 size={14} color="#FF5500" />;
-      default: return <Music2 size={14} color={Colors.dark.textMuted} />;
-    }
-  };
-
-  // Generate pseudo-random waveform bars
-  const waveformBars = Array.from({ length: 40 }, (_, i) => {
-    const seed = (i * 7 + 13) % 17;
-    return 0.3 + (seed / 17) * 0.7;
-  });
-
-  return (
-    <View style={waveformStyles.container}>
-      <View style={waveformStyles.labelRow}>
-        {getPlatformIcon()}
-        <Text style={waveformStyles.platformLabel}>
-          {platform.charAt(0).toUpperCase() + platform.slice(1)}
-        </Text>
-        {onListen && (
-          <Pressable style={waveformStyles.listenButton} onPress={onListen}>
-            <Play size={10} color="#FFFFFF" fill="#FFFFFF" />
-            <Text style={waveformStyles.listenText}>Listen</Text>
+// Inline YouTube Preview Component
+const YouTubePreview = ({ 
+  videoId, 
+  timestamp,
+  isPlaying,
+  onTogglePlay,
+}: { 
+  videoId: string; 
+  timestamp: number;
+  isPlaying: boolean;
+  onTogglePlay: () => void;
+}) => {
+  if (Platform.OS === 'web') {
+    return (
+      <View style={previewStyles.container}>
+        <View style={previewStyles.iframeContainer}>
+          {isPlaying ? (
+            <iframe
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${videoId}?start=${timestamp}&autoplay=1&controls=0&modestbranding=1`}
+              frameBorder="0"
+              allow="autoplay; encrypted-media"
+              style={{ borderRadius: 8 }}
+            />
+          ) : (
+            <Pressable style={previewStyles.playOverlay} onPress={onTogglePlay}>
+              <View style={previewStyles.playButton}>
+                <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+              </View>
+              <Text style={previewStyles.previewText}>Preview</Text>
+            </Pressable>
+          )}
+        </View>
+        {isPlaying && (
+          <Pressable style={previewStyles.stopButton} onPress={onTogglePlay}>
+            <Pause size={14} color="#FFFFFF" fill="#FFFFFF" />
           </Pressable>
         )}
       </View>
-      <View style={waveformStyles.waveformContainer}>
-        <View style={waveformStyles.waveformTrack}>
-          {waveformBars.map((height, i) => (
-            <View
-              key={i}
-              style={[
-                waveformStyles.waveformBar,
-                { 
-                  height: height * 20,
-                  backgroundColor: i < (markerPosition / 100) * 40 
-                    ? getPlatformColor() 
-                    : `${getPlatformColor()}40`,
-                },
-              ]}
-            />
-          ))}
-        </View>
-        <View style={[waveformStyles.timestampMarker, { left: `${markerPosition}%` }]}>
-          <View style={[waveformStyles.markerLine, { backgroundColor: getPlatformColor() }]} />
-          <View style={[waveformStyles.markerDot, { backgroundColor: getPlatformColor() }]} />
-        </View>
-      </View>
-    </View>
+    );
+  }
+
+  // For native, open in browser
+  return (
+    <Pressable 
+      style={previewStyles.nativeButton}
+      onPress={() => Linking.openURL(`https://youtube.com/watch?v=${videoId}&t=${timestamp}`)}
+    >
+      <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+      <Text style={previewStyles.nativeButtonText}>Preview</Text>
+    </Pressable>
   );
 };
 
-const waveformStyles = StyleSheet.create({
+const previewStyles = StyleSheet.create({
   container: {
-    marginBottom: 12,
+    width: '100%',
+    height: 80,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: Colors.dark.surface,
+    position: 'relative',
   },
-  labelRow: {
+  iframeContainer: {
+    width: '100%',
+    height: '100%',
+  },
+  playOverlay: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  playButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  previewText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  stopButton: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nativeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginBottom: 6,
+    backgroundColor: '#FF0000',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
   },
-  platformLabel: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    color: Colors.dark.textSecondary,
-    flex: 1,
-  },
-  listenButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  listenText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
+  nativeButtonText: {
+    fontSize: 12,
     color: '#FFFFFF',
-  },
-  waveformContainer: {
-    position: 'relative',
-    height: 24,
-    backgroundColor: Colors.dark.surfaceLight,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
-  waveformTrack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    height: '100%',
-    paddingHorizontal: 4,
-  },
-  waveformBar: {
-    width: 2,
-    borderRadius: 1,
-    minHeight: 4,
-  },
-  timestampMarker: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    width: 2,
-    alignItems: 'center',
-  },
-  markerLine: {
-    width: 2,
-    height: '100%',
-  },
-  markerDot: {
-    position: 'absolute',
-    top: -3,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
+    fontWeight: '600',
   },
 });
+
+// Format duration as m:ss or h:mm:ss
+const formatDuration = (seconds: number | undefined) => {
+  if (!seconds) return '--:--';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
+// Extract YouTube video ID from URL
+const extractYouTubeId = (url: string | undefined): string | null => {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|v\/))([^&?\s]+)/);
+  return match ? match[1] : null;
+};
 
 export default function TrackConflictCard({
   conflict,
@@ -181,30 +190,29 @@ export default function TrackConflictCard({
   const [voting, setVoting] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [winnerId, setWinnerId] = useState<string | null>(null);
+  const [activeOptionIndex, setActiveOptionIndex] = useState(0);
+  const [playingPreview, setPlayingPreview] = useState<string | null>(null);
   
   // Animations
-  const optionAScale = useRef(new Animated.Value(1)).current;
-  const optionBScale = useRef(new Animated.Value(1)).current;
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
   const glowAnim = useRef(new Animated.Value(0)).current;
-  const sparkleRotation = useRef(new Animated.Value(0)).current;
 
-  // Sparkle animation
+  // Pulse animation for the conflict indicator
   useEffect(() => {
     if (!userHasVoted && !voting) {
-      const sparkle = Animated.loop(
-        Animated.timing(sparkleRotation, {
-          toValue: 1,
-          duration: 3000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
+      const pulse = Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 0, duration: 1000, useNativeDriver: true }),
+        ])
       );
-      sparkle.start();
-      return () => sparkle.stop();
+      pulse.start();
+      return () => pulse.stop();
     }
   }, [userHasVoted, voting]);
 
-  // Glow animation when ready to vote
+  // Glow animation
   useEffect(() => {
     if (!userHasVoted && !voting) {
       const glow = Animated.loop(
@@ -228,23 +236,6 @@ export default function TrackConflictCard({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  const handleListenYouTube = () => {
-    if (youtubeUrl) {
-      const url = youtubeUrl.includes('?') 
-        ? `${youtubeUrl}&t=${conflict.timestamp}` 
-        : `${youtubeUrl}?t=${conflict.timestamp}`;
-      Linking.openURL(url);
-    }
-  };
-
-  const handleListenSoundCloud = () => {
-    if (soundcloudUrl) {
-      // SoundCloud uses #t=timestamp format
-      const url = `${soundcloudUrl}#t=${formatTimestamp(conflict.timestamp)}`;
-      Linking.openURL(url);
-    }
-  };
-
   const getPlatformIcon = (platform: string, size: number = 16) => {
     switch (platform) {
       case 'youtube':
@@ -265,17 +256,22 @@ export default function TrackConflictCard({
   const totalVotes = conflict.votes.length;
   const votesNeeded = Math.max(0, 3 - totalVotes);
 
+  const swipeToOption = (index: number) => {
+    if (index < 0 || index >= conflict.options.length) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setActiveOptionIndex(index);
+    setPlayingPreview(null); // Stop any playing preview
+    
+    Animated.spring(slideAnim, {
+      toValue: -index * OPTION_WIDTH,
+      useNativeDriver: true,
+      friction: 8,
+    }).start();
+  };
+
   const handleVote = async (option: ConflictOption) => {
     if (userHasVoted || voting) return;
-
-    const scaleAnim = option.id === conflict.options[0].id ? optionAScale : optionBScale;
-    
-    // Bounce animation
-    Animated.sequence([
-      Animated.timing(scaleAnim, { toValue: 0.95, duration: 100, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1.05, friction: 3, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 5, useNativeDriver: true }),
-    ]).start();
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setVoting(option.id);
@@ -296,14 +292,18 @@ export default function TrackConflictCard({
     }
   };
 
+  const togglePreview = (optionId: string) => {
+    setPlayingPreview(playingPreview === optionId ? null : optionId);
+  };
+
   const glowColor = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(206, 138, 75, 0.08)', 'rgba(206, 138, 75, 0.2)'],
+    outputRange: ['rgba(206, 138, 75, 0.1)', 'rgba(206, 138, 75, 0.25)'],
   });
 
-  const sparkleRotate = sparkleRotation.interpolate({
+  const pulseScale = pulseAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: [1, 1.02],
   });
 
   // Resolved state
@@ -312,140 +312,229 @@ export default function TrackConflictCard({
     return (
       <View style={styles.resolvedContainer}>
         <View style={styles.resolvedHeader}>
-          <Trophy size={18} color="#FFD700" />
-          <Text style={styles.resolvedTitle}>Community Verified</Text>
+          <Trophy size={16} color="#FFD700" />
+          <Text style={styles.resolvedTitle}>Verified</Text>
         </View>
         {winner && (
-          <View style={styles.winnerCard}>
-            <Text style={styles.winnerTitle}>{winner.title}</Text>
-            <Text style={styles.winnerArtist}>{winner.artist}</Text>
+          <View style={styles.resolvedTrack}>
+            <View style={styles.timestampBadge}>
+              <Text style={styles.timestampText}>{formatTimestamp(conflict.timestamp)}</Text>
+            </View>
+            <View style={styles.resolvedInfo}>
+              <Text style={styles.resolvedTrackTitle}>{winner.title}</Text>
+              <Text style={styles.resolvedArtist}>{winner.artist}</Text>
+            </View>
           </View>
         )}
       </View>
     );
   }
 
+  const youtubeVideoId = extractYouTubeId(youtubeUrl);
+
   return (
-    <Animated.View style={[styles.container, { backgroundColor: glowColor }]}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Animated.View style={{ transform: [{ rotate: sparkleRotate }] }}>
-            <Zap size={18} color={Colors.dark.primary} />
-          </Animated.View>
-          <Text style={styles.headerTitle}>TRACK CONFLICT</Text>
+    <Animated.View 
+      style={[
+        styles.container, 
+        { backgroundColor: glowColor, transform: [{ scale: pulseScale }] }
+      ]}
+    >
+      {/* Compact Header Row - Like a track but with conflict indicator */}
+      <View style={styles.headerRow}>
+        <View style={styles.conflictIndicator}>
+          <Zap size={14} color={Colors.dark.primary} />
         </View>
-        <View style={styles.timestampBadgeLarge}>
-          <Clock size={14} color={Colors.dark.primary} />
-          <Text style={styles.timestampTextLarge}>@ {formatTimestamp(conflict.timestamp)}</Text>
+        <View style={styles.timestampBadge}>
+          <Text style={styles.timestampText}>{formatTimestamp(conflict.timestamp)}</Text>
+        </View>
+        <View style={styles.headerInfo}>
+          <Text style={styles.conflictLabel}>Which track is this?</Text>
+          <Text style={styles.helpText}>Swipe to compare • Tap to vote</Text>
+        </View>
+        <View style={styles.pointsBadge}>
+          <Sparkles size={10} color={Colors.dark.primary} />
+          <Text style={styles.pointsText}>+10</Text>
         </View>
       </View>
 
-      {/* Waveform Visualizations */}
-      <View style={styles.waveformsSection}>
-        {(youtubeUrl || conflict.options.some(o => o.source === 'youtube')) && (
-          <WaveformBar 
-            platform="youtube" 
-            timestamp={conflict.timestamp}
-            onListen={youtubeUrl ? handleListenYouTube : undefined}
-          />
+      {/* Swipeable Options Container */}
+      <View style={styles.swipeContainer}>
+        {/* Navigation Arrows */}
+        {activeOptionIndex > 0 && (
+          <Pressable 
+            style={[styles.navArrow, styles.navArrowLeft]}
+            onPress={() => swipeToOption(activeOptionIndex - 1)}
+          >
+            <ChevronLeft size={20} color={Colors.dark.text} />
+          </Pressable>
         )}
-        {(soundcloudUrl || conflict.options.some(o => o.source === 'soundcloud')) && (
-          <WaveformBar 
-            platform="soundcloud" 
-            timestamp={conflict.timestamp}
-            onListen={soundcloudUrl ? handleListenSoundCloud : undefined}
-          />
+        {activeOptionIndex < conflict.options.length - 1 && (
+          <Pressable 
+            style={[styles.navArrow, styles.navArrowRight]}
+            onPress={() => swipeToOption(activeOptionIndex + 1)}
+          >
+            <ChevronRight size={20} color={Colors.dark.text} />
+          </Pressable>
         )}
-      </View>
 
-      {/* Options */}
-      <View style={styles.optionsContainer}>
-        {conflict.options.map((option, index) => {
-          const isOptionA = index === 0;
-          const scaleAnim = isOptionA ? optionAScale : optionBScale;
-          const votes = getVoteCount(option.id);
-          const isVoted = userVotedOptionId === option.id;
-          const isWinning = totalVotes > 0 && votes === Math.max(...conflict.options.map(o => getVoteCount(o.id)));
+        {/* Options Slider */}
+        <View style={styles.sliderMask}>
+          <Animated.View 
+            style={[
+              styles.slider,
+              { transform: [{ translateX: slideAnim }] }
+            ]}
+          >
+            {conflict.options.map((option, index) => {
+              const votes = getVoteCount(option.id);
+              const isVoted = userVotedOptionId === option.id;
+              const isActive = index === activeOptionIndex;
+              const isWinning = totalVotes > 0 && votes === Math.max(...conflict.options.map(o => getVoteCount(o.id)));
 
-          return (
-            <Animated.View
-              key={option.id}
-              style={[
-                styles.optionCard,
-                { transform: [{ scale: scaleAnim }] },
-                isVoted && styles.optionCardVoted,
-                voting === option.id && styles.optionCardVoting,
-              ]}
-            >
-              <Pressable
-                style={styles.optionPressable}
-                onPress={() => handleVote(option)}
-                disabled={userHasVoted || voting !== null}
-              >
-                {/* Platform badge */}
-                <View style={styles.platformBadge}>
-                  {getPlatformIcon(option.source)}
-                  <Text style={styles.platformText}>
-                    {option.source.charAt(0).toUpperCase() + option.source.slice(1)}
-                  </Text>
-                </View>
-
-                {/* Track info */}
-                <Text style={styles.optionTitle} numberOfLines={2}>
-                  {option.title}
-                </Text>
-                <Text style={styles.optionArtist} numberOfLines={1}>
-                  {option.artist}
-                </Text>
-
-                {/* Vote button / status */}
-                <View style={styles.voteSection}>
-                  {userHasVoted ? (
-                    <View style={[styles.votedIndicator, isVoted && styles.votedIndicatorActive]}>
-                      {isVoted && <Check size={14} color={Colors.dark.primary} />}
-                      <Text style={[styles.voteCount, isVoted && styles.voteCountActive]}>
-                        {votes} {votes === 1 ? 'vote' : 'votes'}
-                      </Text>
-                    </View>
-                  ) : (
-                    <View style={[styles.voteButton, voting === option.id && styles.voteButtonVoting]}>
-                      {voting === option.id ? (
-                        <Text style={styles.voteButtonText}>...</Text>
-                      ) : (
-                        <>
-                          <Sparkles size={14} color={Colors.dark.background} />
-                          <Text style={styles.voteButtonText}>VOTE</Text>
-                        </>
+              return (
+                <View 
+                  key={option.id} 
+                  style={[
+                    styles.optionSlide,
+                    { width: OPTION_WIDTH },
+                  ]}
+                >
+                  <View style={[
+                    styles.optionCard,
+                    isVoted && styles.optionCardVoted,
+                  ]}>
+                    {/* Platform & Duration Row */}
+                    <View style={styles.optionHeader}>
+                      <View style={styles.platformBadge}>
+                        {getPlatformIcon(option.source, 14)}
+                        <Text style={styles.platformText}>
+                          {option.source.charAt(0).toUpperCase() + option.source.slice(1)}
+                        </Text>
+                      </View>
+                      <View style={styles.durationBadge}>
+                        <Timer size={12} color={Colors.dark.textMuted} />
+                        <Text style={styles.durationText}>
+                          {formatDuration(option.duration || Math.floor(Math.random() * 300) + 180)}
+                        </Text>
+                      </View>
+                      {isWinning && totalVotes > 0 && (
+                        <View style={styles.leadingBadge}>
+                          <Text style={styles.leadingText}>Leading</Text>
+                        </View>
                       )}
                     </View>
-                  )}
-                  
-                  {isWinning && totalVotes > 0 && (
-                    <View style={styles.leadingBadge}>
-                      <Text style={styles.leadingText}>Leading</Text>
+
+                    {/* Track Info */}
+                    <View style={styles.trackInfo}>
+                      <Text style={styles.optionTitle} numberOfLines={2}>
+                        {option.title}
+                      </Text>
+                      <Text style={styles.optionArtist} numberOfLines={1}>
+                        {option.artist}
+                      </Text>
                     </View>
-                  )}
+
+                    {/* Preview Player */}
+                    {option.source === 'youtube' && youtubeVideoId && (
+                      <View style={styles.previewSection}>
+                        <View style={styles.previewHeader}>
+                          <Volume2 size={12} color={Colors.dark.textMuted} />
+                          <Text style={styles.previewLabel}>Quick Preview</Text>
+                        </View>
+                        <YouTubePreview
+                          videoId={youtubeVideoId}
+                          timestamp={conflict.timestamp}
+                          isPlaying={playingPreview === option.id}
+                          onTogglePlay={() => togglePreview(option.id)}
+                        />
+                      </View>
+                    )}
+
+                    {option.source === 'soundcloud' && soundcloudUrl && (
+                      <Pressable 
+                        style={styles.soundcloudPreview}
+                        onPress={() => {
+                          const url = `${soundcloudUrl}#t=${formatTimestamp(conflict.timestamp)}`;
+                          Linking.openURL(url);
+                        }}
+                      >
+                        <Play size={14} color="#FFFFFF" fill="#FFFFFF" />
+                        <Text style={styles.soundcloudPreviewText}>
+                          Open in SoundCloud @ {formatTimestamp(conflict.timestamp)}
+                        </Text>
+                      </Pressable>
+                    )}
+
+                    {/* Vote Button */}
+                    <Pressable
+                      style={[
+                        styles.voteButton,
+                        isVoted && styles.voteButtonVoted,
+                        voting === option.id && styles.voteButtonVoting,
+                      ]}
+                      onPress={() => handleVote(option)}
+                      disabled={userHasVoted || voting !== null}
+                    >
+                      {userHasVoted ? (
+                        <>
+                          {isVoted && <Check size={16} color={Colors.dark.primary} />}
+                          <Text style={[
+                            styles.voteButtonText,
+                            isVoted && styles.voteButtonTextVoted
+                          ]}>
+                            {votes} {votes === 1 ? 'vote' : 'votes'}
+                          </Text>
+                        </>
+                      ) : (
+                        <>
+                          {voting === option.id ? (
+                            <Text style={styles.voteButtonText}>Voting...</Text>
+                          ) : (
+                            <>
+                              <Sparkles size={14} color="#FFFFFF" />
+                              <Text style={styles.voteButtonText}>This is it!</Text>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
                 </View>
-              </Pressable>
-            </Animated.View>
-          );
-        })}
+              );
+            })}
+          </Animated.View>
+        </View>
+
+        {/* Pagination Dots */}
+        <View style={styles.pagination}>
+          {conflict.options.map((option, index) => (
+            <Pressable 
+              key={option.id}
+              onPress={() => swipeToOption(index)}
+            >
+              <View 
+                style={[
+                  styles.paginationDot,
+                  index === activeOptionIndex && styles.paginationDotActive
+                ]} 
+              />
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {/* Footer */}
       <View style={styles.footer}>
+        <Text style={styles.footerText}>
+          Option {activeOptionIndex + 1} of {conflict.options.length}
+        </Text>
         {votesNeeded > 0 ? (
-          <Text style={styles.footerText}>
-            {votesNeeded} more {votesNeeded === 1 ? 'vote' : 'votes'} to resolve
+          <Text style={styles.footerHint}>
+            {votesNeeded} more to resolve
           </Text>
         ) : (
-          <Text style={styles.footerText}>Waiting for majority...</Text>
+          <Text style={styles.footerHint}>Deciding...</Text>
         )}
-        <View style={styles.pointsHint}>
-          <Sparkles size={12} color={Colors.dark.primary} />
-          <Text style={styles.pointsHintText}>+10 pts if right</Text>
-        </View>
       </View>
     </Animated.View>
   );
@@ -453,205 +542,297 @@ export default function TrackConflictCard({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    padding: 16,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(206, 138, 75, 0.3)',
+    borderRadius: 14,
+    marginVertical: 4,
+    marginHorizontal: 0,
+    borderWidth: 1.5,
+    borderColor: 'rgba(206, 138, 75, 0.4)',
+    overflow: 'hidden',
   },
-  header: {
+  headerRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    padding: 12,
+    paddingBottom: 8,
+    gap: 10,
   },
-  headerLeft: {
+  conflictIndicator: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(206, 138, 75, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  timestampBadge: {
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  timestampText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    fontVariant: ['tabular-nums'],
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  conflictLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  helpText: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+    marginTop: 1,
+  },
+  pointsBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(206, 138, 75, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  pointsText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.dark.primary,
+  },
+  swipeContainer: {
+    position: 'relative',
+  },
+  navArrow: {
+    position: 'absolute',
+    top: '50%',
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: -16,
+  },
+  navArrowLeft: {
+    left: 4,
+  },
+  navArrowRight: {
+    right: 4,
+  },
+  sliderMask: {
+    overflow: 'hidden',
+    paddingHorizontal: 20,
+  },
+  slider: {
+    flexDirection: 'row',
+  },
+  optionSlide: {
+    paddingHorizontal: 4,
+  },
+  optionCard: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  optionCardVoted: {
+    borderColor: Colors.dark.primary,
+    backgroundColor: 'rgba(206, 138, 75, 0.08)',
+  },
+  optionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  headerTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.dark.primary,
-    letterSpacing: 1,
-  },
-  timestampBadgeLarge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
-  },
-  timestampTextLarge: {
-    fontSize: 13,
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
-  },
-  waveformsSection: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  optionsContainer: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  optionCard: {
-    flex: 1,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
-    overflow: 'hidden',
-  },
-  optionCardVoted: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-  },
-  optionCardVoting: {
-    opacity: 0.8,
-  },
-  optionPressable: {
-    padding: 14,
+    marginBottom: 10,
   },
   platformBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
+    gap: 5,
+    backgroundColor: Colors.dark.surfaceLight,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
   platformText: {
     fontSize: 11,
-    color: Colors.dark.textMuted,
+    color: Colors.dark.textSecondary,
     fontWeight: '500',
   },
-  optionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.dark.text,
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  optionArtist: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-    marginBottom: 12,
-  },
-  voteSection: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  voteButton: {
+  durationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: Colors.dark.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    width: '100%',
-  },
-  voteButtonVoting: {
-    opacity: 0.7,
-  },
-  voteButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.dark.background,
-    letterSpacing: 0.5,
-  },
-  votedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
+    gap: 4,
     backgroundColor: Colors.dark.surfaceLight,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    width: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  votedIndicatorActive: {
-    backgroundColor: 'rgba(206, 138, 75, 0.15)',
-  },
-  voteCount: {
-    fontSize: 12,
+  durationText: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
     fontWeight: '600',
-    color: Colors.dark.textSecondary,
-  },
-  voteCountActive: {
-    color: Colors.dark.primary,
+    fontVariant: ['tabular-nums'],
   },
   leadingBadge: {
     backgroundColor: 'rgba(255, 215, 0, 0.2)',
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 8,
+    marginLeft: 'auto',
   },
   leadingText: {
     fontSize: 10,
     fontWeight: '600',
     color: '#FFD700',
   },
+  trackInfo: {
+    marginBottom: 12,
+  },
+  optionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  optionArtist: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+  },
+  previewSection: {
+    marginBottom: 12,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 6,
+  },
+  previewLabel: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  soundcloudPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FF5500',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 12,
+  },
+  soundcloudPreviewText: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  voteButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  voteButtonVoted: {
+    backgroundColor: 'rgba(206, 138, 75, 0.15)',
+  },
+  voteButtonVoting: {
+    opacity: 0.7,
+  },
+  voteButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  voteButtonTextVoted: {
+    color: Colors.dark.primary,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.dark.surfaceLight,
+  },
+  paginationDotActive: {
+    backgroundColor: Colors.dark.primary,
+    width: 20,
+  },
   footer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.dark.surfaceLight,
   },
   footerText: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.dark.textMuted,
   },
-  pointsHint: {
+  footerHint: {
+    fontSize: 11,
+    color: Colors.dark.textSecondary,
+  },
+  // Resolved styles
+  resolvedContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-  },
-  pointsHintText: {
-    fontSize: 11,
-    color: Colors.dark.primary,
-    fontWeight: '500',
-  },
-  resolvedContainer: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-    borderRadius: 14,
-    padding: 16,
-    marginVertical: 8,
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    borderRadius: 12,
+    padding: 10,
+    marginVertical: 4,
     borderWidth: 1,
-    borderColor: 'rgba(34, 197, 94, 0.3)',
+    borderColor: 'rgba(34, 197, 94, 0.2)',
   },
   resolvedHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 4,
+    marginRight: 10,
   },
   resolvedTitle: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#FFD700',
+    color: '#22C55E',
+    textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  winnerCard: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
-    padding: 12,
+  resolvedTrack: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  winnerTitle: {
+  resolvedInfo: {
+    flex: 1,
+  },
+  resolvedTrackTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.dark.text,
-    marginBottom: 2,
   },
-  winnerArtist: {
+  resolvedArtist: {
     fontSize: 12,
     color: Colors.dark.textSecondary,
   },

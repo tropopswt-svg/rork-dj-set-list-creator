@@ -159,6 +159,7 @@ export interface ConflictOption {
   source: 'youtube' | 'soundcloud' | 'mixcloud';
   confidence: number;
   contributedBy?: string;
+  duration?: number; // Track duration in seconds
 }
 
 export interface ConflictVote {
