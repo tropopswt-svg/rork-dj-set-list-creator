@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,8 @@ import {
   TextInput,
   Pressable,
   Alert,
-  ActivityIndicator,
-  Modal,
-  Animated,
 } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
+import { Stack } from 'expo-router';
 import {
   Link2,
   Music,
@@ -22,28 +18,12 @@ import {
   Sparkles,
   CheckCircle,
   AlertCircle,
-  MessageSquare,
-  Disc3,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useFormValidation, validationRules } from '@/utils/hooks';
-import { trpc } from '@/lib/trpc';
-import { useSets } from '@/contexts/SetsContext';
-import { SetList, Track, SourceLink } from '@/types';
-
-type ImportStep = 'idle' | 'fetching_metadata' | 'fetching_comments' | 'extracting_tracks' | 'complete' | 'error';
-
-interface ImportProgress {
-  step: ImportStep;
-  message: string;
-  setName?: string;
-  artistName?: string;
-  thumbnail?: string;
-  commentsFound?: number;
-  tracksFound?: number;
-  error?: string;
-}
+import { saveSubmittedSet } from '@/utils/storage';
+import { SetList } from '@/types';
 
 interface PendingTrack {
   id: string;
@@ -52,19 +32,7 @@ interface PendingTrack {
   timestamp: string;
 }
 
-interface ScrapedSourceInfo {
-  url: string;
-  platform: 'youtube' | 'soundcloud' | 'mixcloud';
-  duration?: number;
-  uploaderName?: string;
-  isOfficial?: boolean;
-  isUserRip?: boolean;
-}
-
 export default function SubmitScreen() {
-  const router = useRouter();
-  const { addSet } = useSets();
-  
   const form = useFormValidation(
     {
       setUrl: '',
@@ -83,151 +51,14 @@ export default function SubmitScreen() {
   );
 
   const [tracks, setTracks] = useState<PendingTrack[]>([]);
-  const [scrapedThumbnail, setScrapedThumbnail] = useState<string | null>(null);
-  const [scrapedDuration, setScrapedDuration] = useState<string | null>(null);
-  const [scrapedDurationSeconds, setScrapedDurationSeconds] = useState<number | null>(null);
-  const [scrapedDate, setScrapedDate] = useState<string | null>(null);
-  const [scrapedSourceInfo, setScrapedSourceInfo] = useState<ScrapedSourceInfo | null>(null);
-  const [sourceLinks, setSourceLinks] = useState<{ youtube?: string; soundcloud?: string; mixcloud?: string }>({});
   const [newTrackTitle, setNewTrackTitle] = useState('');
   const [newTrackArtist, setNewTrackArtist] = useState('');
   const [newTrackTimestamp, setNewTrackTimestamp] = useState('');
   const [isAddingTrack, setIsAddingTrack] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  // Import progress state
-  const [importProgress, setImportProgress] = useState<ImportProgress>({
-    step: 'idle',
-    message: '',
-  });
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [pulseAnim] = useState(new Animated.Value(1));
 
-  // Pulse animation for the loading indicator
-  useEffect(() => {
-    if (showImportModal && importProgress.step !== 'complete' && importProgress.step !== 'error') {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [showImportModal, importProgress.step, pulseAnim]);
-
-  // tRPC mutation for scraping URLs
-  const scrapeMutation = trpc.scraper.scrapeUrl.useMutation({
-    onMutate: () => {
-      setShowImportModal(true);
-      setImportProgress({
-        step: 'fetching_metadata',
-        message: 'Fetching set info...',
-      });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    },
-    onSuccess: (result) => {
-      console.log('[Submit] Scrape result:', result);
-      
-      if (result.success && result.data) {
-        setImportProgress(prev => ({
-          ...prev,
-          step: 'fetching_comments',
-          message: 'Scanning comments for tracks...',
-          setName: result.data.title,
-          artistName: result.data.artist,
-          thumbnail: result.data.thumbnail,
-        }));
-        
-        // Auto-fill form with scraped data
-        if (result.data.title) {
-          form.setValue('setName', result.data.title);
-        }
-        if (result.data.artist) {
-          form.setValue('artistName', result.data.artist);
-        }
-        if (result.data.venue) {
-          form.setValue('venue', result.data.venue);
-        }
-        
-        // Store additional data
-        setScrapedThumbnail(result.data.thumbnail || null);
-        setScrapedDuration(result.data.duration || null);
-        setScrapedDurationSeconds(result.data.durationSeconds || null);
-        setScrapedDate(result.data.date || null);
-        setSourceLinks(result.data.links || {});
-        
-        // Store source info
-        const platform = result.data.platform as 'youtube' | 'soundcloud' | 'mixcloud';
-        const sourceUrl = result.data.links[platform] || form.values.setUrl;
-        setScrapedSourceInfo({
-          url: sourceUrl,
-          platform,
-          duration: result.data.durationSeconds,
-          uploaderName: result.data.uploaderName,
-          isOfficial: result.data.isOfficialUpload,
-          isUserRip: result.data.isUserRip,
-        });
-        
-        // Convert scraped tracks to PendingTrack format
-        const tracksFound = result.data.tracks?.length || 0;
-        if (result.data.tracks && tracksFound > 0) {
-          const pendingTracks: PendingTrack[] = result.data.tracks.map((t, i) => ({
-            id: `scraped-${Date.now()}-${i}`,
-            title: t.title,
-            artist: t.artist,
-            timestamp: t.timestamp,
-          }));
-          setTracks(pendingTracks);
-        }
-        
-        // Show complete state
-        setTimeout(() => {
-          setImportProgress(prev => ({
-            ...prev,
-            step: 'complete',
-            message: tracksFound > 0 ? `Found ${tracksFound} tracks!` : 'Set info loaded',
-            tracksFound,
-            commentsFound: result.data.comments?.length || 0,
-          }));
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        }, 500);
-        
-      } else {
-        setImportProgress({
-          step: 'error',
-          message: result.error || 'Could not scrape the URL',
-          error: result.error,
-        });
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      }
-    },
-    onError: (error) => {
-      console.error('[Submit] Scrape error:', error);
-      setImportProgress({
-        step: 'error',
-        message: error.message || 'Failed to connect to server',
-        error: error.message,
-      });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    },
-  });
-
-  const closeImportModal = () => {
-    setShowImportModal(false);
-    setImportProgress({ step: 'idle', message: '' });
-  };
-
-  const handleImportFromUrl = async () => {
+  const handleImportFromUrl = () => {
     if (!form.values.setUrl.trim()) {
       form.setFieldTouched('setUrl');
       form.validateField('setUrl');
@@ -244,8 +75,16 @@ export default function SubmitScreen() {
       return;
     }
 
+    setIsImporting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    scrapeMutation.mutate({ url: form.values.setUrl.trim() });
+    
+    setTimeout(() => {
+      form.setValue('setName', 'Example Set Name');
+      form.setValue('artistName', 'DJ Name');
+      setIsImporting(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Import Complete', 'AI is scanning comments for track IDs...');
+    }, 1500);
   };
 
   const handleAddTrack = () => {
@@ -272,142 +111,28 @@ export default function SubmitScreen() {
     setTracks(tracks.filter((t) => t.id !== id));
   };
 
-  // Helper to parse timestamp string to seconds
-  const parseTimestamp = (ts: string): number => {
-    const parts = ts.split(':').map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    return 0;
-  };
-
-  // Helper to parse duration string to seconds
-  const parseDuration = (durationStr: string): number => {
-    if (!durationStr) return 0;
-    const parts = durationStr.split(':').map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    const seconds = parseInt(durationStr);
-    return isNaN(seconds) ? 0 : seconds;
-  };
-
   const handleSubmit = () => {
-    if (!form.values.setName.trim() || !form.values.artistName.trim()) {
+    if (!setName.trim() || !artistName.trim()) {
       Alert.alert('Error', 'Please fill in set name and artist');
       return;
     }
 
-    setIsSubmitting(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Build source links array
-    const links: SourceLink[] = [];
-    
-    if (scrapedSourceInfo) {
-      links.push({
-        platform: scrapedSourceInfo.platform,
-        url: scrapedSourceInfo.url,
-      });
-    } else if (form.values.setUrl) {
-      const url = form.values.setUrl;
-      const platform = url.includes('youtube.com') || url.includes('youtu.be') ? 'youtube' 
-        : url.includes('soundcloud.com') ? 'soundcloud'
-        : url.includes('mixcloud.com') ? 'mixcloud' : null;
-      if (platform) {
-        links.push({ platform, url });
-      }
-    }
-
-    // Convert PendingTracks to Track objects
-    const convertedTracks: Track[] = tracks.map((t, i) => ({
-      id: `track-${Date.now()}-${i}`,
-      title: t.title,
-      artist: t.artist,
-      timestamp: parseTimestamp(t.timestamp),
-      duration: 0,
-      coverUrl: scrapedThumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
-      addedAt: new Date(),
-      source: 'manual' as const,
-      verified: false,
-    }));
-
-    // Create the SetList object
-    const newSet: SetList = {
-      id: `set-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      name: form.values.setName.trim(),
-      artist: form.values.artistName.trim(),
-      venue: form.values.venue.trim() || undefined,
-      date: scrapedDate ? new Date(scrapedDate) : new Date(),
-      tracks: convertedTracks,
-      coverUrl: scrapedThumbnail || `https://picsum.photos/seed/${form.values.setName.replace(/\s/g, '')}/400/400`,
-      sourceLinks: links.length > 0 ? links : undefined,
-      totalDuration: parseDuration(scrapedDuration || ''),
-      aiProcessed: tracks.length > 0,
-      commentsScraped: 0,
-      tracksIdentified: convertedTracks.length,
-      plays: 0,
-    };
-
-    // Add to context
-    const result = addSet(newSet);
-    setIsSubmitting(false);
-
-    if (result.success) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Set Added!',
-        `"${form.values.setName}" has been added to your library with ${convertedTracks.length} tracks.`,
-        [
-          {
-            text: 'View Set',
-            onPress: () => {
-              // Reset form
-              form.setValue('setUrl', '');
-              form.setValue('setName', '');
-              form.setValue('artistName', '');
-              form.setValue('venue', '');
-              setTracks([]);
-              setScrapedThumbnail(null);
-              setScrapedDuration(null);
-              setScrapedDurationSeconds(null);
-              setScrapedDate(null);
-              setScrapedSourceInfo(null);
-              setSourceLinks({});
-              // Navigate to the set
-              router.push(`/(tabs)/(discover)/${result.set.id}`);
-            },
+    Alert.alert(
+      'Set Submitted!',
+      `Your set "${setName}" has been submitted for review. You'll earn points for each verified track.`,
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            setSetUrl('');
+            setSetName('');
+            setArtistName('');
+            setVenue('');
+            setTracks([]);
           },
-          {
-            text: 'Add Another',
-            onPress: () => {
-              form.setValue('setUrl', '');
-              form.setValue('setName', '');
-              form.setValue('artistName', '');
-              form.setValue('venue', '');
-              setTracks([]);
-              setScrapedThumbnail(null);
-              setScrapedDuration(null);
-              setScrapedDurationSeconds(null);
-              setScrapedDate(null);
-              setScrapedSourceInfo(null);
-              setSourceLinks({});
-            },
-          },
-        ]
-      );
-    } else if (result.duplicate) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Alert.alert(
-        'Duplicate Set',
-        'This set already exists in your library.',
-        [
-          {
-            text: 'View Existing',
-            onPress: () => router.push(`/(tabs)/(discover)/${result.duplicate!.id}`),
-          },
-          { text: 'OK' },
-        ]
-      );
-    }
+        },
+      ]
+    );
   };
 
   return (
@@ -430,24 +155,20 @@ export default function SubmitScreen() {
                 style={styles.urlInput}
                 placeholder="YouTube, SoundCloud, or Mixcloud URL"
                 placeholderTextColor={Colors.dark.textMuted}
-                value={form.values.setUrl}
-                onChangeText={(text) => form.setValue('setUrl', text)}
+                value={setUrl}
+                onChangeText={setSetUrl}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
             </View>
             <Pressable
-              style={[styles.importButton, scrapeMutation.isPending && styles.importButtonDisabled]}
+              style={[styles.importButton, isImporting && styles.importButtonDisabled]}
               onPress={handleImportFromUrl}
-              disabled={scrapeMutation.isPending}
+              disabled={isImporting}
             >
-              {scrapeMutation.isPending ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Sparkles size={16} color="#fff" />
-              )}
+              <Sparkles size={16} color="#fff" />
               <Text style={styles.importButtonText}>
-                {scrapeMutation.isPending ? 'Scanning...' : 'Import'}
+                {isImporting ? 'Scanning...' : 'Import'}
               </Text>
             </Pressable>
           </View>
@@ -464,8 +185,8 @@ export default function SubmitScreen() {
               style={styles.input}
               placeholder="e.g., Boiler Room Berlin"
               placeholderTextColor={Colors.dark.textMuted}
-              value={form.values.setName}
-              onChangeText={(text) => form.setValue('setName', text)}
+              value={setName}
+              onChangeText={setSetName}
             />
           </View>
           <View style={styles.inputGroup}>
@@ -474,8 +195,8 @@ export default function SubmitScreen() {
               style={styles.input}
               placeholder="e.g., Dixon"
               placeholderTextColor={Colors.dark.textMuted}
-              value={form.values.artistName}
-              onChangeText={(text) => form.setValue('artistName', text)}
+              value={artistName}
+              onChangeText={setArtistName}
             />
           </View>
           <View style={styles.inputGroup}>
@@ -484,8 +205,8 @@ export default function SubmitScreen() {
               style={styles.input}
               placeholder="e.g., Kreuzberg Warehouse"
               placeholderTextColor={Colors.dark.textMuted}
-              value={form.values.venue}
-              onChangeText={(text) => form.setValue('venue', text)}
+              value={venue}
+              onChangeText={setVenue}
             />
           </View>
         </View>
@@ -622,99 +343,6 @@ export default function SubmitScreen() {
 
         <View style={styles.bottomPadding} />
       </ScrollView>
-
-      {/* Import Progress Modal */}
-      <Modal
-        visible={showImportModal}
-        transparent
-        animationType="fade"
-        onRequestClose={closeImportModal}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {/* Thumbnail Preview */}
-            {importProgress.thumbnail && (
-              <Image
-                source={{ uri: importProgress.thumbnail }}
-                style={styles.modalThumbnail}
-                contentFit="cover"
-              />
-            )}
-            
-            {/* Loading Indicator */}
-            {importProgress.step !== 'complete' && importProgress.step !== 'error' && (
-              <Animated.View style={[styles.loadingIconContainer, { transform: [{ scale: pulseAnim }] }]}>
-                <Disc3 size={48} color={Colors.dark.primary} />
-              </Animated.View>
-            )}
-            
-            {/* Success Icon */}
-            {importProgress.step === 'complete' && (
-              <View style={[styles.loadingIconContainer, styles.successIconContainer]}>
-                <CheckCircle size={48} color={Colors.dark.success} />
-              </View>
-            )}
-            
-            {/* Error Icon */}
-            {importProgress.step === 'error' && (
-              <View style={[styles.loadingIconContainer, styles.errorIconContainer]}>
-                <AlertCircle size={48} color={Colors.dark.error} />
-              </View>
-            )}
-            
-            {/* Step Title */}
-            <Text style={styles.modalTitle}>
-              {importProgress.step === 'fetching_metadata' && 'Identifying Set...'}
-              {importProgress.step === 'fetching_comments' && 'Scanning Comments...'}
-              {importProgress.step === 'extracting_tracks' && 'Extracting Tracks...'}
-              {importProgress.step === 'complete' && 'Import Complete!'}
-              {importProgress.step === 'error' && 'Import Failed'}
-            </Text>
-            
-            {/* Set Info Preview */}
-            {(importProgress.setName || importProgress.artistName) && (
-              <View style={styles.modalSetInfo}>
-                {importProgress.artistName && (
-                  <Text style={styles.modalArtist}>{importProgress.artistName}</Text>
-                )}
-                {importProgress.setName && (
-                  <Text style={styles.modalSetName} numberOfLines={2}>{importProgress.setName}</Text>
-                )}
-              </View>
-            )}
-            
-            {/* Progress Message */}
-            <Text style={styles.modalMessage}>{importProgress.message}</Text>
-            
-            {/* Stats (on complete) */}
-            {importProgress.step === 'complete' && (
-              <View style={styles.modalStats}>
-                <View style={styles.modalStatItem}>
-                  <MessageSquare size={16} color={Colors.dark.textMuted} />
-                  <Text style={styles.modalStatText}>
-                    {importProgress.commentsFound || 0} comments scanned
-                  </Text>
-                </View>
-                <View style={styles.modalStatItem}>
-                  <Music size={16} color={Colors.dark.primary} />
-                  <Text style={styles.modalStatText}>
-                    {importProgress.tracksFound || 0} tracks found
-                  </Text>
-                </View>
-              </View>
-            )}
-            
-            {/* Close Button */}
-            {(importProgress.step === 'complete' || importProgress.step === 'error') && (
-              <Pressable style={styles.modalButton} onPress={closeImportModal}>
-                <Text style={styles.modalButtonText}>
-                  {importProgress.step === 'complete' ? 'Continue' : 'Try Again'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -991,97 +619,5 @@ const styles = StyleSheet.create({
   },
   bottomPadding: {
     height: 40,
-  },
-  // Import Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  modalContent: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 340,
-    alignItems: 'center',
-  },
-  modalThumbnail: {
-    width: '100%',
-    height: 160,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  loadingIconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  successIconContainer: {
-    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-  },
-  errorIconContainer: {
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700' as const,
-    color: Colors.dark.text,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  modalSetInfo: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalArtist: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: Colors.dark.primary,
-    marginBottom: 4,
-  },
-  modalSetName: {
-    fontSize: 14,
-    color: Colors.dark.textSecondary,
-    textAlign: 'center',
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  modalStats: {
-    flexDirection: 'row',
-    gap: 20,
-    marginBottom: 20,
-  },
-  modalStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  modalStatText: {
-    fontSize: 13,
-    color: Colors.dark.textSecondary,
-  },
-  modalButton: {
-    backgroundColor: Colors.dark.primary,
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 12,
-    width: '100%',
-    alignItems: 'center',
-  },
-  modalButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600' as const,
   },
 });
