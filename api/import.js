@@ -979,8 +979,134 @@ function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, set
     }
   }
   
-  console.log(`Deduplication: ${tracks.length} -> ${deduped.length} tracks, ${conflicts.length} same-platform conflicts`);
-  return { tracks: deduped, conflicts };
+  console.log(`Segment deduplication: ${tracks.length} -> ${deduped.length} tracks, ${conflicts.length} same-platform conflicts`);
+  
+  // Second pass: Global deduplication to catch duplicates at different timestamps
+  const globalDeduped = removeGlobalDuplicates(deduped);
+  
+  console.log(`Global deduplication: ${deduped.length} -> ${globalDeduped.length} tracks`);
+  return { tracks: globalDeduped, conflicts };
+}
+
+/**
+ * Remove duplicate tracks that appear at different timestamps.
+ * This catches cases where the same track is listed at different times
+ * (e.g., user timing errors, different people reporting different timestamps).
+ */
+function removeGlobalDuplicates(tracks) {
+  if (tracks.length <= 1) return tracks;
+  
+  const result = [];
+  const seen = new Map(); // Map of normalized key -> best track
+  
+  for (const track of tracks) {
+    // Create a normalized key for this track
+    const normalizedTitle = normalizeForDedup(track.title);
+    const normalizedArtist = normalizeForDedup(track.artist);
+    
+    // Try multiple key variations to catch different formats
+    const keys = [
+      `${normalizedTitle}::${normalizedArtist}`,
+      `${normalizedTitle}`, // Just title (catches artist variations)
+    ];
+    
+    let isDuplicate = false;
+    let existingKey = null;
+    
+    for (const key of keys) {
+      if (seen.has(key)) {
+        isDuplicate = true;
+        existingKey = key;
+        break;
+      }
+      
+      // Also check for high similarity with existing keys
+      for (const [seenKey, seenTrack] of seen.entries()) {
+        const similarity = calculateTrackSimilarity(
+          track.title, track.artist,
+          seenTrack.title, seenTrack.artist
+        );
+        
+        if (similarity >= 0.85) {
+          isDuplicate = true;
+          existingKey = seenKey;
+          console.log(`[Global Dedup] "${track.title}" by "${track.artist}" matches "${seenTrack.title}" by "${seenTrack.artist}" (${(similarity * 100).toFixed(0)}% similar)`);
+          break;
+        }
+      }
+      
+      if (isDuplicate) break;
+    }
+    
+    if (isDuplicate && existingKey) {
+      // We found a duplicate - keep the one with more confidence or more complete info
+      const existing = seen.get(existingKey);
+      const newScore = scoreTrackQuality(track);
+      const existingScore = scoreTrackQuality(existing);
+      
+      if (newScore > existingScore) {
+        // Replace with better version
+        seen.set(existingKey, track);
+        console.log(`[Global Dedup] Replaced "${existing.title}" (score: ${existingScore.toFixed(2)}) with "${track.title}" (score: ${newScore.toFixed(2)})`);
+      } else {
+        console.log(`[Global Dedup] Kept existing "${existing.title}" (score: ${existingScore.toFixed(2)}), discarded duplicate at ${track.timestamp}s`);
+      }
+    } else {
+      // Not a duplicate - add it
+      const primaryKey = keys[0];
+      seen.set(primaryKey, track);
+    }
+  }
+  
+  // Convert map back to sorted array
+  const dedupedTracks = Array.from(seen.values());
+  dedupedTracks.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  
+  return dedupedTracks;
+}
+
+/**
+ * Normalize a string for deduplication comparison
+ */
+function normalizeForDedup(str) {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/\(.*?\)/g, '') // Remove parenthetical content
+    .replace(/\[.*?\]/g, '') // Remove bracketed content
+    .replace(/[^\w\s]/g, '') // Remove punctuation
+    .replace(/\s+/g, ' ')    // Normalize whitespace
+    .trim();
+}
+
+/**
+ * Score the quality/completeness of a track entry
+ */
+function scoreTrackQuality(track) {
+  let score = track.confidence || 0.5;
+  
+  // Prefer tracks with longer, more complete titles
+  const titleLen = (track.title || '').length;
+  if (titleLen >= 5 && titleLen <= 60) score += 0.1;
+  
+  // Prefer tracks with multiple artists (more complete credit)
+  const artistParts = (track.artist || '').split(/[&,]/).length;
+  if (artistParts >= 2) score += 0.1;
+  
+  // Prefer tracks from description (usually more accurate)
+  if (track.sourceType === 'description' || track.sourceAuthor === 'Uploader') {
+    score += 0.2;
+  }
+  
+  // Prefer tracks with more likes (social proof)
+  if (track.likes > 10) score += 0.1;
+  if (track.likes > 50) score += 0.1;
+  
+  // Prefer earlier timestamps in a tie (usually more accurate)
+  // Small penalty for very late timestamps
+  if (track.timestamp > 7200) score -= 0.05; // After 2 hours
+  
+  return score;
 }
 
 async function importFromYouTube(url, apiKey) {
