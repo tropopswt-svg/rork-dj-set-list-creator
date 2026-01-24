@@ -12,6 +12,7 @@ import {
 import { X, Link2, Youtube, Music2, Sparkles, CheckCircle, MessageSquare, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { trpc } from '@/lib/trpc';
 import { importSet, ImportProgress, ImportResult } from '@/services/importService';
 import { SetList } from '@/types';
 
