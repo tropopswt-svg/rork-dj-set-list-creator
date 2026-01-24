@@ -45,7 +45,8 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
-  const parseTimestamp = (ts: string): number => {
+  const parseTimestamp = (ts: string | undefined | null): number => {
+    if (!ts) return 0;
     const parts = ts.split(':').map(Number);
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
@@ -185,11 +186,24 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     },
   });
 
-  const parseDuration = (durationStr: string): number => {
-    // Parse duration string like "1:15:30" or "75:30" or "4530"
+  const parseDuration = (durationStr: string | undefined | null): number => {
+    if (!durationStr) return 0;
+    
+    // Handle ISO 8601 duration format (PT1H30M45S)
+    const isoMatch = durationStr.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (isoMatch) {
+      const hours = parseInt(isoMatch[1] || '0');
+      const mins = parseInt(isoMatch[2] || '0');
+      const secs = parseInt(isoMatch[3] || '0');
+      return hours * 3600 + mins * 60 + secs;
+    }
+    
+    // Handle colon-separated format "1:15:30" or "75:30"
     const parts = durationStr.split(':').map(Number);
     if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
     if (parts.length === 2) return parts[0] * 60 + parts[1];
+    
+    // Handle plain seconds
     const seconds = parseInt(durationStr);
     return isNaN(seconds) ? 0 : seconds;
   };
