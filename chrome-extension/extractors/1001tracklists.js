@@ -197,7 +197,7 @@
     const btn = document.createElement('button');
     btn.id = 'identified-btn';
     btn.innerHTML = '✨ IDentified';
-    btn.title = 'Scrape tracklist for IDentified';
+    btn.title = 'Scrape and send tracklist to IDentified';
     
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -206,19 +206,44 @@
       try {
         const data = extract();
         
-        chrome.runtime.sendMessage({ type: 'SCRAPE_RESULT', data });
+        if (data.tracks.length === 0) {
+          btn.innerHTML = '⚠️ No tracks found';
+          setTimeout(() => {
+            btn.innerHTML = '✨ IDentified';
+            btn.disabled = false;
+          }, 2000);
+          return;
+        }
         
-        btn.innerHTML = `✅ ${data.tracks.length} tracks`;
+        btn.innerHTML = `📤 Sending ${data.tracks.length}...`;
+        
+        // Auto-send to API
+        const response = await chrome.runtime.sendMessage({
+          type: 'SEND_TO_API',
+          data: data
+        });
+        
+        if (response.success) {
+          const r = response.result;
+          btn.innerHTML = `✅ +${r.artistsCreated || 0} artists, +${r.tracksCreated || 0} tracks`;
+          console.log('[1001TL] Sent to API:', response.result);
+        } else {
+          btn.innerHTML = '❌ ' + (response.error || 'Send failed');
+          console.error('[1001TL] API error:', response.error);
+        }
+        
         setTimeout(() => {
           btn.innerHTML = '✨ IDentified';
           btn.disabled = false;
-        }, 2000);
+        }, 4000);
+        
       } catch (e) {
+        console.error('[1001TL] Button error:', e);
         btn.innerHTML = '❌ Error';
         setTimeout(() => {
           btn.innerHTML = '✨ IDentified';
           btn.disabled = false;
-        }, 2000);
+        }, 3000);
       }
     });
     

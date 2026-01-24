@@ -356,7 +356,7 @@
     const btn = document.createElement('button');
     btn.id = 'identified-btn';
     btn.innerHTML = '✨ IDentified';
-    btn.title = 'Scrape tracks for IDentified';
+    btn.title = 'Scrape and send tracks to IDentified';
     
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -365,20 +365,44 @@
       try {
         const data = extract();
         
-        // Store in extension storage
-        chrome.runtime.sendMessage({ type: 'SCRAPE_RESULT', data });
+        if (data.tracks.length === 0 && data.artists.length === 0) {
+          btn.innerHTML = '⚠️ Nothing found';
+          setTimeout(() => {
+            btn.innerHTML = '✨ IDentified';
+            btn.disabled = false;
+          }, 2000);
+          return;
+        }
         
-        btn.innerHTML = `✅ ${data.tracks.length} tracks`;
+        btn.innerHTML = `📤 Sending ${data.tracks.length}...`;
+        
+        // Auto-send to API
+        const response = await chrome.runtime.sendMessage({
+          type: 'SEND_TO_API',
+          data: data
+        });
+        
+        if (response.success) {
+          const r = response.result;
+          btn.innerHTML = `✅ +${r.artistsCreated || 0} artists, +${r.tracksCreated || 0} tracks`;
+          console.log('[SoundCloud] Sent to API:', response.result);
+        } else {
+          btn.innerHTML = '❌ ' + (response.error || 'Send failed');
+          console.error('[SoundCloud] API error:', response.error);
+        }
+        
         setTimeout(() => {
           btn.innerHTML = '✨ IDentified';
           btn.disabled = false;
-        }, 2000);
+        }, 4000);
+        
       } catch (e) {
+        console.error('[SoundCloud] Button error:', e);
         btn.innerHTML = '❌ Error';
         setTimeout(() => {
           btn.innerHTML = '✨ IDentified';
           btn.disabled = false;
-        }, 2000);
+        }, 3000);
       }
     });
     
