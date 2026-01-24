@@ -187,11 +187,73 @@ function parseTrackInfo(text) {
   cleaned = cleaned.replace(/[\s|:\-–—.]+$/, '').trim();
   cleaned = cleaned.replace(/^\d{1,2}[.)]\s*/, '').trim();
 
-  const noiseTerms = [/^\s*tracklist\s*:?\s*$/i, /^intro$/i, /^outro$/i, /^id\s*[-–—]\s*id\s*$/i, /^unknown$/i, /^tba$/i, /^\s*$/, /^id\?*$/i, /^track\s*id\?*$/i, /^what.*tune/i, /^tune\?*$/i, /^crazy/i, /^heate+r+/i, /^fire$/i, /^banger$/i, /^unreal$/i, /^insane$/i, /^anyone know/i, /^need.*id/i, /^i need/i, /^please\s*(id|identify)/i, /^is\s+unreal/i, /^sounds like/i, /^neee+d/i];
-  for (const noise of noiseTerms) {
+  // STRICT FILTERING - Reject obvious garbage
+  
+  // Reject URLs
+  if (/https?:\/\/|www\.|\.com|\.org|soundcloud\.com|youtube\.com|youtu\.be|spotify\.com|music\.apple/i.test(cleaned)) {
+    return null;
+  }
+  
+  // Reject URL fragments (video IDs, query params)
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(cleaned) || /[?&=]/.test(cleaned) || /watch\?v=/i.test(cleaned)) {
+    return null;
+  }
+  
+  // Reject user reactions and comments (not track names)
+  const reactionPatterns = [
+    /^love\s*(it|this|that)?!*$/i,
+    /^fuck(ing)?\s*(love|loved|amazing)/i,
+    /^(this|that)\s*(is|was)\s*(so|the|a|an)?\s*(good|great|amazing|fire|sick|insane)/i,
+    /^i\s+remember/i,
+    /^i\s+(love|loved|like|liked|need)/i,
+    /^(so|very|really)\s+(good|fire|sick)/i,
+    /^not\s+sure\s+what/i,
+    /^anyone\s+(know|got|have)/i,
+    /^what\s+(is|was)\s+(this|that)/i,
+    /^can\s+(someone|anyone)/i,
+    /^(absolute|total)\s+(banger|fire|heater)/i,
+    /^(banger|fire|heater|sick|insane|crazy|unreal|amazing|incredible)!*$/i,
+    /^ooph/i,
+    /^grimy/i,
+    /^dark$/i,
+    /^(the|this|that)\s+\w+\s+is\s+(the|a)/i,  // "the X is the Y" pattern
+    /^listen\s+to/i,
+    /starting\s+at\s+\w+\s+\d+/i,  // "starting at edco 2024"
+  ];
+  
+  for (const pattern of reactionPatterns) {
+    if (pattern.test(cleaned)) return null;
+  }
+  
+  // Reject ID/unknown tracks
+  const idPatterns = [
+    /^\s*tracklist\s*:?\s*$/i, 
+    /^intro$/i, 
+    /^outro$/i, 
+    /^id\s*[-–—]\s*id\s*$/i, 
+    /^unknown$/i, 
+    /^tba$/i, 
+    /^\s*$/, 
+    /^id\?*$/i, 
+    /^track\s*id\?*$/i,
+    /\(id\)$/i,  // Ends with (ID)
+    /\bid\b.*\bid\b/i,  // Contains "ID" multiple times
+    /^id\s*$/i,
+  ];
+  
+  for (const noise of idPatterns) {
     if (noise.test(cleaned)) return null;
   }
-
+  
+  // Reject text with unbalanced parentheses (broken parsing)
+  const openParens = (cleaned.match(/\(/g) || []).length;
+  const closeParens = (cleaned.match(/\)/g) || []).length;
+  if (Math.abs(openParens - closeParens) > 1) return null;
+  
+  // Reject if it starts or ends with a broken parenthesis pattern
+  if (/^\)/.test(cleaned) || /\($/.test(cleaned)) return null;
+  
+  // Reject pure emoji or too short
   const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu;
   const emojis = cleaned.match(emojiRegex) || [];
   const nonEmojiLength = cleaned.replace(emojiRegex, '').trim().length;
@@ -208,6 +270,9 @@ function parseTrackInfo(text) {
   if (dashMatch) {
     let part1 = dashMatch[1].trim();
     let part2 = dashMatch[2].trim();
+    
+    // Validate both parts look like real track/artist info
+    if (!isValidTrackPart(part1) || !isValidTrackPart(part2)) return null;
     
     // Check for remix/edit info - if it's in part1, that's likely the title (unusual format)
     const part1HasRemix = /remix|edit|vip|dub|bootleg/i.test(part1);
@@ -226,9 +291,49 @@ function parseTrackInfo(text) {
 
   // "Title by Artist" format
   const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
-  if (byMatch) return { title: byMatch[1].trim(), artist: byMatch[2].trim() };
+  if (byMatch) {
+    const title = byMatch[1].trim();
+    const artist = byMatch[2].trim();
+    if (!isValidTrackPart(title) || !isValidTrackPart(artist)) return null;
+    return { title, artist };
+  }
 
   return null;
+}
+
+/**
+ * Validate that a string looks like a valid track title or artist name
+ */
+function isValidTrackPart(str) {
+  if (!str || str.length < 2) return false;
+  if (str.length > 100) return false;
+  
+  // Reject if it's mostly numbers or special characters
+  const alphaCount = (str.match(/[a-zA-Z]/g) || []).length;
+  if (alphaCount < 2) return false;
+  
+  // Reject common non-track patterns
+  const invalidPatterns = [
+    /^https?:/i,
+    /^www\./i,
+    /^listen\s+to/i,
+    /^check\s+(out|it)/i,
+    /^i\s+(remember|love|need|think)/i,
+    /^(this|that|it)\s+(is|was)/i,
+    /^not\s+sure/i,
+    /^anyone/i,
+    /^what\s+(is|was)/i,
+    /^(so|very|really|fucking)\s+(good|fire|sick)/i,
+    /^(amazing|incredible|insane|crazy|unreal)$/i,
+    /starting\s+at/i,
+    /\d{4}$/,  // Ends with a year (likely a comment about an event)
+  ];
+  
+  for (const pattern of invalidPatterns) {
+    if (pattern.test(str)) return false;
+  }
+  
+  return true;
 }
 
 function parseComments(comments) {
@@ -540,13 +645,34 @@ function cleanSoundCloudComment(text) {
 function parseSoundCloudTrackInfo(text) {
   let cleaned = cleanSoundCloudComment(text);
   
-  // Skip noise
+  // STRICT FILTERING - Reject obvious garbage
+  
+  // Reject URLs
+  if (/https?:\/\/|www\.|\.com|\.org|soundcloud\.com|youtube\.com|youtu\.be|spotify\.com|music\.apple|on\.soundcloud/i.test(cleaned)) {
+    return null;
+  }
+  
+  // Reject URL fragments (video IDs, query params)
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(cleaned) || /[?&=]/.test(cleaned)) {
+    return null;
+  }
+  
+  // Skip noise - expanded patterns
   const noisePatterns = [
     /^(id\??|track\s*id\??|what|anyone|need|fire|banger|heater|crazy|insane|unreal|tune\??|sick|wow|omg|yes+|finally|sound dude)$/i,
     /^(i need|anyone know|what song|what track|please id|need this|i'd|anyone got)/i,
-    /^(best|love|great|amazing|perfect|incredible)\s*(set|track|tune|song|mix|boiler)?$/i,
+    /^(best|love|great|amazing|perfect|incredible|fucking|grimy|dark|ooph)\s*(set|track|tune|song|mix|boiler)?!*$/i,
     /^\d+:\d+\s*$/,  // Just a timestamp
     /^@/,  // Just an @mention (wasn't cleaned)
+    /^love\s*(it|this|that)?!*$/i,
+    /^fuck(ing)?\s*(love|loved|amazing)/i,
+    /^(this|that)\s+(is|was)\s+(the|so|a|an)/i,
+    /^i\s+remember/i,
+    /^not\s+sure\s+what/i,
+    /^listen\s+to/i,
+    /starting\s+at\s+\w+\s+\d+/i,  // "starting at edco 2024"
+    /^check\s+(it|this|out)/i,
+    /\(id\)$/i,  // Ends with (ID) - unknown track
   ];
   
   for (const pattern of noisePatterns) {
@@ -555,6 +681,14 @@ function parseSoundCloudTrackInfo(text) {
   
   // Too short or too long
   if (cleaned.length < 5 || cleaned.length > 200) return null;
+  
+  // Reject text with unbalanced parentheses (broken parsing)
+  const openParens = (cleaned.match(/\(/g) || []).length;
+  const closeParens = (cleaned.match(/\)/g) || []).length;
+  if (Math.abs(openParens - closeParens) > 1) return null;
+  
+  // Reject if it starts or ends with a broken parenthesis pattern
+  if (/^\)/.test(cleaned) || /\($/.test(cleaned)) return null;
   
   // Skip if ends with ? and doesn't look like track info
   if (/\?\s*$/.test(cleaned) && !/[-–—]/.test(cleaned)) return null;
@@ -574,6 +708,9 @@ function parseSoundCloudTrackInfo(text) {
     // Skip if either part is too short or just noise
     if (part1.length < 2 || part2.length < 2) return null;
     if (/^(id|unknown|tba|\?+)$/i.test(part1) || /^(id|unknown|tba|\?+)$/i.test(part2)) return null;
+    
+    // Validate both parts look like real track/artist info
+    if (!isValidTrackPart(part1) || !isValidTrackPart(part2)) return null;
     
     // Determine which is artist vs title
     // Key insight: In DJ set comments, it's usually "Artist - Track" format
@@ -651,10 +788,13 @@ function parseSoundCloudTrackInfo(text) {
   // Try "by" format: "Track Name by Artist"
   const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
   if (byMatch) {
-    return { 
-      title: toTitleCase(byMatch[1].trim()), 
-      artist: toTitleCase(byMatch[2].trim()) 
-    };
+    const title = toTitleCase(byMatch[1].trim());
+    const artist = toTitleCase(byMatch[2].trim());
+    // Validate both parts
+    if (isValidTrackPart(title) && isValidTrackPart(artist)) {
+      return { title, artist };
+    }
+    return null;
   }
   
   // Try slash format: "artist / track" or "artist track / version"
@@ -667,10 +807,11 @@ function parseSoundCloudTrackInfo(text) {
       // Try to split first part: "locklead i'm turning" -> Artist: Locklead, Title: I'm Turning
       const firstWords = part1.split(/\s+/);
       if (firstWords.length >= 2) {
-        return {
-          artist: toTitleCase(firstWords[0]),
-          title: toTitleCase(firstWords.slice(1).join(' ') + ' / ' + part2)
-        };
+        const artist = toTitleCase(firstWords[0]);
+        const title = toTitleCase(firstWords.slice(1).join(' ') + ' / ' + part2);
+        if (isValidTrackPart(artist) && isValidTrackPart(title)) {
+          return { artist, title };
+        }
       }
     }
   }
