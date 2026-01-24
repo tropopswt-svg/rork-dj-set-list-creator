@@ -883,12 +883,14 @@ function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, set
     }
     
     if (trackGroups.length === 1) {
-      // All tracks match - pick the best one (highest confidence/likes)
-      const best = trackGroups[0].reduce((best, t) => {
-        const tScore = (t.confidence || 0.7) + (t.likes || 0) * 0.001;
-        const bestScore = (best.confidence || 0.7) + (best.likes || 0) * 0.001;
-        return tScore > bestScore ? t : best;
-      });
+      // All tracks match - use intelligent selection to pick the best version
+      const best = selectBestTrackVersion(trackGroups[0]);
+      if (trackGroups[0].length > 1) {
+        console.log(`[Smart Merge] Merged ${trackGroups[0].length} similar entries at ${segment[0].timestamp}s into: "${best.title}" by "${best.artist}"`);
+        trackGroups[0].forEach((t, i) => {
+          if (i > 0) console.log(`  - Also matched: "${t.title}" by "${t.artist}"`);
+        });
+      }
       deduped.push(best);
     } else {
       // Multiple different tracks at same timestamp = conflict
@@ -914,11 +916,9 @@ function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, set
       
       if (topGroup.count >= 2 && secondGroup.count === 1 && confidenceGap > 0.15) {
         // Clear winner - multiple people agreed, only one person disagreed
-        const best = topGroup.group.reduce((best, t) => 
-          (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
-        );
+        const best = selectBestTrackVersion(topGroup.group);
         deduped.push(best);
-        console.log(`Auto-resolved same-platform conflict at ${segment[0].timestamp}s: "${best.title}" (${topGroup.count} sources vs ${secondGroup.count})`);
+        console.log(`[Auto-Resolve] Conflict at ${segment[0].timestamp}s resolved: "${best.title}" (${topGroup.count} sources vs ${secondGroup.count})`);
       } else {
         // Genuine conflict - create for user voting
         const timestamp = segment[0].timestamp || 0;
@@ -948,12 +948,15 @@ function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, set
         });
         
         // Still add the top-ranked option as the default track (can be overridden by voting)
-        const defaultTrack = rankedGroups[0].group[0];
+        const defaultTrack = selectBestTrackVersion(rankedGroups[0].group);
         defaultTrack.hasConflict = true;
         defaultTrack.conflictId = conflicts[conflicts.length - 1].id;
         deduped.push(defaultTrack);
         
-        console.log(`Same-platform conflict at ${timestamp}s: ${rankedGroups.length} different track suggestions`);
+        console.log(`[Conflict Created] At ${timestamp}s: ${rankedGroups.length} distinct track suggestions:`);
+        rankedGroups.forEach((rg, i) => {
+          console.log(`  ${i + 1}. "${rg.group[0].title}" by "${rg.group[0].artist}" (${rg.count} source${rg.count > 1 ? 's' : ''})`);
+        });
       }
     }
   }
@@ -1028,13 +1031,128 @@ async function importFromYouTube(url, apiKey) {
 }
 
 // ============ TRACK MERGING UTILITIES ============
-// Smart deduplication and track segmentation
+// Smart deduplication and track segmentation with intelligent matching
 
-const SEGMENT_WINDOW = 30; // seconds - tracks within this window are considered same segment
-const MIN_SIMILARITY = 0.7; // Threshold for tracks to be considered the same
-const HIGH_SIMILARITY = 0.85; // Threshold for auto-merge without conflict
+const SEGMENT_WINDOW = 45; // seconds - tracks within this window are considered same segment (increased for user timing errors)
+const MIN_SIMILARITY = 0.55; // Threshold for tracks to be considered potentially same (lowered for fuzzy matching)
+const HIGH_SIMILARITY = 0.80; // Threshold for auto-merge without conflict
 const CONFIDENCE_BOOST = 0.2;
 const MIN_TRACK_GAP = 60; // Minimum expected gap between tracks (1 min typical for DJ sets)
+
+// Common user commentary patterns to strip from track info
+const USER_COMMENTARY_PATTERNS = [
+  /\(red card( tho)?\)/gi,
+  /\(banger\)/gi,
+  /\(fire\)/gi,
+  /\(sick\)/gi,
+  /\(amazing\)/gi,
+  /\(classic\)/gi,
+  /\(tune\)/gi,
+  /\(big one\)/gi,
+  /\(huge\)/gi,
+  /\(absolute\s+\w+\)/gi,
+  /\(so good\)/gi,
+  /\(love this\)/gi,
+  /\(id\s*\??\)/gi, // (ID) or (ID?)
+  /\(unreleased\s*\??\)/gi,
+  /\(forthcoming\)/gi,
+  /\(dub\s*\??\)/gi,
+  /\([^)]*edit[^)]*\)/gi, // (someone's edit)
+  /\s*tho\s*$/gi, // trailing "tho"
+];
+
+// Label patterns in track titles to normalize
+const LABEL_PATTERNS = [
+  /\[([A-Z0-9\s&]+)\]$/i, // [LABEL NAME] at end
+  /\s+on\s+[A-Z][a-zA-Z0-9\s&]+$/i, // "on Label Name" at end
+];
+
+// Common artist abbreviations/variations
+const ARTIST_ALIASES = {
+  'cb': ['chris stussy', 'across boundaries'],
+  'tmp': ['t.m.p', 'tmp', 't m p'],
+  'djb': ['dj boring'],
+  'kh': ['k.h', 'kh'],
+};
+
+/**
+ * Clean a track title by removing user commentary and normalizing
+ */
+function cleanTrackTitle(title) {
+  if (!title) return '';
+  
+  let cleaned = title;
+  
+  // Remove user commentary patterns
+  for (const pattern of USER_COMMENTARY_PATTERNS) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  // Extract and store label info, but remove from matching
+  let label = null;
+  for (const pattern of LABEL_PATTERNS) {
+    const match = cleaned.match(pattern);
+    if (match) {
+      label = match[1] || match[0];
+      cleaned = cleaned.replace(pattern, '');
+    }
+  }
+  
+  // Normalize whitespace and trim
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  
+  return { cleaned, label, original: title };
+}
+
+/**
+ * Clean and normalize artist names
+ */
+function cleanArtistName(artist) {
+  if (!artist) return '';
+  
+  let cleaned = artist;
+  
+  // Remove featuring/and variations to get primary artists
+  const primaryArtists = cleaned
+    .split(/\s*[&,]\s*|\s+(?:feat\.?|ft\.?|featuring|and|x|vs\.?)\s+/i)
+    .map(a => a.trim())
+    .filter(a => a.length > 0);
+  
+  // Normalize each artist
+  const normalized = primaryArtists.map(a => 
+    a.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+  );
+  
+  return { 
+    primary: normalized[0] || '', 
+    all: normalized, 
+    original: artist,
+    normalized: normalized.join(' ')
+  };
+}
+
+/**
+ * Extract core identifying words from a title
+ */
+function extractCoreWords(title) {
+  const cleaned = title
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Filter out common non-identifying words
+  const stopWords = new Set(['the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'mix', 'remix', 'edit', 'version', 'original', 'extended', 'club', 'dub', 'instrumental']);
+  
+  const words = cleaned.split(' ').filter(w => 
+    w.length > 1 && !stopWords.has(w)
+  );
+  
+  return words;
+}
 
 function normalizeString(str) {
   return str
@@ -1044,34 +1162,242 @@ function normalizeString(str) {
     .trim();
 }
 
+/**
+ * Advanced string similarity using multiple methods
+ */
 function stringSimilarity(s1, s2) {
   if (s1 === s2) return 1;
   if (!s1 || !s2) return 0;
   
-  // Check for containment
-  if (s1.includes(s2) || s2.includes(s1)) {
-    const shorter = Math.min(s1.length, s2.length);
-    const longer = Math.max(s1.length, s2.length);
-    return shorter / longer;
+  const n1 = normalizeString(s1);
+  const n2 = normalizeString(s2);
+  
+  if (n1 === n2) return 1;
+  
+  // Check for containment (one is substring of other)
+  if (n1.includes(n2) || n2.includes(n1)) {
+    const shorter = Math.min(n1.length, n2.length);
+    const longer = Math.max(n1.length, n2.length);
+    return 0.7 + (shorter / longer) * 0.3; // High score for containment
   }
   
-  // Word overlap similarity
-  const words1 = new Set(s1.split(' '));
-  const words2 = new Set(s2.split(' '));
+  // Word-based similarity
+  const words1 = extractCoreWords(s1);
+  const words2 = extractCoreWords(s2);
   
-  let overlap = 0;
-  for (const word of words1) {
-    if (words2.has(word)) overlap++;
+  if (words1.length === 0 || words2.length === 0) {
+    return n1.includes(n2) || n2.includes(n1) ? 0.6 : 0;
   }
   
-  const total = words1.size + words2.size;
-  return total > 0 ? (overlap * 2) / total : 0;
+  // Check for key word matches
+  let matches = 0;
+  let partialMatches = 0;
+  
+  for (const w1 of words1) {
+    for (const w2 of words2) {
+      if (w1 === w2) {
+        matches++;
+        break;
+      } else if (w1.includes(w2) || w2.includes(w1)) {
+        partialMatches++;
+        break;
+      } else if (levenshteinSimilarity(w1, w2) > 0.8) {
+        // Fuzzy match for typos
+        partialMatches += 0.8;
+        break;
+      }
+    }
+  }
+  
+  const totalWords = Math.max(words1.length, words2.length);
+  const matchScore = (matches + partialMatches * 0.5) / totalWords;
+  
+  return Math.min(1, matchScore);
 }
 
+/**
+ * Levenshtein distance-based similarity
+ */
+function levenshteinSimilarity(s1, s2) {
+  if (s1 === s2) return 1;
+  if (s1.length === 0 || s2.length === 0) return 0;
+  
+  const matrix = [];
+  
+  for (let i = 0; i <= s1.length; i++) {
+    matrix[i] = [i];
+  }
+  
+  for (let j = 0; j <= s2.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= s1.length; i++) {
+    for (let j = 1; j <= s2.length; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+  
+  const distance = matrix[s1.length][s2.length];
+  const maxLen = Math.max(s1.length, s2.length);
+  return 1 - distance / maxLen;
+}
+
+/**
+ * Intelligent track similarity calculation
+ * Handles variations like:
+ * - "Across Boundaries & Chris Stussy - T.M.P" vs "Across Boundaries - T.m.p"
+ * - User commentary in parentheses
+ * - Different artist credit formats
+ */
 function calculateTrackSimilarity(title1, artist1, title2, artist2) {
-  const titleSim = stringSimilarity(normalizeString(title1), normalizeString(title2));
-  const artistSim = stringSimilarity(normalizeString(artist1), normalizeString(artist2));
-  return titleSim * 0.6 + artistSim * 0.4;
+  // Clean titles
+  const t1 = cleanTrackTitle(title1);
+  const t2 = cleanTrackTitle(title2);
+  
+  // Clean artists
+  const a1 = cleanArtistName(artist1);
+  const a2 = cleanArtistName(artist2);
+  
+  // Title similarity on cleaned versions
+  const titleSim = stringSimilarity(t1.cleaned, t2.cleaned);
+  
+  // Artist similarity - check if any artists match
+  let artistSim = 0;
+  
+  // Check primary artist match
+  if (a1.primary && a2.primary) {
+    artistSim = stringSimilarity(a1.primary, a2.primary);
+  }
+  
+  // Check if any artist in one appears in the other
+  for (const artist of a1.all) {
+    for (const otherArtist of a2.all) {
+      const sim = stringSimilarity(artist, otherArtist);
+      if (sim > artistSim) {
+        artistSim = sim;
+      }
+    }
+  }
+  
+  // If one artist string contains the other as a substring
+  if (a1.normalized.includes(a2.primary) || a2.normalized.includes(a1.primary)) {
+    artistSim = Math.max(artistSim, 0.8);
+  }
+  
+  // Weight: title is more important than artist for matching
+  // because users often abbreviate artist names
+  const baseScore = titleSim * 0.7 + artistSim * 0.3;
+  
+  // Boost if labels match
+  if (t1.label && t2.label && stringSimilarity(t1.label, t2.label) > 0.8) {
+    return Math.min(1, baseScore + 0.1);
+  }
+  
+  // Special case: if title similarity is very high (>0.8), it's likely same track
+  // even if artist format differs significantly
+  if (titleSim > 0.8) {
+    return Math.max(baseScore, 0.75);
+  }
+  
+  return baseScore;
+}
+
+/**
+ * Determine if two tracks are likely the same based on intelligent matching
+ */
+function areTracksSimilar(track1, track2, timestampThreshold = SEGMENT_WINDOW) {
+  // Check timestamp proximity
+  const timeDiff = Math.abs((track1.timestamp || 0) - (track2.timestamp || 0));
+  if (timeDiff > timestampThreshold) {
+    return { similar: false, confidence: 0, reason: 'timestamp_too_far' };
+  }
+  
+  // Calculate similarity
+  const similarity = calculateTrackSimilarity(
+    track1.title, track1.artist,
+    track2.title, track2.artist
+  );
+  
+  if (similarity >= HIGH_SIMILARITY) {
+    return { 
+      similar: true, 
+      confidence: similarity, 
+      reason: 'high_similarity',
+      autoMerge: true 
+    };
+  }
+  
+  if (similarity >= MIN_SIMILARITY) {
+    return { 
+      similar: true, 
+      confidence: similarity, 
+      reason: 'potential_match',
+      autoMerge: false 
+    };
+  }
+  
+  return { similar: false, confidence: similarity, reason: 'low_similarity' };
+}
+
+/**
+ * Select the best version of a track from multiple similar entries
+ */
+function selectBestTrackVersion(tracks) {
+  if (tracks.length === 0) return null;
+  if (tracks.length === 1) return tracks[0];
+  
+  // Score each track version
+  const scored = tracks.map(track => {
+    let score = track.confidence || 0.5;
+    
+    // Prefer longer, more complete titles (but not too long with junk)
+    const titleLen = (track.title || '').length;
+    if (titleLen >= 3 && titleLen <= 50) {
+      score += 0.1;
+    }
+    
+    // Prefer tracks with proper artist credits (multiple artists = more complete)
+    const artistParts = (track.artist || '').split(/[&,]/).length;
+    if (artistParts >= 2) {
+      score += 0.1;
+    }
+    
+    // Prefer tracks from description over comments (usually more accurate)
+    if (track.sourceType === 'description') {
+      score += 0.15;
+    }
+    
+    // Prefer tracks with more likes (social proof)
+    if (track.likes && track.likes > 5) {
+      score += 0.05;
+    }
+    
+    return { track, score };
+  });
+  
+  // Sort by score and return best
+  scored.sort((a, b) => b.score - a.score);
+  
+  // Merge info from top candidates
+  const best = { ...scored[0].track };
+  
+  // If another version has a longer/better title, consider it
+  for (const { track } of scored.slice(1)) {
+    // Take longer artist string if it has more info
+    if ((track.artist || '').split(/[&,]/).length > (best.artist || '').split(/[&,]/).length) {
+      best.artist = track.artist;
+    }
+  }
+  
+  console.log(`Selected best track version: "${best.title}" by "${best.artist}" (score: ${scored[0].score.toFixed(2)})`);
+  
+  return best;
 }
 
 /**
