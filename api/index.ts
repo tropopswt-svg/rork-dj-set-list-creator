@@ -1,10 +1,13 @@
-/**
- * Vercel serverless function entry point
- * Hono works with Vercel with zero configuration
- * Just export the app directly
- */
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-import app from "../backend/hono.js";
-
-// Export the Hono app directly - Vercel handles the conversion automatically
-export default app;
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Content-Type', 'application/json');
+  return res.status(200).json({
+    name: 'DJ Set List Creator API',
+    version: '1.0.0',
+    status: 'healthy',
+    endpoints: {
+      import: 'POST /api/import',
+    },
+  });
+}
