@@ -4,7 +4,7 @@
  * Just export the app directly
  */
 
-import app from "../backend/hono";
+import app from "../backend/hono.js";
 
 // Export the Hono app directly - Vercel handles the conversion automatically
 export default app;
