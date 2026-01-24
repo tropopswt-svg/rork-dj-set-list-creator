@@ -1628,10 +1628,12 @@ export const scraperRouter = createTRPCRouter({
         };
       } catch (error) {
         console.error(`[Scraper] Error during scraping:`, error);
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error(`[Scraper] Error stack:`, error instanceof Error ? error.stack : 'No stack trace');
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorDetails = error instanceof Error && error.stack ? error.stack.split('\n')[0] : '';
         return {
           success: false,
-          error: `Failed to scrape URL: ${errorMessage}`,
+          error: `Failed to scrape URL: ${errorMessage}${errorDetails ? ` (${errorDetails})` : ''}`,
           data: null,
         };
       }

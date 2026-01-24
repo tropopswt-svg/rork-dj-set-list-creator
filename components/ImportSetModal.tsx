@@ -165,11 +165,38 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     },
     onError: (error) => {
       console.error('[ImportModal] Scrape error:', error);
+      console.error('[ImportModal] Error details:', {
+        message: error.message,
+        data: error.data,
+        shape: error.shape,
+        cause: error.cause,
+        stack: error.stack,
+      });
       if (progressIntervalRef.current) {
         clearInterval(progressIntervalRef.current);
         progressIntervalRef.current = null;
       }
-      setError(error.message || 'Failed to scrape URL');
+      
+      // Try to extract more detailed error message
+      let errorMessage = 'Failed to scrape URL';
+      
+      // Check for connection errors first
+      if (error.message?.includes('fetch') || error.message?.includes('network') || error.message?.includes('ECONNREFUSED')) {
+        const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'http://localhost:3001';
+        errorMessage = `Cannot connect to backend server at ${backendUrl}. Please start the server with: bun run server`;
+      } else if (error.data?.zodError) {
+        errorMessage = `Invalid input: ${error.data.zodError.message}`;
+      } else if (error.data?.httpStatus === 404) {
+        errorMessage = 'Backend server not found. Is the server running on port 3001?';
+      } else if (error.data?.httpStatus) {
+        errorMessage = `Server error (${error.data.httpStatus}): ${error.message || 'Unknown error'}`;
+      } else if (error.message) {
+        errorMessage = error.message;
+      } else if (error.cause) {
+        errorMessage = `Network error: ${error.cause instanceof Error ? error.cause.message : String(error.cause)}`;
+      }
+      
+      setError(errorMessage);
       setStep('idle');
       setProcessing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -255,6 +282,28 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     let urlToScrape = url.trim();
     if (!urlToScrape.startsWith('http://') && !urlToScrape.startsWith('https://')) {
       urlToScrape = 'https://' + urlToScrape;
+    }
+
+    // Check if backend is reachable before attempting scrape
+    const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'http://localhost:3001';
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const healthCheck = await fetch(`${backendUrl}/`, { 
+        signal: controller.signal 
+      });
+      clearTimeout(timeoutId);
+      if (!healthCheck.ok) {
+        throw new Error('Backend returned non-OK status');
+      }
+    } catch (error) {
+      const isTimeout = error instanceof Error && (error.name === 'AbortError' || error.message.includes('timeout'));
+      const errorMsg = isTimeout
+        ? `Backend server not responding at ${backendUrl}`
+        : `Cannot connect to backend server at ${backendUrl}`;
+      setError(`${errorMsg}. Please start the server with: bun run server`);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
     }
 
     setProcessing(true);
