@@ -123,10 +123,18 @@ export default function SubmitScreen() {
   });
   const [showImportModal, setShowImportModal] = useState(false);
   const [pulseAnim] = useState(new Animated.Value(1));
+  
+  // Background matching state (runs after modal closes)
+  const [isMatching, setIsMatching] = useState(false);
+  const [matchingProgress, setMatchingProgress] = useState({
+    total: 0,
+    matched: 0,
+    unreleased: 0,
+  });
 
   // Pulse animation for the loading indicator
   useEffect(() => {
-    if (showImportModal && importProgress.step !== 'complete' && importProgress.step !== 'error') {
+    if (showImportModal && importProgress.step !== 'extracting_tracks' && importProgress.step !== 'error') {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -222,27 +230,14 @@ export default function SubmitScreen() {
         });
 
         // Small delay to show Phase 1
-        await new Promise(resolve => setTimeout(resolve, 800));
+        await new Promise(resolve => setTimeout(resolve, 600));
 
         // ============================================
-        // PHASE 2: Extract tracks
+        // PHASE 2: Extract tracks - STOP HERE for user action
         // ============================================
         const tracksFound = setList.tracks?.length || 0;
-        
-        setImportProgress(prev => ({
-          ...prev,
-          step: 'extracting_tracks',
-          message: tracksFound > 0 
-            ? `Extracted ${tracksFound} track${tracksFound !== 1 ? 's' : ''} from signals`
-            : 'No tracks identified yet',
-          tracksFound,
-        }));
 
         let pendingTracks: PendingTrack[] = [];
-        let linkedCount = 0;
-        let unreleasedCount = 0;
-        let artistLinked = false;
-
         if (setList.tracks && tracksFound > 0) {
           // Create basic pending tracks
           pendingTracks = setList.tracks.map((t: any, i: number) => ({
@@ -253,81 +248,18 @@ export default function SubmitScreen() {
           }));
           
           setTracks(pendingTracks);
-          
-          // Small delay to show Phase 2
-          await new Promise(resolve => setTimeout(resolve, 800));
-          
-          // ============================================
-          // PHASE 3: Match to database (IDentified core)
-          // ============================================
-          setImportProgress(prev => ({
-            ...prev,
-            step: 'matching_database',
-            message: 'IDentifying released & unreleased tracks...',
-          }));
-          
-          try {
-            const enhanced = await enhanceTracksWithDatabase(
-              pendingTracks.map(t => ({ title: t.title, artist: t.artist }))
-            );
-            
-            // Update tracks with database matches
-            pendingTracks = pendingTracks.map((track, i) => ({
-              ...track,
-              isLinked: !!enhanced[i]?.dbTrack,
-              isUnreleased: enhanced[i]?.dbTrack?.is_unreleased || false,
-              dbTrackId: enhanced[i]?.dbTrack?.id,
-              dbArtistId: enhanced[i]?.dbArtist?.id,
-            }));
-            
-            setTracks(pendingTracks);
-            
-            linkedCount = pendingTracks.filter(t => t.isLinked).length;
-            unreleasedCount = pendingTracks.filter(t => t.isUnreleased).length;
-            
-            // Update progress with matching results
-            setImportProgress(prev => ({
-              ...prev,
-              message: linkedCount > 0 
-                ? `Matched ${linkedCount} track${linkedCount !== 1 ? 's' : ''} to database`
-                : 'Checking artist database...',
-              tracksLinked: linkedCount,
-              tracksUnreleased: unreleasedCount,
-            }));
-            
-            console.log(`[Submit] Linked ${linkedCount} tracks, ${unreleasedCount} unreleased`);
-          } catch (linkError) {
-            console.warn('[Submit] Could not enhance tracks:', linkError);
-          }
         }
-
-        // Check if the DJ artist exists in database
-        try {
-          const artistCheck = await artistExists(setList.artist);
-          artistLinked = artistCheck.exists;
-          if (artistCheck.exists) {
-            console.log(`[Submit] Artist ${setList.artist} found in database`);
-          }
-        } catch (artistError) {
-          console.warn('[Submit] Could not check artist:', artistError);
-        }
-
-        // Small delay before complete
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        // ============================================
-        // COMPLETE: Show final results
-        // ============================================
+        
+        // Show Phase 2 complete with Continue button
         setImportProgress(prev => ({
           ...prev,
-          step: 'complete',
-          message: 'IDentified processing complete',
+          step: 'extracting_tracks',
+          message: tracksFound > 0 
+            ? `Ready to IDentify ${tracksFound} track${tracksFound !== 1 ? 's' : ''}`
+            : 'No tracks found - you can add them manually',
           tracksFound,
-          tracksLinked: linkedCount,
-          tracksUnreleased: unreleasedCount,
-          artistLinked,
-          commentsScanned: commentsCount,
         }));
+        
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       } else {
@@ -365,6 +297,67 @@ export default function SubmitScreen() {
   const closeImportModal = () => {
     setShowImportModal(false);
     setImportProgress({ step: 'idle', message: '' });
+  };
+
+  // Run background matching (Phase 3) after user presses Continue
+  const handleContinueAndMatch = async () => {
+    // Close the modal first
+    setShowImportModal(false);
+    
+    // If we have tracks to match, start background matching
+    if (tracks.length > 0) {
+      setIsMatching(true);
+      setMatchingProgress({ total: tracks.length, matched: 0, unreleased: 0 });
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      try {
+        const enhanced = await enhanceTracksWithDatabase(
+          tracks.map(t => ({ title: t.title, artist: t.artist }))
+        );
+        
+        // Update tracks with database matches
+        const updatedTracks = tracks.map((track, i) => ({
+          ...track,
+          isLinked: !!enhanced[i]?.dbTrack,
+          isUnreleased: enhanced[i]?.dbTrack?.is_unreleased || false,
+          dbTrackId: enhanced[i]?.dbTrack?.id,
+          dbArtistId: enhanced[i]?.dbArtist?.id,
+        }));
+        
+        setTracks(updatedTracks);
+        
+        const linkedCount = updatedTracks.filter(t => t.isLinked).length;
+        const unreleasedCount = updatedTracks.filter(t => t.isUnreleased).length;
+        
+        setMatchingProgress({
+          total: tracks.length,
+          matched: linkedCount,
+          unreleased: unreleasedCount,
+        });
+        
+        console.log(`[Submit] Background match: ${linkedCount} linked, ${unreleasedCount} unreleased`);
+        
+        // Also check artist
+        if (form.values.artistName) {
+          const artistCheck = await artistExists(form.values.artistName);
+          if (artistCheck.exists) {
+            console.log(`[Submit] Artist ${form.values.artistName} found in database`);
+          }
+        }
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } catch (error) {
+        console.warn('[Submit] Background matching error:', error);
+      } finally {
+        // Keep showing results for a moment, then hide
+        setTimeout(() => {
+          setIsMatching(false);
+        }, 2000);
+      }
+    } else {
+      setImportProgress({ step: 'idle', message: '' });
+    }
   };
 
   const handleImportFromUrl = async () => {
@@ -704,6 +697,31 @@ export default function SubmitScreen() {
             </View>
           )}
 
+          {/* Inline IDentified Matching Progress */}
+          {isMatching && (
+            <View style={styles.matchingBanner}>
+              <ActivityIndicator size="small" color={Colors.dark.primary} />
+              <View style={styles.matchingInfo}>
+                <Text style={styles.matchingTitle}>IDentifying tracks...</Text>
+                <Text style={styles.matchingSubtext}>
+                  Matching {matchingProgress.total} tracks to database
+                </Text>
+              </View>
+              <Sparkles size={18} color={Colors.dark.primary} />
+            </View>
+          )}
+          
+          {/* Matching Complete Banner */}
+          {!isMatching && matchingProgress.matched > 0 && (
+            <View style={styles.matchingCompleteBanner}>
+              <CheckCircle size={16} color={Colors.dark.success} />
+              <Text style={styles.matchingCompleteText}>
+                {matchingProgress.matched} matched
+                {matchingProgress.unreleased > 0 && ` • ${matchingProgress.unreleased} unreleased`}
+              </Text>
+            </View>
+          )}
+
           {tracks.length > 0 && (
             <View style={styles.tracksList}>
               {tracks.map((track, index) => (
@@ -803,15 +821,15 @@ export default function SubmitScreen() {
               <Text style={styles.identifiedText}>IDentified</Text>
             </View>
             
-            {/* Loading Indicator */}
-            {importProgress.step !== 'complete' && importProgress.step !== 'error' && (
+            {/* Loading Indicator - During fetching/scanning */}
+            {(importProgress.step === 'fetching_metadata' || importProgress.step === 'scanning_comments') && (
               <Animated.View style={[styles.loadingIconContainer, { transform: [{ scale: pulseAnim }] }]}>
                 <Disc3 size={48} color={Colors.dark.primary} />
               </Animated.View>
             )}
             
-            {/* Success Icon */}
-            {importProgress.step === 'complete' && (
+            {/* Success Icon - Ready to continue */}
+            {importProgress.step === 'extracting_tracks' && (
               <View style={[styles.loadingIconContainer, styles.successIconContainer]}>
                 <CheckCircle size={48} color={Colors.dark.success} />
               </View>
@@ -827,10 +845,8 @@ export default function SubmitScreen() {
             {/* Step Title */}
             <Text style={styles.modalTitle}>
               {importProgress.step === 'fetching_metadata' && 'Fetching Set Info...'}
-              {importProgress.step === 'scanning_comments' && 'Phase 1: Scanning'}
-              {importProgress.step === 'extracting_tracks' && 'Phase 2: Extracting'}
-              {importProgress.step === 'matching_database' && 'Phase 3: IDentifying'}
-              {importProgress.step === 'complete' && 'Processing Complete'}
+              {importProgress.step === 'scanning_comments' && 'Scanning Comments...'}
+              {importProgress.step === 'extracting_tracks' && 'Tracks Found!'}
               {importProgress.step === 'error' && 'Import Failed'}
             </Text>
             
@@ -838,12 +854,7 @@ export default function SubmitScreen() {
             {(importProgress.setName || importProgress.artistName) && (
               <View style={styles.modalSetInfo}>
                 {importProgress.artistName && (
-                  <View style={styles.modalArtistRow}>
-                    <Text style={styles.modalArtist}>{importProgress.artistName}</Text>
-                    {importProgress.artistLinked && (
-                      <CheckCircle size={14} color={Colors.dark.success} />
-                    )}
-                  </View>
+                  <Text style={styles.modalArtist}>{importProgress.artistName}</Text>
                 )}
                 {importProgress.setName && (
                   <Text style={styles.modalSetName} numberOfLines={2}>{importProgress.setName}</Text>
@@ -854,120 +865,71 @@ export default function SubmitScreen() {
             {/* Progress Message */}
             <Text style={styles.modalMessage}>{importProgress.message}</Text>
             
-            {/* Phase Progress Indicators */}
+            {/* Phase Progress Indicators - Simple 2 phase */}
             {importProgress.step !== 'fetching_metadata' && importProgress.step !== 'error' && (
               <View style={styles.phaseIndicators}>
-                {/* Phase 1: Comments */}
-                <View style={[
-                  styles.phaseItem,
-                  (importProgress.step === 'scanning_comments' || 
-                   importProgress.step === 'extracting_tracks' || 
-                   importProgress.step === 'matching_database' ||
-                   importProgress.step === 'complete') && styles.phaseItemActive,
-                ]}>
+                {/* Phase 1: Comments Scanned */}
+                <View style={[styles.phaseItem, styles.phaseItemActive]}>
                   <View style={[
                     styles.phaseIcon,
-                    (importProgress.step !== 'scanning_comments') && styles.phaseIconComplete,
+                    importProgress.step !== 'scanning_comments' && styles.phaseIconComplete,
                   ]}>
                     {importProgress.step === 'scanning_comments' ? (
                       <ActivityIndicator size="small" color={Colors.dark.primary} />
                     ) : (
-                      <MessageSquare size={14} color={
-                        importProgress.step === 'fetching_metadata' 
-                          ? Colors.dark.textMuted 
-                          : Colors.dark.success
-                      } />
+                      <MessageSquare size={14} color={Colors.dark.success} />
                     )}
                   </View>
-                  <Text style={styles.phaseLabel}>Scan</Text>
+                  <Text style={styles.phaseLabel}>Scanned</Text>
                   <Text style={styles.phaseValue}>
                     {importProgress.commentsScanned?.toLocaleString() || '0'}
                   </Text>
                 </View>
                 
-                {/* Phase 2: Tracks */}
+                {/* Phase 2: Tracks Found */}
                 <View style={[
                   styles.phaseItem,
-                  (importProgress.step === 'extracting_tracks' || 
-                   importProgress.step === 'matching_database' ||
-                   importProgress.step === 'complete') && styles.phaseItemActive,
+                  importProgress.step === 'extracting_tracks' && styles.phaseItemActive,
                 ]}>
                   <View style={[
                     styles.phaseIcon,
-                    (importProgress.step === 'matching_database' || importProgress.step === 'complete') && styles.phaseIconComplete,
+                    importProgress.step === 'extracting_tracks' && styles.phaseIconComplete,
                   ]}>
-                    {importProgress.step === 'extracting_tracks' ? (
-                      <ActivityIndicator size="small" color={Colors.dark.primary} />
-                    ) : (
-                      <Music size={14} color={
-                        importProgress.step === 'scanning_comments' || importProgress.step === 'fetching_metadata'
-                          ? Colors.dark.textMuted 
-                          : Colors.dark.success
-                      } />
-                    )}
+                    <Music size={14} color={
+                      importProgress.step === 'extracting_tracks' 
+                        ? Colors.dark.success 
+                        : Colors.dark.textMuted
+                    } />
                   </View>
-                  <Text style={styles.phaseLabel}>Extract</Text>
+                  <Text style={styles.phaseLabel}>Found</Text>
                   <Text style={styles.phaseValue}>
                     {importProgress.tracksFound || '0'}
                   </Text>
                 </View>
-                
-                {/* Phase 3: Match */}
-                <View style={[
-                  styles.phaseItem,
-                  (importProgress.step === 'matching_database' ||
-                   importProgress.step === 'complete') && styles.phaseItemActive,
-                ]}>
-                  <View style={[
-                    styles.phaseIcon,
-                    importProgress.step === 'complete' && styles.phaseIconComplete,
-                  ]}>
-                    {importProgress.step === 'matching_database' ? (
-                      <ActivityIndicator size="small" color={Colors.dark.primary} />
-                    ) : (
-                      <Sparkles size={14} color={
-                        importProgress.step === 'complete' 
-                          ? Colors.dark.success 
-                          : Colors.dark.textMuted
-                      } />
-                    )}
-                  </View>
-                  <Text style={styles.phaseLabel}>IDentify</Text>
-                  <Text style={styles.phaseValue}>
-                    {importProgress.tracksLinked || '0'}
-                  </Text>
-                </View>
               </View>
             )}
             
-            {/* Final Stats (on complete) */}
-            {importProgress.step === 'complete' && (
-              <View style={styles.modalFinalStats}>
-                {(importProgress.tracksLinked || 0) > 0 && (
-                  <View style={styles.finalStatBadge}>
-                    <CheckCircle size={12} color={Colors.dark.success} />
-                    <Text style={styles.finalStatText}>
-                      {importProgress.tracksLinked} matched
-                    </Text>
-                  </View>
-                )}
-                {(importProgress.tracksUnreleased || 0) > 0 && (
-                  <View style={[styles.finalStatBadge, styles.finalStatBadgeUnreleased]}>
-                    <AlertCircle size={12} color={Colors.dark.primary} />
-                    <Text style={[styles.finalStatText, styles.finalStatTextUnreleased]}>
-                      {importProgress.tracksUnreleased} unreleased
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-            
-            {/* Close Button */}
-            {(importProgress.step === 'complete' || importProgress.step === 'error') && (
-              <Pressable style={styles.modalButton} onPress={closeImportModal}>
-                <Text style={styles.modalButtonText}>
-                  {importProgress.step === 'complete' ? 'Continue' : 'Try Again'}
+            {/* Next Step Hint */}
+            {importProgress.step === 'extracting_tracks' && (importProgress.tracksFound || 0) > 0 && (
+              <View style={styles.nextStepHint}>
+                <Sparkles size={14} color={Colors.dark.primary} />
+                <Text style={styles.nextStepText}>
+                  Continue to IDentify released & unreleased tracks
                 </Text>
+              </View>
+            )}
+            
+            {/* Continue Button - at Phase 2 */}
+            {importProgress.step === 'extracting_tracks' && (
+              <Pressable style={styles.modalButton} onPress={handleContinueAndMatch}>
+                <Text style={styles.modalButtonText}>Continue</Text>
+              </Pressable>
+            )}
+            
+            {/* Error Button */}
+            {importProgress.step === 'error' && (
+              <Pressable style={styles.modalButton} onPress={closeImportModal}>
+                <Text style={styles.modalButtonText}>Try Again</Text>
               </Pressable>
             )}
           </View>
@@ -1448,5 +1410,62 @@ const styles = StyleSheet.create({
   },
   finalStatTextUnreleased: {
     color: Colors.dark.primary,
+  },
+  // Next step hint in modal
+  nextStepHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginBottom: 16,
+  },
+  nextStepText: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    flex: 1,
+  },
+  // Inline matching banner
+  matchingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.2)',
+  },
+  matchingInfo: {
+    flex: 1,
+  },
+  matchingTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+  },
+  matchingSubtext: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  // Matching complete banner
+  matchingCompleteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  matchingCompleteText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.success,
   },
 });
