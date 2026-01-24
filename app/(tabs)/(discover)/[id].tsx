@@ -29,6 +29,7 @@ import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
 import PointsBadge from '@/components/PointsBadge';
+import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
@@ -49,6 +50,11 @@ export default function SetDetailScreen() {
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud' | 'mixcloud'>('youtube');
+  
+  // YouTube Player state
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [playerMinimized, setPlayerMinimized] = useState(false);
+  const [currentTimestamp, setCurrentTimestamp] = useState(0);
   
   // Look up set from real context first, then fallback to mock data
   // Using sets directly in useMemo for proper reactivity
@@ -436,6 +442,49 @@ export default function SetDetailScreen() {
             </View>
           )}
 
+          {/* Embedded YouTube Player */}
+          {(() => {
+            const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+            const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
+            
+            if (!showPlayer || !videoId) {
+              // Show "Play In App" button when player is hidden
+              if (ytLink && videoId) {
+                return (
+                  <Pressable
+                    style={styles.playInAppButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setShowPlayer(true);
+                      setPlayerMinimized(false);
+                    }}
+                  >
+                    <View style={styles.playInAppIcon}>
+                      <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
+                    </View>
+                    <View style={styles.playInAppInfo}>
+                      <Text style={styles.playInAppTitle}>Play Set</Text>
+                      <Text style={styles.playInAppSubtitle}>Listen while browsing tracklist</Text>
+                    </View>
+                    <Youtube size={20} color="#FF0000" />
+                  </Pressable>
+                );
+              }
+              return null;
+            }
+            
+            return (
+              <YouTubePlayer
+                videoId={videoId}
+                initialTimestamp={currentTimestamp}
+                onTimestampChange={setCurrentTimestamp}
+                onClose={() => setShowPlayer(false)}
+                minimized={playerMinimized}
+                onToggleMinimize={() => setPlayerMinimized(!playerMinimized)}
+              />
+            );
+          })()}
+
           {/* Inline conflict indicator */}
           {conflicts.length > 0 && (
             <View style={styles.conflictHintBanner}>
@@ -494,11 +543,25 @@ export default function SetDetailScreen() {
                   track={track}
                   showTimestamp
                   onPress={() => {
-                    if (setList.sourceLinks.length > 0 && track.timestamp) {
-                      const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                      if (youtubeLink) {
-                        const url = `${youtubeLink.url}&t=${track.timestamp}`;
-                        Linking.openURL(url);
+                    if (track.timestamp !== undefined) {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      
+                      // If player is showing, seek to timestamp
+                      if (showPlayer) {
+                        setCurrentTimestamp(track.timestamp);
+                        // The player will respond to currentTimestamp change
+                        if (playerMinimized) {
+                          setPlayerMinimized(false);
+                        }
+                      } else {
+                        // Open YouTube at timestamp if player not active
+                        const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                        if (youtubeLink) {
+                          // Start the player instead of opening externally
+                          setCurrentTimestamp(track.timestamp);
+                          setShowPlayer(true);
+                          setPlayerMinimized(false);
+                        }
                       }
                     }
                   }}
@@ -783,8 +846,40 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 212, 170, 0.1)',
     borderRadius: 12,
     padding: 14,
-    marginBottom: 24,
+    marginBottom: 16,
     gap: 10,
+  },
+  playInAppButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 0, 0.2)',
+  },
+  playInAppIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FF0000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playInAppInfo: {
+    flex: 1,
+  },
+  playInAppTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  playInAppSubtitle: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
   },
   aiInfoText: {
     flex: 1,
