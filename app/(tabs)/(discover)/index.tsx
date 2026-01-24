@@ -1,9 +1,10 @@
-import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import ImportSetModal from '@/components/ImportSetModal';
@@ -11,6 +12,176 @@ import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
+
+// Animated IDentified Logo Component
+const IDentifiedLogo = () => {
+  const glowAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const barAnims = useRef([...Array(5)].map(() => new Animated.Value(0.3))).current;
+
+  useEffect(() => {
+    // Glow animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+        Animated.timing(glowAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+      ])
+    ).start();
+
+    // Pulse animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.02, duration: 1500, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1500, useNativeDriver: true }),
+      ])
+    ).start();
+
+    // Audio bars animation
+    barAnims.forEach((anim, i) => {
+      const randomDuration = 300 + Math.random() * 400;
+      const animate = () => {
+        Animated.sequence([
+          Animated.timing(anim, { 
+            toValue: 0.4 + Math.random() * 0.6, 
+            duration: randomDuration, 
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true 
+          }),
+          Animated.timing(anim, { 
+            toValue: 0.2 + Math.random() * 0.3, 
+            duration: randomDuration, 
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true 
+          }),
+        ]).start(animate);
+      };
+      setTimeout(animate, i * 100);
+    });
+  }, []);
+
+  const glowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.4, 0.9],
+  });
+
+  const shadowRadius = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [10, 25],
+  });
+
+  return (
+    <Animated.View style={[logoStyles.container, { transform: [{ scale: pulseAnim }] }]}>
+      {/* Audio bars on left */}
+      <View style={logoStyles.barsContainer}>
+        {barAnims.slice(0, 3).map((anim, i) => (
+          <Animated.View
+            key={`left-${i}`}
+            style={[
+              logoStyles.bar,
+              { 
+                height: 14 + i * 4,
+                transform: [{ scaleY: anim }],
+                opacity: anim,
+              }
+            ]}
+          />
+        ))}
+      </View>
+
+      {/* Main Logo */}
+      <View style={logoStyles.logoWrapper}>
+        {/* Glow effect behind */}
+        <Animated.View style={[logoStyles.glowBg, { opacity: glowOpacity }]} />
+        
+        {/* The ID part - highlighted */}
+        <View style={logoStyles.idContainer}>
+          <LinearGradient
+            colors={[Colors.dark.primary, '#E8A855', Colors.dark.primary]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={logoStyles.idGradient}
+          >
+            <Text style={logoStyles.idText}>ID</Text>
+          </LinearGradient>
+        </View>
+        
+        {/* entified part */}
+        <Text style={logoStyles.entifiedText}>entified</Text>
+      </View>
+
+      {/* Audio bars on right */}
+      <View style={logoStyles.barsContainer}>
+        {barAnims.slice(2, 5).map((anim, i) => (
+          <Animated.View
+            key={`right-${i}`}
+            style={[
+              logoStyles.bar,
+              { 
+                height: 18 - i * 3,
+                transform: [{ scaleY: anim }],
+                opacity: anim,
+              }
+            ]}
+          />
+        ))}
+      </View>
+    </Animated.View>
+  );
+};
+
+const logoStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  barsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+    height: 24,
+  },
+  bar: {
+    width: 3,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 1.5,
+  },
+  logoWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  glowBg: {
+    position: 'absolute',
+    left: -10,
+    right: -10,
+    top: -8,
+    bottom: -8,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 20,
+    opacity: 0.15,
+  },
+  idContainer: {
+    marginRight: -2,
+  },
+  idGradient: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  idText: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: Colors.dark.background,
+    letterSpacing: -1,
+  },
+  entifiedText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    letterSpacing: -0.5,
+  },
+});
 
 type FilterType = 'trending' | 'recent';
 
@@ -66,7 +237,7 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Sets</Text>
+          <IDentifiedLogo />
           <Pressable 
             style={styles.addButton}
             onPress={() => {
@@ -170,12 +341,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '700' as const,
-    color: Colors.dark.text,
-    letterSpacing: -0.5,
   },
   addButton: {
     width: 44,
