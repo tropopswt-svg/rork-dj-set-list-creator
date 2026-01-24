@@ -182,12 +182,14 @@ export default function SubmitScreen() {
           setSourceLinks({ [setList.sourceLinks[0].platform]: setList.sourceLinks[0].url });
         }
 
-        // Store source info
+        // Store source info - detect platform from response
+        const detectedPlatform = setList.sourceLinks?.[0]?.platform || 
+          (url.includes('soundcloud.com') ? 'soundcloud' : 'youtube');
         setScrapedSourceInfo({
           url: url,
-          platform: 'youtube',
+          platform: detectedPlatform as 'youtube' | 'soundcloud' | 'mixcloud',
           duration: setList.totalDuration,
-          uploaderName: videoInfo?.channelTitle,
+          uploaderName: videoInfo?.channelTitle || result.soundcloudInfo?.artist,
         });
 
         // Convert scraped tracks to PendingTrack format

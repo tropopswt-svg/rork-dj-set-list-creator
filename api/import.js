@@ -1,4 +1,16 @@
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
+const SOUNDCLOUD_OEMBED = 'https://soundcloud.com/oembed';
+
+// ============ PLATFORM DETECTION ============
+
+function detectPlatform(url) {
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube';
+  if (url.includes('soundcloud.com')) return 'soundcloud';
+  if (url.includes('mixcloud.com')) return 'mixcloud';
+  return null;
+}
+
+// ============ YOUTUBE FUNCTIONS ============
 
 function extractVideoId(url) {
   const patterns = [
@@ -207,6 +219,213 @@ function parseDuration(isoDuration) {
   return parseInt(match[1] || '0') * 3600 + parseInt(match[2] || '0') * 60 + parseInt(match[3] || '0');
 }
 
+// ============ SOUNDCLOUD FUNCTIONS ============
+
+async function fetchSoundCloudInfo(url) {
+  // Use oEmbed to get basic track info
+  const oembedUrl = `${SOUNDCLOUD_OEMBED}?format=json&url=${encodeURIComponent(url)}`;
+  const response = await fetch(oembedUrl);
+  
+  if (!response.ok) {
+    throw new Error('Could not fetch SoundCloud track info');
+  }
+  
+  const data = await response.json();
+  
+  // Extract thumbnail from the HTML embed (it contains an img tag)
+  let thumbnailUrl = null;
+  const imgMatch = data.html?.match(/src="([^"]+)"/);
+  if (imgMatch) {
+    // Try to get artwork from the visual
+    thumbnailUrl = data.thumbnail_url || null;
+  }
+  
+  // Parse artist and title from the oEmbed title
+  // Format is usually "Track Title by Artist Name"
+  let title = data.title || 'Unknown Set';
+  let artist = data.author_name || 'Unknown Artist';
+  
+  // If title contains " by ", split it
+  const byMatch = title.match(/^(.+?)\s+by\s+(.+)$/i);
+  if (byMatch) {
+    title = byMatch[1].trim();
+    artist = byMatch[2].trim();
+  }
+  
+  return {
+    id: url.split('/').pop() || Date.now().toString(),
+    title: data.title || title,
+    artist,
+    description: data.description || '',
+    thumbnailUrl: data.thumbnail_url,
+    duration: 0, // oEmbed doesn't provide duration
+    authorUrl: data.author_url,
+  };
+}
+
+async function fetchSoundCloudPage(url) {
+  // Fetch the actual page to get the description with tracklist
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      },
+    });
+    
+    if (!response.ok) return null;
+    
+    const html = await response.text();
+    
+    // Try to extract description from the page
+    // SoundCloud stores data in a script tag with JSON
+    const scriptMatch = html.match(/<script>window\.__sc_hydration\s*=\s*(\[[\s\S]*?\]);<\/script>/);
+    if (scriptMatch) {
+      try {
+        const hydrationData = JSON.parse(scriptMatch[1]);
+        for (const item of hydrationData) {
+          if (item.hydratable === 'sound' && item.data) {
+            return {
+              description: item.data.description || '',
+              duration: item.data.duration ? Math.floor(item.data.duration / 1000) : 0,
+              artworkUrl: item.data.artwork_url?.replace('-large', '-t500x500') || item.data.user?.avatar_url,
+              createdAt: item.data.created_at,
+              genre: item.data.genre,
+              playbackCount: item.data.playback_count,
+            };
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse SoundCloud hydration data:', e);
+      }
+    }
+    
+    // Fallback: try to find description in meta tags
+    const descMatch = html.match(/<meta\s+property="og:description"\s+content="([^"]+)"/i);
+    if (descMatch) {
+      return { description: descMatch[1].replace(/&amp;/g, '&').replace(/&quot;/g, '"') };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch SoundCloud page:', error);
+    return null;
+  }
+}
+
+async function importFromSoundCloud(url) {
+  const [oembedInfo, pageInfo] = await Promise.all([
+    fetchSoundCloudInfo(url),
+    fetchSoundCloudPage(url),
+  ]);
+  
+  // Combine info from both sources
+  const description = pageInfo?.description || oembedInfo.description || '';
+  const duration = pageInfo?.duration || 0;
+  const thumbnailUrl = pageInfo?.artworkUrl || oembedInfo.thumbnailUrl;
+  
+  // Parse tracklist from description
+  const tracks = parseDescription(description);
+  
+  // Parse artist/title from the oEmbed data
+  const { name, artist } = parseArtistFromTitle(oembedInfo.title);
+  const finalArtist = artist !== 'Unknown Artist' ? artist : oembedInfo.artist;
+  
+  const setList = {
+    id: `sc-${oembedInfo.id}-${Date.now()}`,
+    name: name || oembedInfo.title,
+    artist: finalArtist,
+    date: pageInfo?.createdAt || new Date().toISOString(),
+    tracks: tracks.map((pt, i) => ({
+      id: `imported-${Date.now()}-${i}`,
+      title: pt.title,
+      artist: pt.artist,
+      duration: 0,
+      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      addedAt: new Date().toISOString(),
+      source: 'ai',
+      timestamp: pt.timestamp,
+      verified: false,
+      contributedBy: pt.sourceAuthor || 'Description',
+    })),
+    coverUrl: thumbnailUrl,
+    sourceLinks: [{ platform: 'soundcloud', url }],
+    totalDuration: duration,
+    aiProcessed: true,
+    commentsScraped: 0, // SoundCloud comments aren't easily accessible
+    tracksIdentified: tracks.length,
+    plays: pageInfo?.playbackCount || 0,
+  };
+  
+  return {
+    success: true,
+    setList,
+    soundcloudInfo: {
+      title: oembedInfo.title,
+      artist: finalArtist,
+      thumbnailUrl,
+      duration,
+      genre: pageInfo?.genre,
+    },
+    commentsCount: 0,
+    tracksCount: tracks.length,
+  };
+}
+
+// ============ YOUTUBE IMPORT ============
+
+async function importFromYouTube(url, apiKey) {
+  const videoId = extractVideoId(url);
+  if (!videoId) throw new Error('Invalid YouTube URL');
+
+  const [video, comments] = await Promise.all([
+    fetchVideoInfo(videoId, apiKey),
+    fetchVideoComments(videoId, apiKey, 500),
+  ]);
+
+  const descTracks = parseDescription(video.description);
+  const commentTracks = parseComments(comments);
+
+  const merged = new Map();
+  for (const t of descTracks) merged.set(t.timestamp, t);
+  for (const t of commentTracks) {
+    const existing = Array.from(merged.keys()).find(ts => Math.abs(ts - t.timestamp) < 30);
+    if (!existing) merged.set(t.timestamp, t);
+  }
+
+  const tracks = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
+  const { name, artist } = parseArtistFromTitle(video.title);
+
+  const setList = {
+    id: `yt-${video.id}-${Date.now()}`,
+    name,
+    artist: artist !== 'Unknown Artist' ? artist : video.channelTitle,
+    date: video.publishedAt,
+    tracks: tracks.map((pt, i) => ({
+      id: `imported-${Date.now()}-${i}`,
+      title: pt.title,
+      artist: pt.artist,
+      duration: 0,
+      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      addedAt: new Date().toISOString(),
+      source: 'ai',
+      timestamp: pt.timestamp,
+      verified: false,
+      contributedBy: pt.sourceAuthor,
+    })),
+    coverUrl: video.thumbnailUrl,
+    sourceLinks: [{ platform: 'youtube', url }],
+    totalDuration: parseDuration(video.duration),
+    aiProcessed: true,
+    commentsScraped: comments.length,
+    tracksIdentified: tracks.length,
+    plays: 0,
+  };
+
+  return { success: true, setList, videoInfo: video, commentsCount: comments.length, tracksCount: tracks.length };
+}
+
+// ============ MAIN HANDLER ============
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -217,58 +436,27 @@ module.exports = async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
-  const apiKey = process.env.YOUTUBE_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
-
   try {
-    const videoId = extractVideoId(url);
-    if (!videoId) return res.status(400).json({ error: 'Invalid YouTube URL' });
-
-    const [video, comments] = await Promise.all([
-      fetchVideoInfo(videoId, apiKey),
-      fetchVideoComments(videoId, apiKey, 500),
-    ]);
-
-    const descTracks = parseDescription(video.description);
-    const commentTracks = parseComments(comments);
-
-    const merged = new Map();
-    for (const t of descTracks) merged.set(t.timestamp, t);
-    for (const t of commentTracks) {
-      const existing = Array.from(merged.keys()).find(ts => Math.abs(ts - t.timestamp) < 30);
-      if (!existing) merged.set(t.timestamp, t);
+    const platform = detectPlatform(url);
+    
+    if (platform === 'youtube') {
+      const apiKey = process.env.YOUTUBE_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
+      
+      const result = await importFromYouTube(url, apiKey);
+      return res.status(200).json(result);
+      
+    } else if (platform === 'soundcloud') {
+      const result = await importFromSoundCloud(url);
+      return res.status(200).json(result);
+      
+    } else if (platform === 'mixcloud') {
+      return res.status(400).json({ error: 'Mixcloud support coming soon!' });
+      
+    } else {
+      return res.status(400).json({ error: 'Unsupported platform. Please use a YouTube or SoundCloud link.' });
     }
-
-    const tracks = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
-    const { name, artist } = parseArtistFromTitle(video.title);
-
-    const setList = {
-      id: `yt-${video.id}-${Date.now()}`,
-      name,
-      artist: artist !== 'Unknown Artist' ? artist : video.channelTitle,
-      date: video.publishedAt,
-      tracks: tracks.map((pt, i) => ({
-        id: `imported-${Date.now()}-${i}`,
-        title: pt.title,
-        artist: pt.artist,
-        duration: 0,
-        coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
-        addedAt: new Date().toISOString(),
-        source: 'ai',
-        timestamp: pt.timestamp,
-        verified: false,
-        contributedBy: pt.sourceAuthor,
-      })),
-      coverUrl: video.thumbnailUrl,
-      sourceLinks: [{ platform: 'youtube', url }],
-      totalDuration: parseDuration(video.duration),
-      aiProcessed: true,
-      commentsScraped: comments.length,
-      tracksIdentified: tracks.length,
-      plays: 0,
-    };
-
-    return res.status(200).json({ success: true, setList, videoInfo: video, commentsCount: comments.length, tracksCount: tracks.length });
+    
   } catch (error) {
     console.error('Import error:', error);
     return res.status(500).json({ success: false, error: error.message || 'Import failed' });
