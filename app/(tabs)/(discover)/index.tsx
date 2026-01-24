@@ -4,7 +4,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import ImportSetModal from '@/components/ImportSetModal';
@@ -13,22 +12,15 @@ import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
 
-// Animated IDentified Logo Component
+// Animated IDentified Logo Component with Scanner Effect
 const IDentifiedLogo = () => {
-  const glowAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const barAnims = useRef([...Array(5)].map(() => new Animated.Value(0.3))).current;
+  const scannerAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Glow animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, { toValue: 1, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-        Animated.timing(glowAnim, { toValue: 0, duration: 2000, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
-      ])
-    ).start();
-
-    // Pulse animation
+    // Subtle pulse animation
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1.02, duration: 1500, useNativeDriver: true }),
@@ -36,94 +28,93 @@ const IDentifiedLogo = () => {
       ])
     ).start();
 
-    // Audio bars animation
-    barAnims.forEach((anim, i) => {
-      const randomDuration = 300 + Math.random() * 400;
-      const animate = () => {
-        Animated.sequence([
-          Animated.timing(anim, { 
-            toValue: 0.4 + Math.random() * 0.6, 
-            duration: randomDuration, 
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true 
-          }),
-          Animated.timing(anim, { 
-            toValue: 0.2 + Math.random() * 0.3, 
-            duration: randomDuration, 
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true 
-          }),
-        ]).start(animate);
-      };
-      setTimeout(animate, i * 100);
-    });
+    // Scanner bar sweeping across ID
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scannerAnim, { 
+          toValue: 1, 
+          duration: 800, 
+          easing: Easing.inOut(Easing.ease), 
+          useNativeDriver: true 
+        }),
+        Animated.delay(300),
+        Animated.timing(scannerAnim, { 
+          toValue: 0, 
+          duration: 800, 
+          easing: Easing.inOut(Easing.ease), 
+          useNativeDriver: true 
+        }),
+        Animated.delay(500),
+      ])
+    ).start();
+
+    // Glow pulse synced with scanner
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, { toValue: 0.8, duration: 400, useNativeDriver: true }),
+        Animated.timing(glowAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
+        Animated.delay(1400),
+      ])
+    ).start();
+
+    // Horizontal scan line effect
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanLineAnim, { toValue: 1, duration: 1500, easing: Easing.linear, useNativeDriver: true }),
+        Animated.timing(scanLineAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ])
+    ).start();
   }, []);
 
-  const glowOpacity = glowAnim.interpolate({
+  // Scanner bar translation (sweeps left to right across ID)
+  const scannerTranslate = scannerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.4, 0.9],
+    outputRange: [-50, 50],
   });
 
-  const shadowRadius = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [10, 25],
+  // Scan line translation (vertical sweep)
+  const scanLineTranslate = scanLineAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [-12, 12, -12],
   });
 
   return (
     <Animated.View style={[logoStyles.container, { transform: [{ scale: pulseAnim }] }]}>
-      {/* Audio bars on left */}
-      <View style={logoStyles.barsContainer}>
-        {barAnims.slice(0, 3).map((anim, i) => (
-          <Animated.View
-            key={`left-${i}`}
-            style={[
-              logoStyles.bar,
-              { 
-                height: 10 + i * 3,
-                transform: [{ scaleY: anim }],
-                opacity: anim,
-              }
-            ]}
-          />
-        ))}
-      </View>
-
       {/* Main Logo */}
       <View style={logoStyles.logoWrapper}>
-        {/* Glow effect behind */}
-        <Animated.View style={[logoStyles.glowBg, { opacity: glowOpacity }]} />
-        
-        {/* The ID part - highlighted */}
-        <View style={logoStyles.idContainer}>
-          <LinearGradient
-            colors={[Colors.dark.primary, '#E8A855', Colors.dark.primary]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={logoStyles.idGradient}
-          >
-            <Text style={logoStyles.idText}>ID</Text>
-          </LinearGradient>
+        {/* The ID part with scanner effect */}
+        <View style={logoStyles.idScannerContainer}>
+          {/* Glow background */}
+          <Animated.View style={[logoStyles.idGlowBg, { opacity: glowAnim }]} />
+          
+          {/* Scanner corner brackets */}
+          <View style={[logoStyles.scannerCorner, logoStyles.cornerTL]} />
+          <View style={[logoStyles.scannerCorner, logoStyles.cornerTR]} />
+          <View style={[logoStyles.scannerCorner, logoStyles.cornerBL]} />
+          <View style={[logoStyles.scannerCorner, logoStyles.cornerBR]} />
+          
+          {/* ID Text */}
+          <Text style={logoStyles.idText}>ID</Text>
+          
+          {/* Vertical scanning bar */}
+          <Animated.View 
+            style={[
+              logoStyles.scannerBar,
+              { transform: [{ translateX: scannerTranslate }] }
+            ]} 
+          />
+          
+          {/* Horizontal scan line */}
+          <Animated.View 
+            style={[
+              logoStyles.scanLine,
+              { transform: [{ translateY: scanLineTranslate }] }
+            ]} 
+          />
         </View>
         
         {/* entified part */}
         <Text style={logoStyles.entifiedText}>entified</Text>
-      </View>
-
-      {/* Audio bars on right */}
-      <View style={logoStyles.barsContainer}>
-        {barAnims.slice(2, 5).map((anim, i) => (
-          <Animated.View
-            key={`right-${i}`}
-            style={[
-              logoStyles.bar,
-              { 
-                height: 14 - i * 2,
-                transform: [{ scaleY: anim }],
-                opacity: anim,
-              }
-            ]}
-          />
-        ))}
       </View>
     </Animated.View>
   );
@@ -133,47 +124,90 @@ const logoStyles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  barsContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 2,
-    height: 18,
-  },
-  bar: {
-    width: 2.5,
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 1.25,
   },
   logoWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  // ID Scanner container with visual scanning effect
+  idScannerContainer: {
+    width: 50,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
     position: 'relative',
+    overflow: 'hidden',
+    marginRight: 2,
   },
-  glowBg: {
+  idGlowBg: {
     position: 'absolute',
-    left: -8,
-    right: -8,
-    top: -6,
-    bottom: -6,
+    width: 44,
+    height: 26,
     backgroundColor: Colors.dark.primary,
-    borderRadius: 16,
-    opacity: 0.15,
-  },
-  idContainer: {
-    marginRight: -1,
-  },
-  idGradient: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
     borderRadius: 6,
+  },
+  // Scanner corner brackets
+  scannerCorner: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderColor: Colors.dark.primary,
+    borderWidth: 2,
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 4,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 4,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 4,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 4,
   },
   idText: {
     fontSize: 22,
     fontWeight: '900',
-    color: Colors.dark.background,
+    color: Colors.dark.primary,
     letterSpacing: -0.5,
+    zIndex: 2,
+  },
+  // Vertical scanner bar that sweeps across
+  scannerBar: {
+    position: 'absolute',
+    width: 3,
+    height: 36,
+    backgroundColor: Colors.dark.primary,
+    opacity: 0.9,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+  },
+  // Horizontal scan line
+  scanLine: {
+    position: 'absolute',
+    width: 54,
+    height: 2,
+    backgroundColor: Colors.dark.primary,
+    opacity: 0.5,
   },
   entifiedText: {
     fontSize: 22,

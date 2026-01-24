@@ -2061,15 +2061,41 @@ function mergeTracks(primaryTracks, secondaryTracks, primaryDuration, secondaryD
 // ============ CHROME EXTENSION HANDLER ============
 
 async function handleChromeExtensionImport(req, res, data) {
+  console.log('[Chrome Import] Handler called with data:', {
+    source: data?.source,
+    tracksCount: data?.tracks?.length,
+    artistsCount: data?.artists?.length,
+    keys: data ? Object.keys(data) : 'null',
+  });
+  
+  // Validate we have data to import
+  if (!data || (!data.tracks?.length && !data.artists?.length)) {
+    console.log('[Chrome Import] No data to import');
+    return res.status(400).json({ 
+      error: 'No tracks or artists to import',
+      received: {
+        hasTracks: !!data?.tracks,
+        tracksLength: data?.tracks?.length || 0,
+        hasArtists: !!data?.artists,
+        artistsLength: data?.artists?.length || 0,
+      }
+    });
+  }
+  
   const { createClient } = require('@supabase/supabase-js');
   
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   
+  console.log('[Chrome Import] Supabase config:', {
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseKey,
+  });
+  
   if (!supabaseUrl || !supabaseKey) {
     return res.status(500).json({ 
       error: 'Database not configured',
-      message: 'Supabase credentials not found'
+      message: 'Supabase credentials not found on server'
     });
   }
   
@@ -2084,7 +2110,7 @@ async function handleChromeExtensionImport(req, res, data) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
   
-  console.log(`[Chrome Import] Received from ${data.source}:`, {
+  console.log(`[Chrome Import] Processing from ${data.source}:`, {
     artists: data.artists?.length || 0,
     tracks: data.tracks?.length || 0,
   });
@@ -2181,11 +2207,43 @@ async function handleChromeExtensionImport(req, res, data) {
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
   if (req.method === 'OPTIONS') return res.status(200).end();
+  
+  // GET handler for testing connection
+  if (req.method === 'GET') {
+    const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+    return res.status(200).json({
+      status: 'ok',
+      endpoint: '/api/import',
+      supabaseConfigured: !!(supabaseUrl && supabaseKey),
+      timestamp: new Date().toISOString(),
+    });
+  }
+  
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const body = req.body || {};
+  // Parse body - handle both pre-parsed and string bodies
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (e) {
+      console.error('[Import] Failed to parse body:', e.message);
+      return res.status(400).json({ error: 'Invalid JSON body' });
+    }
+  }
+  body = body || {};
+  
+  console.log('[Import] Received request:', {
+    chromeExtension: body.chromeExtension,
+    hasUrl: !!body.url,
+    hasTracks: !!body.tracks,
+    hasArtists: !!body.artists,
+    source: body.source,
+  });
   
   // Handle Chrome Extension import
   if (body.chromeExtension) {

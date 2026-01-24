@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IDentified - Track Scraper",
-  "version": "2.0",
+  "version": "2.1",
   "description": "Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists for the IDentified app",
   "permissions": [
     "clipboardWrite",

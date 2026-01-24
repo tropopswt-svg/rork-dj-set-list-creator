@@ -57,7 +57,7 @@ function extractTimestamps(text: string): { timestamp: number; formatted: string
   return results.sort((a, b) => a.position - b.position);
 }
 
-function parseTrackInfo(text: string): { title: string; artist: string } | null {
+function parseTrackInfo(text: string): { title: string; artist: string; isUnreleased?: boolean } | null {
   let cleaned = cleanText(text);
 
   // Remove leading separators like | or - at the start
@@ -125,44 +125,111 @@ function parseTrackInfo(text: string): { title: string; artist: string } | null 
   // Skip if too short or too long
   if (cleaned.length < 3 || cleaned.length > 200) return null;
 
+  // Extract unreleased status from the text
+  const isUnreleased = /unreleased|forthcoming|upcoming/i.test(cleaned);
+  
+  // Clean up extra descriptors from the text for parsing
+  let cleanedForParsing = cleaned
+    .replace(/\s*\(unreleased\)\s*/gi, ' ')
+    .replace(/\s*unreleased\s*/gi, ' ')
+    .replace(/\s*TRACK OF THE SET\s*/gi, ' ')
+    .replace(/\s*🤯+\s*/g, ' ')
+    .replace(/\s*🔥+\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   // Try different formats:
 
-  // Format: "Title - Artist" (most common in tracklists)
-  const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  // Format: "Part1 - Part2" (dash separated)
+  const dashMatch = cleanedForParsing.match(/^(.+?)\s*[-–—]\s*(.+)$/);
   if (dashMatch) {
     let [, part1, part2] = dashMatch;
     part1 = part1.trim();
     part2 = part2.trim();
 
-    // Heuristics to determine which is artist vs title:
-    const part1HasRemix = /remix|edit|vip|dub|bootleg/i.test(part1);
-    const part2HasRemix = /remix|edit|vip|dub|bootleg/i.test(part2);
+    // Check if part1 looks like remix/production info (not an artist name)
+    // Patterns: "Name Remix", "Name Edit", "Name VIP", "Name Bootleg", "Name Dub"
+    const remixPattern = /^(.+?)\s+(remix|edit|vip|dub|bootleg|rework|flip|version)$/i;
+    const part1RemixMatch = part1.match(remixPattern);
+    const part2RemixMatch = part2.match(remixPattern);
+    
+    // Check if part1 ends with remix-type words
+    const part1IsRemixInfo = remixPattern.test(part1);
+    // Check if part2 ends with remix-type words  
+    const part2IsRemixInfo = remixPattern.test(part2);
+    
+    // Check if part contains "(Something Remix)" in parentheses
+    const part1HasParenRemix = /\([^)]*remix[^)]*\)/i.test(part1);
+    const part2HasParenRemix = /\([^)]*remix[^)]*\)/i.test(part2);
 
-    if (part2HasRemix && !part1HasRemix) {
-      // Part2 has remix info, so it's likely the title
-      return { artist: part1, title: part2 };
+    if (part1IsRemixInfo && !part2IsRemixInfo) {
+      // Part1 is "Someone Remix" - this is remix info, part2 is the track title
+      // Format: "Franky Rizardo Remix - A Little Conversation"
+      // Result: title = "A Little Conversation (Franky Rizardo Remix)", artist from remix
+      const remixerName = part1RemixMatch ? part1RemixMatch[1].trim() : part1;
+      const remixType = part1RemixMatch ? part1RemixMatch[2] : 'Remix';
+      return { 
+        title: `${part2} (${remixerName} ${remixType})`, 
+        artist: remixerName,
+        isUnreleased,
+      };
+    } else if (part2IsRemixInfo && !part1IsRemixInfo) {
+      // Part2 is "Someone Remix" - Format: "Track Title - Artist Remix"
+      // This is "Artist - Title (Remix)" format
+      const remixerName = part2RemixMatch ? part2RemixMatch[1].trim() : part2;
+      const remixType = part2RemixMatch ? part2RemixMatch[2] : 'Remix';
+      return { 
+        title: `${part1} (${remixerName} ${remixType})`, 
+        artist: remixerName,
+        isUnreleased,
+      };
+    } else if (part2HasParenRemix) {
+      // Part2 has "(Someone Remix)" - Format: "Artist - Title (Remix)"
+      return { artist: part1, title: part2, isUnreleased };
+    } else if (part1HasParenRemix) {
+      // Part1 has "(Someone Remix)" - Less common, treat as title
+      return { title: part1, artist: part2, isUnreleased };
     } else {
-      // Default: assume "Title - Artist" format (common in tracklists)
-      return { title: part1, artist: part2 };
+      // Standard format: Most DJ set tracklists use "Artist - Title"
+      // Check for common artist name patterns vs track title patterns
+      
+      // Heuristics to detect which part is more likely the artist:
+      // - Shorter part is often artist
+      // - Part with "feat." or "ft." is usually the title side
+      // - Part with "&" between words could be artists collaborating
+      
+      const part1HasFeat = /\b(feat\.?|ft\.?|featuring)\b/i.test(part1);
+      const part2HasFeat = /\b(feat\.?|ft\.?|featuring)\b/i.test(part2);
+      
+      if (part2HasFeat && !part1HasFeat) {
+        // "Artist - Title (feat. Someone)" format
+        return { artist: part1, title: part2, isUnreleased };
+      } else if (part1HasFeat && !part2HasFeat) {
+        // "Title (feat. Someone) - Artist" format (rare)
+        return { title: part1, artist: part2, isUnreleased };
+      }
+      
+      // Default to "Artist - Title" format (most common in DJ tracklists)
+      return { artist: part1, title: part2, isUnreleased };
     }
   }
 
   // Format: "Title by Artist"
-  const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
+  const byMatch = cleanedForParsing.match(/^(.+?)\s+by\s+(.+)$/i);
   if (byMatch) {
-    return { title: byMatch[1].trim(), artist: byMatch[2].trim() };
+    return { title: byMatch[1].trim(), artist: byMatch[2].trim(), isUnreleased };
   }
 
   // Format: "Artist 'Title'" or 'Artist "Title"'
-  const quotedMatch = cleaned.match(/^(.+?)\s+["'](.+?)["']$/);
+  const quotedMatch = cleanedForParsing.match(/^(.+?)\s+["'](.+?)["']$/);
   if (quotedMatch) {
-    return { artist: quotedMatch[1].trim(), title: quotedMatch[2].trim() };
+    return { artist: quotedMatch[1].trim(), title: quotedMatch[2].trim(), isUnreleased };
   }
 
   // Format: "'Title' by/- Artist"
-  const quotedTitleMatch = cleaned.match(/^["'](.+?)["']\s*(?:by|[-–—])\s*(.+)$/i);
+  const quotedTitleMatch = cleanedForParsing.match(/^["'](.+?)["']\s*(?:by|[-–—])\s*(.+)$/i);
   if (quotedTitleMatch) {
-    return { title: quotedTitleMatch[1].trim(), artist: quotedTitleMatch[2].trim() };
+    return { title: quotedTitleMatch[1].trim(), artist: quotedTitleMatch[2].trim(), isUnreleased };
   }
 
   // Only return tracks that have a proper separator
@@ -237,9 +304,9 @@ export function parseComments(comments: YouTubeComment[]): ParsedTrack[] {
           if (!seenTracks.has(key)) {
             seenTracks.add(key);
 
-            // Check for unreleased indicator
-            const isUnreleased = /unreleased|forthcoming|upcoming/i.test(afterText);
-            // Check for remix info
+            // Check for unreleased indicator (from parseTrackInfo or text)
+            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
+            // Check for remix info in brackets
             const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
             tracks.push({
@@ -285,7 +352,7 @@ export function parseComments(comments: YouTubeComment[]): ParsedTrack[] {
           if (!seenTracks.has(key)) {
             seenTracks.add(key);
 
-            const isUnreleased = /unreleased|forthcoming|upcoming/i.test(afterText);
+            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
             const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
             tracks.push({
@@ -347,7 +414,7 @@ export function parseDescription(description: string): ParsedTrack[] {
         if (!seenTracks.has(key)) {
           seenTracks.add(key);
 
-          const isUnreleased = /unreleased|forthcoming|upcoming/i.test(afterText);
+          const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
           const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
           tracks.push({

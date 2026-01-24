@@ -28,10 +28,14 @@ export default function AnimatedLogo({
   const ringRotation = useRef(new Animated.Value(0)).current;
   const ringScale = useRef(new Animated.Value(1)).current;
   const ringOpacity = useRef(new Animated.Value(0.6)).current;
-  const idPulse = useRef(new Animated.Value(1)).current;
   const waveAnim = useRef(new Animated.Value(0)).current;
   const scanLinePos = useRef(new Animated.Value(0)).current;
   const glowOpacity = useRef(new Animated.Value(0.3)).current;
+  
+  // ID Scanning animations
+  const idScanLine = useRef(new Animated.Value(0)).current;
+  const idGlow = useRef(new Animated.Value(0.4)).current;
+  const idScannerBar = useRef(new Animated.Value(0)).current;
 
   // Ring rotation animation
   useEffect(() => {
@@ -65,16 +69,41 @@ export default function AnimatedLogo({
     return () => pulse.stop();
   }, []);
 
-  // ID text pulse
+  // ID Scanner bar animation - sweeps horizontally across ID text
   useEffect(() => {
-    const pulse = Animated.loop(
+    const scan = Animated.loop(
       Animated.sequence([
-        Animated.timing(idPulse, { toValue: 1.1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        Animated.timing(idPulse, { toValue: 1, duration: 800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(idScannerBar, { 
+          toValue: 1, 
+          duration: 1000, 
+          easing: Easing.inOut(Easing.ease), 
+          useNativeDriver: true 
+        }),
+        Animated.delay(200),
+        Animated.timing(idScannerBar, { 
+          toValue: 0, 
+          duration: 1000, 
+          easing: Easing.inOut(Easing.ease), 
+          useNativeDriver: true 
+        }),
+        Animated.delay(400),
       ])
     );
-    pulse.start();
-    return () => pulse.stop();
+    scan.start();
+    return () => scan.stop();
+  }, []);
+
+  // ID Glow pulse - pulses when scanner bar passes
+  useEffect(() => {
+    const glow = Animated.loop(
+      Animated.sequence([
+        Animated.timing(idGlow, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(idGlow, { toValue: 0.4, duration: 700, useNativeDriver: true }),
+        Animated.delay(1400),
+      ])
+    );
+    glow.start();
+    return () => glow.stop();
   }, []);
 
   // Wave animation for scan effect
@@ -143,10 +172,16 @@ export default function AnimatedLogo({
 
   // Size configurations
   const sizeConfig = {
-    small: { container: 32, ring: 28, icon: 14, fontSize: 16, idSize: 18 },
-    medium: { container: 44, ring: 38, icon: 18, fontSize: 20, idSize: 24 },
-    large: { container: 64, ring: 56, icon: 24, fontSize: 28, idSize: 34 },
+    small: { container: 32, ring: 28, icon: 14, fontSize: 16, idSize: 18, scanBarWidth: 36, scanBarHeight: 22 },
+    medium: { container: 44, ring: 38, icon: 18, fontSize: 20, idSize: 24, scanBarWidth: 48, scanBarHeight: 28 },
+    large: { container: 64, ring: 56, icon: 24, fontSize: 28, idSize: 34, scanBarWidth: 68, scanBarHeight: 40 },
   }[size];
+
+  // ID scanner bar translation
+  const idScannerTranslate = idScannerBar.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-sizeConfig.scanBarWidth, sizeConfig.scanBarWidth],
+  });
 
   return (
     <Pressable onPress={handlePress} style={styles.wrapper}>
@@ -214,16 +249,49 @@ export default function AnimatedLogo({
           </View>
         </View>
 
-        {/* Logo Text */}
+        {/* Logo Text with ID Scanner Effect */}
         <View style={styles.textContainer}>
-          <Animated.Text 
-            style={[
-              styles.idText,
-              { fontSize: sizeConfig.idSize, transform: [{ scale: idPulse }] }
-            ]}
-          >
-            ID
-          </Animated.Text>
+          {/* ID text with scanning effect */}
+          <View style={[styles.idScanContainer, { width: sizeConfig.scanBarWidth, height: sizeConfig.scanBarHeight }]}>
+            {/* Glow background behind ID */}
+            <Animated.View 
+              style={[
+                styles.idGlowBackground,
+                { 
+                  opacity: idGlow,
+                  width: sizeConfig.scanBarWidth - 4,
+                  height: sizeConfig.scanBarHeight - 4,
+                  borderRadius: 6,
+                }
+              ]} 
+            />
+            
+            {/* Scanner corners - top left */}
+            <View style={[styles.scannerCorner, styles.scannerCornerTL]} />
+            {/* Scanner corners - top right */}
+            <View style={[styles.scannerCorner, styles.scannerCornerTR]} />
+            {/* Scanner corners - bottom left */}
+            <View style={[styles.scannerCorner, styles.scannerCornerBL]} />
+            {/* Scanner corners - bottom right */}
+            <View style={[styles.scannerCorner, styles.scannerCornerBR]} />
+            
+            {/* The ID text */}
+            <Text style={[styles.idText, { fontSize: sizeConfig.idSize }]}>
+              ID
+            </Text>
+            
+            {/* Scanning bar overlay */}
+            <Animated.View 
+              style={[
+                styles.idScanBar,
+                {
+                  height: sizeConfig.scanBarHeight + 4,
+                  transform: [{ translateX: idScannerTranslate }],
+                }
+              ]}
+            />
+          </View>
+          
           <Text style={[styles.entifiedText, { fontSize: sizeConfig.fontSize }]}>
             entified
           </Text>
@@ -297,17 +365,77 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
+  },
+  // ID Scanner container with corner brackets
+  idScanContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  idGlowBackground: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.primary,
+  },
+  // Scanner corner brackets
+  scannerCorner: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderColor: Colors.dark.primary,
+    borderWidth: 2,
+  },
+  scannerCornerTL: {
+    top: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 3,
+  },
+  scannerCornerTR: {
+    top: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderBottomWidth: 0,
+    borderTopRightRadius: 3,
+  },
+  scannerCornerBL: {
+    bottom: 0,
+    left: 0,
+    borderRightWidth: 0,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 3,
+  },
+  scannerCornerBR: {
+    bottom: 0,
+    right: 0,
+    borderLeftWidth: 0,
+    borderTopWidth: 0,
+    borderBottomRightRadius: 3,
   },
   idText: {
     fontWeight: '900',
     color: Colors.dark.primary,
     letterSpacing: -0.5,
+    zIndex: 1,
+  },
+  // Scanning bar that sweeps across ID
+  idScanBar: {
+    position: 'absolute',
+    width: 3,
+    backgroundColor: Colors.dark.primary,
+    opacity: 0.8,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
   },
   entifiedText: {
     fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.5,
+    marginLeft: 2,
   },
   tagline: {
     fontSize: 11,

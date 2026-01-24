@@ -31,6 +31,7 @@ import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
 import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
+import TrackDetailModal from '@/components/TrackDetailModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
@@ -51,6 +52,10 @@ export default function SetDetailScreen() {
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud'>('youtube');
+  
+  // Track Detail Modal state
+  const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
+  const [pendingTimestamp, setPendingTimestamp] = useState<number | null>(null);
   
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -549,26 +554,12 @@ export default function SetDetailScreen() {
                   track={track}
                   showTimestamp
                   onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    // Show track detail modal
+                    setSelectedTrack(track);
+                    // Store the timestamp for when user clicks play
                     if (track.timestamp !== undefined) {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      
-                      // If player is showing, seek to timestamp
-                      if (showPlayer) {
-                        setCurrentTimestamp(track.timestamp);
-                        // The player will respond to currentTimestamp change
-                        if (playerMinimized) {
-                          setPlayerMinimized(false);
-                        }
-                      } else {
-                        // Open YouTube at timestamp if player not active
-                        const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                        if (youtubeLink) {
-                          // Start the player instead of opening externally
-                          setCurrentTimestamp(track.timestamp);
-                          setShowPlayer(true);
-                          setPlayerMinimized(false);
-                        }
-                      }
+                      setPendingTimestamp(track.timestamp);
                     }
                   }}
                   onContributorPress={(username) => setSelectedContributor(username)}
@@ -636,6 +627,35 @@ export default function SetDetailScreen() {
             await addPoints('source_added', setList.id);
           }
           return result;
+        }}
+      />
+
+      <TrackDetailModal
+        visible={selectedTrack !== null}
+        track={selectedTrack}
+        onClose={() => {
+          setSelectedTrack(null);
+          setPendingTimestamp(null);
+        }}
+        onPlayTimestamp={() => {
+          if (pendingTimestamp !== null) {
+            // If player is showing, seek to timestamp
+            if (showPlayer) {
+              setCurrentTimestamp(pendingTimestamp);
+              if (playerMinimized) {
+                setPlayerMinimized(false);
+              }
+            } else {
+              // Start the player at the timestamp
+              const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+              if (youtubeLink) {
+                setCurrentTimestamp(pendingTimestamp);
+                setShowPlayer(true);
+                setPlayerMinimized(false);
+              }
+            }
+          }
+          setPendingTimestamp(null);
         }}
       />
     </View>

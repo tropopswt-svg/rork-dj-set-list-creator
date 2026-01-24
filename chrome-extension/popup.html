@@ -192,6 +192,90 @@
       font-size: 11px;
       color: #666;
       text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .settings-toggle {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      opacity: 0.6;
+      transition: opacity 0.2s;
+    }
+    
+    .settings-toggle:hover {
+      opacity: 1;
+    }
+    
+    .settings {
+      background: #1a1a1a;
+      border-radius: 10px;
+      padding: 14px;
+      margin: 0 16px 12px;
+    }
+    
+    .settings-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    
+    .setting-row {
+      margin-bottom: 10px;
+    }
+    
+    .setting-row label {
+      display: block;
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 4px;
+    }
+    
+    .setting-row input {
+      width: 100%;
+      padding: 10px;
+      font-size: 12px;
+      background: #2a2a2a;
+      border: 1px solid #333;
+      border-radius: 6px;
+      color: #fff;
+    }
+    
+    .setting-row input:focus {
+      outline: none;
+      border-color: #FF6B35;
+    }
+    
+    .connection-status {
+      font-size: 11px;
+      margin-top: 8px;
+      padding: 6px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .connection-status.success {
+      background: rgba(0, 200, 83, 0.15);
+      color: #00C853;
+    }
+    
+    .connection-status.error {
+      background: rgba(255, 82, 82, 0.15);
+      color: #FF5252;
     }
     
     .loading {
@@ -257,8 +341,23 @@
     </button>
   </div>
   
+  <div id="settingsSection" class="settings" style="display: none;">
+    <div class="settings-header">
+      <span>⚙️ Settings</span>
+      <button class="close-btn" id="closeSettings">×</button>
+    </div>
+    <div class="setting-row">
+      <label for="apiUrl">API URL</label>
+      <input type="text" id="apiUrl" placeholder="https://your-api.vercel.app" />
+    </div>
+    <button class="btn btn-secondary" id="saveSettings">Save Settings</button>
+    <button class="btn" id="testConnection" style="background: #333; margin-top: 6px;">Test Connection</button>
+    <div id="connectionStatus" class="connection-status"></div>
+  </div>
+  
   <div class="footer">
-    Navigate to Beatport, SoundCloud, or 1001Tracklists
+    <span>Navigate to Beatport, SoundCloud, or 1001Tracklists</span>
+    <button class="settings-toggle" id="toggleSettings">⚙️</button>
   </div>
   
   <script src="popup.js"></script>

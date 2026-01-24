@@ -3,12 +3,30 @@
 let currentPlatform = null;
 let scrapedData = null;
 
+const DEFAULT_API_URL = 'https://rork-dj-set-list-creator-3um4.vercel.app';
+
 // Detect which platform we're on
 function detectPlatform(url) {
   if (url.includes('beatport.com')) return 'beatport';
   if (url.includes('soundcloud.com')) return 'soundcloud';
   if (url.includes('1001tracklists.com')) return '1001tracklists';
   return null;
+}
+
+// Get API URL from storage
+async function getApiUrl() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['apiUrl'], (result) => {
+      resolve(result.apiUrl || DEFAULT_API_URL);
+    });
+  });
+}
+
+// Save API URL to storage
+async function saveApiUrl(url) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.set({ apiUrl: url }, resolve);
+  });
 }
 
 // Update UI based on platform
@@ -96,7 +114,12 @@ async function scrape() {
     }
   } catch (error) {
     console.error('Scrape error:', error);
-    showMessage('Could not scrape page. Try refreshing.', 'error');
+    // More helpful error message
+    if (error.message?.includes('Receiving end does not exist')) {
+      showMessage('Page needs refresh. Press Cmd+R then try again.', 'error');
+    } else {
+      showMessage(`Scrape failed: ${error.message || 'Try refreshing the page'}`, 'error');
+    }
     showScrapeResults(null);
   }
   
@@ -155,9 +178,66 @@ async function init() {
   }
 }
 
+// Toggle settings panel
+function toggleSettings() {
+  const settingsSection = document.getElementById('settingsSection');
+  const isVisible = settingsSection.style.display !== 'none';
+  settingsSection.style.display = isVisible ? 'none' : 'block';
+  
+  if (!isVisible) {
+    // Load current API URL
+    getApiUrl().then(url => {
+      document.getElementById('apiUrl').value = url;
+    });
+  }
+}
+
+// Save settings
+async function saveSettings() {
+  const url = document.getElementById('apiUrl').value.trim();
+  if (url) {
+    await saveApiUrl(url);
+    showMessage('Settings saved!', 'success');
+    
+    // Also update the background script
+    chrome.runtime.sendMessage({ type: 'UPDATE_API_URL', url });
+  }
+}
+
+// Test API connection
+async function testConnection() {
+  const url = document.getElementById('apiUrl').value.trim() || DEFAULT_API_URL;
+  const statusEl = document.getElementById('connectionStatus');
+  
+  statusEl.textContent = 'Testing...';
+  statusEl.className = 'connection-status';
+  
+  try {
+    const response = await fetch(`${url}/api/import`, {
+      method: 'GET',
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      statusEl.textContent = `✓ Connected! ${data.status || 'API is running'}`;
+      statusEl.className = 'connection-status success';
+    } else {
+      statusEl.textContent = `✗ Error: ${response.status} ${response.statusText}`;
+      statusEl.className = 'connection-status error';
+    }
+  } catch (error) {
+    statusEl.textContent = `✗ Connection failed: ${error.message}`;
+    statusEl.className = 'connection-status error';
+  }
+}
+
 // Event listeners
 document.getElementById('scrapeBtn').addEventListener('click', scrape);
 document.getElementById('sendBtn').addEventListener('click', sendToApi);
+document.getElementById('toggleSettings').addEventListener('click', toggleSettings);
+document.getElementById('closeSettings').addEventListener('click', toggleSettings);
+document.getElementById('saveSettings').addEventListener('click', saveSettings);
+document.getElementById('testConnection').addEventListener('click', testConnection);
 
 // Initialize
 init();
