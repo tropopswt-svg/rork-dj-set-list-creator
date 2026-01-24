@@ -1,7 +1,7 @@
 // Chrome Extension Import API
 // Receives scraped data from the extension and imports into Supabase
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
 // Initialize Supabase
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -24,8 +24,8 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
-export default async function handler(req, res) {
-  // CORS headers - allow from anywhere (Chrome extension)
+module.exports = async function handler(req, res) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ 
       status: 'ok', 
       endpoint: 'chrome-import',
-      message: 'Use POST to import data'
+      supabaseConfigured: !!(supabaseUrl && supabaseKey)
     });
   }
   
@@ -99,7 +99,6 @@ export default async function handler(req, res) {
           if (existing) {
             // Update with new info if we have it
             const updates = {};
-            if (artist.image_url && !existing.image_url) updates.image_url = artist.image_url;
             if (artist.beatport_url) updates.beatport_url = artist.beatport_url;
             if (artist.soundcloud_url) updates.soundcloud_url = artist.soundcloud_url;
             if (artist.genres?.length) updates.genres = artist.genres;
@@ -164,7 +163,7 @@ export default async function handler(req, res) {
           if (existing) {
             // Update with new info
             const updates = {};
-            if (track.label && !existing.label) updates.label = track.label;
+            if (track.label) updates.label = track.label;
             if (track.bpm) updates.bpm = track.bpm;
             if (track.key) updates.key = track.key;
             if (track.beatport_url) updates.beatport_url = track.beatport_url;
@@ -244,4 +243,4 @@ export default async function handler(req, res) {
       message: error.message,
     });
   }
-}
+};
