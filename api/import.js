@@ -445,10 +445,14 @@ async function fetchSoundCloudComments(trackId, clientId) {
   if (!trackId || !clientId) return [];
   
   try {
-    const commentsUrl = `${SOUNDCLOUD_API_V2}/tracks/${trackId}/comments?client_id=${clientId}&limit=200&offset=0`;
+    // Use threaded=1 parameter - this is required for the API to work
+    const commentsUrl = `${SOUNDCLOUD_API_V2}/tracks/${trackId}/comments?client_id=${clientId}&threaded=1&filter_replies=0&limit=200&offset=0`;
+    console.log('Fetching SoundCloud comments from:', commentsUrl.substring(0, 80) + '...');
+    
     const response = await fetch(commentsUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'application/json',
       },
     });
     
@@ -459,8 +463,9 @@ async function fetchSoundCloudComments(trackId, clientId) {
     
     const data = await response.json();
     const comments = data.collection || [];
+    console.log(`Got ${comments.length} comments from SoundCloud API`);
     
-    // Map to our comment format
+    // Map to our comment format - SoundCloud timestamps are in milliseconds
     return comments.map(c => ({
       id: c.id,
       authorName: c.user?.username || 'Anonymous',
