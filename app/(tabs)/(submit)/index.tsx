@@ -30,6 +30,7 @@ import Colors from '@/constants/colors';
 import { useFormValidation, validationRules } from '@/utils/hooks';
 import { useSets } from '@/contexts/SetsContext';
 import { SetList, Track, SourceLink } from '@/types';
+import { useRef } from 'react';
 import ArtistAutocomplete from '@/components/ArtistAutocomplete';
 import TrackAutocomplete from '@/components/TrackAutocomplete';
 import type { DbArtist, DbTrack } from '@/lib/supabase/types';
@@ -84,7 +85,10 @@ interface ScrapedSourceInfo {
 
 export default function SubmitScreen() {
   const router = useRouter();
-  const { addSet } = useSets();
+  const { addSet, updateSet } = useSets();
+  
+  // Ref to track submitted set ID for background matching
+  const submittedSetIdRef = useRef<string | null>(null);
   
   const form = useFormValidation(
     {
@@ -338,6 +342,33 @@ export default function SubmitScreen() {
         
         console.log(`[Submit] Background match: ${linkedCount} linked, ${unreleasedCount} unreleased`);
         
+        // If set was already submitted, update it in context
+        if (submittedSetIdRef.current) {
+          const convertedTracks: Track[] = updatedTracks.map((t, i) => ({
+            id: `track-${Date.now()}-${i}`,
+            title: t.title,
+            artist: t.artist,
+            timestamp: parseTimestamp(t.timestamp),
+            duration: 0,
+            coverUrl: scrapedThumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+            addedAt: new Date(),
+            source: 'manual' as const,
+            verified: false,
+            isUnreleased: t.isUnreleased,
+          }));
+          
+          updateSet(submittedSetIdRef.current, {
+            tracks: convertedTracks,
+            isMatchingInProgress: false,
+            matchingStats: {
+              total: tracks.length,
+              matched: linkedCount,
+              unreleased: unreleasedCount,
+            },
+          });
+          console.log(`[Submit] Updated set ${submittedSetIdRef.current} with matching results`);
+        }
+        
         // Also check artist
         if (form.values.artistName) {
           const artistCheck = await artistExists(form.values.artistName);
@@ -349,6 +380,12 @@ export default function SubmitScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
         console.warn('[Submit] Background matching error:', error);
+        // If set was submitted, mark matching as done even on error
+        if (submittedSetIdRef.current) {
+          updateSet(submittedSetIdRef.current, {
+            isMatchingInProgress: false,
+          });
+        }
       } finally {
         // Keep showing results for a moment, then hide
         setTimeout(() => {
@@ -358,6 +395,14 @@ export default function SubmitScreen() {
     } else {
       setImportProgress({ step: 'idle', message: '' });
     }
+  };
+  
+  // Helper to parse timestamp string to seconds (defined early for handleContinueAndMatch)
+  const parseTimestamp = (ts: string): number => {
+    const parts = ts.split(':').map(Number);
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    return 0;
   };
 
   const handleImportFromUrl = async () => {
@@ -403,14 +448,6 @@ export default function SubmitScreen() {
 
   const handleRemoveTrack = (id: string) => {
     setTracks(tracks.filter((t) => t.id !== id));
-  };
-
-  // Helper to parse timestamp string to seconds
-  const parseTimestamp = (ts: string): number => {
-    const parts = ts.split(':').map(Number);
-    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-    if (parts.length === 2) return parts[0] * 60 + parts[1];
-    return 0;
   };
 
   // Helper to parse duration string to seconds
@@ -473,11 +510,13 @@ export default function SubmitScreen() {
       addedAt: new Date(),
       source: 'manual' as const,
       verified: false,
+      isUnreleased: t.isUnreleased,
     }));
 
     // Create the SetList object
+    const newSetId = `set-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newSet: SetList = {
-      id: `set-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: newSetId,
       name: form.values.setName.trim(),
       artist: form.values.artistName.trim(),
       venue: form.values.venue.trim() || undefined,
@@ -490,7 +529,13 @@ export default function SubmitScreen() {
       commentsScraped: 0,
       tracksIdentified: convertedTracks.length,
       plays: 0,
+      // Mark as matching in progress if background matching is still running
+      isMatchingInProgress: isMatching,
+      matchingStats: isMatching ? undefined : (matchingProgress.matched > 0 ? matchingProgress : undefined),
     };
+    
+    // Store the set ID so background matching can update it
+    submittedSetIdRef.current = newSetId;
 
     // Add to context
     const result = addSet(newSet);

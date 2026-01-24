@@ -64,6 +64,13 @@ export interface SetList {
   plays?: number;
   // Multi-source merging
   conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes
+  // IDentified matching state
+  isMatchingInProgress?: boolean;
+  matchingStats?: {
+    total: number;
+    matched: number;
+    unreleased: number;
+  };
 }
 
 export interface SocialComment {

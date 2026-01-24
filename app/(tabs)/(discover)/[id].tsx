@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -19,6 +19,7 @@ import {
   CheckCircle,
   Bookmark,
   BookmarkCheck,
+  AlertCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -304,6 +305,35 @@ export default function SetDetailScreen() {
               ) : null}
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
             </View>
+            
+            {/* IDentified Matching Progress Banner */}
+            {setList.isMatchingInProgress && (
+              <View style={styles.matchingBanner}>
+                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                <View style={styles.matchingBannerContent}>
+                  <Text style={styles.matchingBannerTitle}>IDentifying tracks...</Text>
+                  <Text style={styles.matchingBannerSubtext}>
+                    Matching tracks to database
+                  </Text>
+                </View>
+                <Sparkles size={18} color={Colors.dark.primary} />
+              </View>
+            )}
+            
+            {/* Matching Complete Banner */}
+            {!setList.isMatchingInProgress && setList.matchingStats && (
+              <View style={styles.matchingCompleteBanner}>
+                <CheckCircle size={16} color={Colors.dark.success} />
+                <Text style={styles.matchingCompleteText}>
+                  {setList.matchingStats.matched} matched
+                  {setList.matchingStats.unreleased > 0 && (
+                    <Text style={styles.matchingUnreleasedText}>
+                      {' '}• {setList.matchingStats.unreleased} unreleased
+                    </Text>
+                  )}
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.linksSection}>
@@ -951,5 +981,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginTop: 100,
+  },
+  // IDentified matching progress banners
+  matchingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.2)',
+  },
+  matchingBannerContent: {
+    flex: 1,
+  },
+  matchingBannerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+  },
+  matchingBannerSubtext: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 2,
+  },
+  matchingCompleteBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 12,
+    gap: 8,
+  },
+  matchingCompleteText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.success,
+  },
+  matchingUnreleasedText: {
+    color: Colors.dark.primary,
   },
 });

@@ -197,6 +197,35 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     return { success: true, set: setWithId };
   }, [findDuplicateSet, allArtists]);
 
+  /**
+   * Update an existing set (used for matching state, tracks, etc.)
+   */
+  const updateSet = useCallback((setId: string, updates: Partial<SetList>) => {
+    setSets(prev => {
+      const updated = prev.map(set => {
+        if (set.id === setId) {
+          const updatedSet = { ...set, ...updates };
+          console.log('[SetsContext] Set updated:', setId, Object.keys(updates));
+          return updatedSet;
+        }
+        return set;
+      });
+      return updated;
+    });
+    
+    // Also update submitted sets storage
+    setSubmittedSets(prev => {
+      const updated = prev.map(set => {
+        if (set.id === setId) {
+          return { ...set, ...updates };
+        }
+        return set;
+      });
+      AsyncStorage.setItem(SUBMITTED_SETS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
   const toggleSaveSet = useCallback(async (setId: string) => {
     setSavedSetIds(prev => {
       const newSet = new Set(prev);
@@ -611,6 +640,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     allArtists,
     isLoading,
     addSet,
+    updateSet,
     addArtist,
     toggleSaveSet,
     isSetSaved,
