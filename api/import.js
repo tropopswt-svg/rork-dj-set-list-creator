@@ -755,16 +755,22 @@ async function importFromSoundCloud(url) {
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
   
-  // Deduplicate using segment-based grouping
-  const tracks = deduplicateSingleSource(allTracks);
-  
   // Parse artist/title 
   const { name, artist } = parseArtistFromTitle(title);
   const finalArtist = artist !== 'Unknown Artist' ? artist : artistFromPage;
   const finalName = name || title;
+  const setId = `sc-${oembedInfo.id}-${Date.now()}`;
+  
+  // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
+  const { tracks, conflicts: samePlatformConflicts } = deduplicateSingleSource(
+    allTracks,
+    'soundcloud',
+    setId,
+    finalName
+  );
   
   const setList = {
-    id: `sc-${oembedInfo.id}-${Date.now()}`,
+    id: setId,
     name: finalName,
     artist: finalArtist,
     date: pageInfo?.createdAt || new Date().toISOString(),
@@ -772,13 +778,15 @@ async function importFromSoundCloud(url) {
       id: `imported-${Date.now()}-${i}`,
       title: pt.title,
       artist: pt.artist,
-      duration: 0,
+      duration: pt.duration || 0,
       coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
       verified: false,
       contributedBy: pt.sourceAuthor || 'Description',
+      hasConflict: pt.hasConflict,
+      conflictId: pt.conflictId,
     })),
     coverUrl: thumbnailUrl,
     sourceLinks: [{ platform: 'soundcloud', url }],
@@ -786,6 +794,7 @@ async function importFromSoundCloud(url) {
     aiProcessed: true,
     commentsScraped: comments.length,
     tracksIdentified: tracks.length,
+    conflicts: samePlatformConflicts, // Include same-platform conflicts
     plays: pageInfo?.playbackCount || 0,
   };
   
@@ -801,6 +810,7 @@ async function importFromSoundCloud(url) {
     },
     commentsCount: comments.length,
     tracksCount: tracks.length,
+    samePlatformConflicts: samePlatformConflicts.length,
   };
 }
 
@@ -808,57 +818,148 @@ async function importFromSoundCloud(url) {
 
 /**
  * Deduplicate tracks from a single source using segment-based grouping.
- * Picks the highest confidence track within each time segment.
+ * Returns both deduplicated tracks AND any same-platform conflicts.
+ * 
+ * Same-platform conflicts occur when multiple comments suggest different tracks
+ * at similar timestamps (e.g., someone got the timestamp wrong, or different people
+ * identify different tracks at the same point).
  */
-function deduplicateSingleSource(tracks) {
-  if (tracks.length === 0) return [];
+function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, setName = null) {
+  if (tracks.length === 0) return { tracks: [], conflicts: [] };
   
   // Sort by timestamp
   const sorted = [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   
   const deduped = [];
+  const conflicts = [];
+  const segments = [];
   let currentSegment = [sorted[0]];
   
+  // Group into segments
   for (let i = 1; i < sorted.length; i++) {
     const track = sorted[i];
     const lastTrack = currentSegment[currentSegment.length - 1];
     const timeDiff = (track.timestamp || 0) - (lastTrack.timestamp || 0);
     
     if (timeDiff <= SEGMENT_WINDOW) {
-      // Same segment - check if it's a duplicate or different track
-      const isSimilar = currentSegment.some(t => {
-        const sim = calculateTrackSimilarity(t.title, t.artist, track.title, track.artist);
-        return sim >= MIN_SIMILARITY;
-      });
-      
-      if (isSimilar) {
-        // Duplicate - add to segment (will pick best later)
-        currentSegment.push(track);
-      } else {
-        // Different track at similar timestamp - keep both but adjust timestamp slightly
-        track.timestamp = (lastTrack.timestamp || 0) + 5; // Slight offset
-        currentSegment.push(track);
-      }
+      currentSegment.push(track);
     } else {
-      // New segment - resolve current segment and start new one
-      const best = currentSegment.reduce((best, t) => 
-        (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
-      );
-      deduped.push(best);
+      segments.push(currentSegment);
       currentSegment = [track];
     }
   }
+  segments.push(currentSegment);
   
-  // Don't forget the last segment
-  if (currentSegment.length > 0) {
-    const best = currentSegment.reduce((best, t) => 
-      (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
-    );
-    deduped.push(best);
+  // Process each segment
+  for (const segment of segments) {
+    if (segment.length === 1) {
+      // Single track - no conflict
+      deduped.push(segment[0]);
+      continue;
+    }
+    
+    // Multiple tracks in segment - group by similarity
+    const trackGroups = [];
+    
+    for (const track of segment) {
+      let foundGroup = false;
+      
+      for (const group of trackGroups) {
+        const sim = calculateTrackSimilarity(
+          track.title, track.artist,
+          group[0].title, group[0].artist
+        );
+        
+        if (sim >= MIN_SIMILARITY) {
+          group.push(track);
+          foundGroup = true;
+          break;
+        }
+      }
+      
+      if (!foundGroup) {
+        trackGroups.push([track]);
+      }
+    }
+    
+    if (trackGroups.length === 1) {
+      // All tracks match - pick the best one (highest confidence/likes)
+      const best = trackGroups[0].reduce((best, t) => {
+        const tScore = (t.confidence || 0.7) + (t.likes || 0) * 0.001;
+        const bestScore = (best.confidence || 0.7) + (best.likes || 0) * 0.001;
+        return tScore > bestScore ? t : best;
+      });
+      deduped.push(best);
+    } else {
+      // Multiple different tracks at same timestamp = conflict
+      // Sort groups by total confidence/support
+      const rankedGroups = trackGroups
+        .map(group => ({
+          group,
+          totalConfidence: group.reduce((sum, t) => sum + (t.confidence || 0.7), 0),
+          totalLikes: group.reduce((sum, t) => sum + (t.likes || 0), 0),
+          count: group.length,
+        }))
+        .sort((a, b) => {
+          // More sources > higher confidence > more likes
+          if (b.count !== a.count) return b.count - a.count;
+          if (b.totalConfidence !== a.totalConfidence) return b.totalConfidence - a.totalConfidence;
+          return b.totalLikes - a.totalLikes;
+        });
+      
+      // Check if top group has significantly more support
+      const topGroup = rankedGroups[0];
+      const secondGroup = rankedGroups[1];
+      const confidenceGap = (topGroup.totalConfidence / topGroup.count) - (secondGroup.totalConfidence / secondGroup.count);
+      
+      if (topGroup.count >= 2 && secondGroup.count === 1 && confidenceGap > 0.15) {
+        // Clear winner - multiple people agreed, only one person disagreed
+        const best = topGroup.group.reduce((best, t) => 
+          (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+        );
+        deduped.push(best);
+        console.log(`Auto-resolved same-platform conflict at ${segment[0].timestamp}s: "${best.title}" (${topGroup.count} sources vs ${secondGroup.count})`);
+      } else {
+        // Genuine conflict - create for user voting
+        const timestamp = segment[0].timestamp || 0;
+        
+        conflicts.push({
+          id: `conflict-single-${platform}-${timestamp}-${Date.now()}`,
+          setId: setId || 'pending',
+          setName: setName || 'Unknown Set',
+          timestamp,
+          options: rankedGroups.slice(0, 3).map((rg, i) => {
+            const best = rg.group[0];
+            return {
+              id: `opt-${platform}-${i}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              title: best.title,
+              artist: best.artist,
+              source: platform,
+              confidence: rg.totalConfidence / rg.count,
+              contributedBy: best.sourceAuthor,
+              duration: best.duration,
+              supportCount: rg.count,
+            };
+          }),
+          votes: [],
+          createdAt: new Date().toISOString(),
+          status: 'active',
+          isSamePlatform: true, // Flag to indicate this is a same-platform conflict
+        });
+        
+        // Still add the top-ranked option as the default track (can be overridden by voting)
+        const defaultTrack = rankedGroups[0].group[0];
+        defaultTrack.hasConflict = true;
+        defaultTrack.conflictId = conflicts[conflicts.length - 1].id;
+        deduped.push(defaultTrack);
+        
+        console.log(`Same-platform conflict at ${timestamp}s: ${rankedGroups.length} different track suggestions`);
+      }
+    }
   }
   
-  console.log(`Deduplication: ${tracks.length} -> ${deduped.length} tracks`);
-  return deduped;
+  console.log(`Deduplication: ${tracks.length} -> ${deduped.length} tracks, ${conflicts.length} same-platform conflicts`);
+  return { tracks: deduped, conflicts };
 }
 
 async function importFromYouTube(url, apiKey) {
@@ -876,13 +977,19 @@ async function importFromYouTube(url, apiKey) {
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
   
-  // Deduplicate using segment-based grouping
-  const tracks = deduplicateSingleSource(allTracks);
-  
   const { name, artist } = parseArtistFromTitle(video.title);
+  const setId = `yt-${video.id}-${Date.now()}`;
+  
+  // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
+  const { tracks, conflicts: samePlatformConflicts } = deduplicateSingleSource(
+    allTracks, 
+    'youtube',
+    setId,
+    name
+  );
 
   const setList = {
-    id: `yt-${video.id}-${Date.now()}`,
+    id: setId,
     name,
     artist: artist !== 'Unknown Artist' ? artist : video.channelTitle,
     date: video.publishedAt,
@@ -890,13 +997,15 @@ async function importFromYouTube(url, apiKey) {
       id: `imported-${Date.now()}-${i}`,
       title: pt.title,
       artist: pt.artist,
-      duration: 0,
+      duration: pt.duration || 0,
       coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
       verified: false,
       contributedBy: pt.sourceAuthor,
+      hasConflict: pt.hasConflict,
+      conflictId: pt.conflictId,
     })),
     coverUrl: video.thumbnailUrl,
     sourceLinks: [{ platform: 'youtube', url }],
@@ -904,10 +1013,18 @@ async function importFromYouTube(url, apiKey) {
     aiProcessed: true,
     commentsScraped: comments.length,
     tracksIdentified: tracks.length,
+    conflicts: samePlatformConflicts, // Include same-platform conflicts
     plays: 0,
   };
 
-  return { success: true, setList, videoInfo: video, commentsCount: comments.length, tracksCount: tracks.length };
+  return { 
+    success: true, 
+    setList, 
+    videoInfo: video, 
+    commentsCount: comments.length, 
+    tracksCount: tracks.length,
+    samePlatformConflicts: samePlatformConflicts.length,
+  };
 }
 
 // ============ TRACK MERGING UTILITIES ============
