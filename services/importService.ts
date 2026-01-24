@@ -194,9 +194,14 @@ async function importFromYouTubeUrl(
   url: string,
   onProgress?: (progress: ImportProgress) => void
 ): Promise<ImportResult> {
-  // Use backend API if configured
+  // Try backend API if configured, fallback to client-side if it fails
   if (USE_BACKEND) {
-    return importViaBackend(url, onProgress);
+    try {
+      return await importViaBackend(url, onProgress);
+    } catch (error) {
+      console.warn('Backend import failed, falling back to client-side:', error);
+      // Fall through to client-side parsing
+    }
   }
 
   onProgress?.({ step: 'fetching', message: 'Fetching video metadata...' });
