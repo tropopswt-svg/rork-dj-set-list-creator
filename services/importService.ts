@@ -153,6 +153,12 @@ async function importViaBackend(
     body: JSON.stringify({ url }),
   });
 
+  // Check content-type to ensure it's JSON before parsing
+  const contentType = response.headers.get('content-type');
+  if (!contentType || !contentType.includes('application/json')) {
+    throw new Error('Backend unavailable');
+  }
+
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.error || 'Import failed');
