@@ -26,18 +26,30 @@ import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ContributorModal from '@/components/ContributorModal';
+import AddSourceModal from '@/components/AddSourceModal';
+import TrackConflictCard from '@/components/TrackConflictCard';
+import PointsBadge from '@/components/PointsBadge';
 import { mockSetLists } from '@/mocks/tracks';
-import { Track, SourceLink } from '@/types';
+import { Track, SourceLink, TrackConflict } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
+import { useSets } from '@/contexts/SetsContext';
+import { useUser } from '@/contexts/UserContext';
 
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { addSourceToSet, voteOnConflict, getActiveConflicts } = useSets();
+  const { userId, addPoints } = useUser();
+  
   const [showAddModal, setShowAddModal] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
+  
+  // Add Source Modal state
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud' | 'mixcloud'>('youtube');
   
   const setList = useMemo(() => {
     const found = mockSetLists.find(s => s.id === id);
@@ -46,6 +58,12 @@ export default function SetDetailScreen() {
     }
     return found;
   }, [id, tracks.length]);
+
+  // Get conflicts for this set
+  const conflicts = useMemo(() => {
+    if (!id) return [];
+    return getActiveConflicts(id);
+  }, [id, getActiveConflicts]);
 
   useEffect(() => {
     const checkSavedStatus = async () => {
@@ -221,24 +239,103 @@ export default function SetDetailScreen() {
           </View>
 
           <View style={styles.linksSection}>
-            <Text style={styles.sectionLabel}>Listen on</Text>
+            <Text style={styles.sectionLabel}>Sources</Text>
             <View style={styles.linksGrid}>
-              {setList.sourceLinks.map((link, index) => (
-                <Pressable 
-                  key={index} 
-                  style={styles.linkCard}
-                  onPress={() => handleOpenSource(link)}
-                >
-                  <View style={styles.linkIconContainer}>
-                    {getPlatformIcon(link.platform, 22)}
-                  </View>
-                  <Text style={styles.linkPlatform}>{getPlatformName(link.platform)}</Text>
-                  {link.label && (
-                    <Text style={styles.linkLabel}>{link.label}</Text>
-                  )}
-                  <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                </Pressable>
-              ))}
+              {/* YouTube */}
+              {(() => {
+                const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                return ytLink ? (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardFilled]}
+                    onPress={() => handleOpenSource(ytLink)}
+                  >
+                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
+                      <Youtube size={22} color="#FF0000" />
+                    </View>
+                    <Text style={styles.linkPlatform}>YouTube</Text>
+                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                  </Pressable>
+                ) : (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardEmpty]}
+                    onPress={() => {
+                      setSelectedPlatform('youtube');
+                      setShowSourceModal(true);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
+                      <Youtube size={22} color={Colors.dark.textMuted} />
+                    </View>
+                    <Text style={styles.linkPlatformEmpty}>YouTube</Text>
+                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
+                  </Pressable>
+                );
+              })()}
+
+              {/* SoundCloud */}
+              {(() => {
+                const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+                return scLink ? (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardFilled]}
+                    onPress={() => handleOpenSource(scLink)}
+                  >
+                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
+                      <Music2 size={22} color="#FF5500" />
+                    </View>
+                    <Text style={styles.linkPlatform}>SoundCloud</Text>
+                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                  </Pressable>
+                ) : (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardEmpty]}
+                    onPress={() => {
+                      setSelectedPlatform('soundcloud');
+                      setShowSourceModal(true);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
+                      <Music2 size={22} color={Colors.dark.textMuted} />
+                    </View>
+                    <Text style={styles.linkPlatformEmpty}>SoundCloud</Text>
+                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
+                  </Pressable>
+                );
+              })()}
+
+              {/* Mixcloud */}
+              {(() => {
+                const mcLink = setList.sourceLinks.find(l => l.platform === 'mixcloud');
+                return mcLink ? (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardFilled]}
+                    onPress={() => handleOpenSource(mcLink)}
+                  >
+                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(80, 0, 255, 0.1)' }]}>
+                      <Radio size={22} color="#5000FF" />
+                    </View>
+                    <Text style={styles.linkPlatform}>Mixcloud</Text>
+                    <ExternalLink size={14} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                  </Pressable>
+                ) : (
+                  <Pressable 
+                    style={[styles.linkCard, styles.linkCardEmpty]}
+                    onPress={() => {
+                      setSelectedPlatform('mixcloud');
+                      setShowSourceModal(true);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    }}
+                  >
+                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
+                      <Radio size={22} color={Colors.dark.textMuted} />
+                    </View>
+                    <Text style={styles.linkPlatformEmpty}>Mixcloud</Text>
+                    <Plus size={16} color={Colors.dark.primary} style={styles.linkExternal} />
+                  </Pressable>
+                );
+              })()}
             </View>
           </View>
 
@@ -282,6 +379,36 @@ export default function SetDetailScreen() {
               <Text style={styles.aiInfoText}>
                 Tracklist built from {setList.commentsScraped?.toLocaleString()} comments & 1001Tracklists
               </Text>
+            </View>
+          )}
+
+          {/* Track Conflicts Section */}
+          {conflicts.length > 0 && (
+            <View style={styles.conflictsSection}>
+              <Text style={styles.sectionTitle}>
+                Track Conflicts ({conflicts.length})
+              </Text>
+              <Text style={styles.conflictsSubtitle}>
+                Help identify the correct tracks by voting
+              </Text>
+              {conflicts.map((conflict) => (
+                <TrackConflictCard
+                  key={conflict.id}
+                  conflict={conflict}
+                  onVote={async (optionId) => {
+                    const result = await voteOnConflict(conflict.id, optionId, userId);
+                    if (result.success) {
+                      await addPoints('vote_cast', conflict.id);
+                      if (result.resolved && result.winnerId === optionId) {
+                        await addPoints('vote_correct', conflict.id);
+                      }
+                    }
+                    return result;
+                  }}
+                  userHasVoted={conflict.votes.some(v => v.oderId === userId)}
+                  userVotedOptionId={conflict.votes.find(v => v.oderId === userId)?.optionId}
+                />
+              ))}
             </View>
           )}
 
@@ -364,6 +491,21 @@ export default function SetDetailScreen() {
         visible={selectedContributor !== null}
         username={selectedContributor || ''}
         onClose={() => setSelectedContributor(null)}
+      />
+
+      <AddSourceModal
+        visible={showSourceModal}
+        platform={selectedPlatform}
+        setName={setList?.name || 'this set'}
+        onClose={() => setShowSourceModal(false)}
+        onImport={async (url) => {
+          if (!setList) return { success: false, error: 'Set not found' };
+          const result = await addSourceToSet(setList.id, url, selectedPlatform);
+          if (result.success) {
+            await addPoints('source_added', setList.id);
+          }
+          return result;
+        }}
       />
     </View>
   );
@@ -485,6 +627,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 12,
     gap: 10,
+    flex: 1,
+  },
+  linkCardFilled: {
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  linkCardEmpty: {
+    borderWidth: 1,
+    borderColor: Colors.dark.surfaceLight,
+    borderStyle: 'dashed',
   },
   linkIconContainer: {
     width: 36,
@@ -494,10 +646,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  linkIconEmpty: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: Colors.dark.surfaceLight,
+  },
   linkPlatform: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.dark.text,
+  },
+  linkPlatformEmpty: {
+    fontSize: 14,
+    fontWeight: '500' as const,
+    color: Colors.dark.textMuted,
   },
   linkLabel: {
     fontSize: 12,
@@ -505,6 +667,14 @@ const styles = StyleSheet.create({
   },
   linkExternal: {
     marginLeft: 'auto',
+  },
+  conflictsSection: {
+    marginBottom: 24,
+  },
+  conflictsSubtitle: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+    marginBottom: 12,
   },
   statsSection: {
     flexDirection: 'row',

@@ -1,13 +1,17 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { SetList, Artist, Track } from '@/types';
+import { SetList, Artist, Track, TrackConflict, ConflictVote, SourceLink } from '@/types';
 import { trackLibrary } from '@/lib/TrackLibrary';
 
 const SETS_STORAGE_KEY = 'saved_sets';
 const ARTISTS_STORAGE_KEY = 'custom_artists';
 const SUBMITTED_SETS_KEY = 'submitted_sets';
 const TRACK_REPOSITORY_KEY = 'track_repository';
+const CONFLICTS_STORAGE_KEY = 'track_conflicts';
+
+// API base URL
+const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
 
 function normalizeUrl(url: string): string {
   return url
@@ -353,6 +357,252 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     console.log('[SetsContext] Track removed from repository:', trackId);
   }, []);
 
+  // ==========================================
+  // Multi-Source Merging & Conflict Resolution
+  // ==========================================
+
+  const [conflicts, setConflicts] = useState<TrackConflict[]>([]);
+
+  // Load conflicts on mount
+  useEffect(() => {
+    AsyncStorage.getItem(CONFLICTS_STORAGE_KEY).then(json => {
+      if (json) {
+        const loaded = JSON.parse(json) as TrackConflict[];
+        // Parse dates
+        const parsed = loaded.map(c => ({
+          ...c,
+          createdAt: new Date(c.createdAt),
+          resolvedAt: c.resolvedAt ? new Date(c.resolvedAt) : undefined,
+          votes: c.votes.map(v => ({ ...v, votedAt: new Date(v.votedAt) })),
+        }));
+        setConflicts(parsed);
+        console.log('[SetsContext] Loaded', parsed.length, 'conflicts');
+      }
+    });
+  }, []);
+
+  // Save conflicts when changed
+  const saveConflicts = useCallback(async (newConflicts: TrackConflict[]) => {
+    await AsyncStorage.setItem(CONFLICTS_STORAGE_KEY, JSON.stringify(newConflicts));
+  }, []);
+
+  /**
+   * Add a secondary source to an existing set and merge tracks
+   */
+  const addSourceToSet = useCallback(async (
+    setId: string,
+    url: string,
+    platform: 'youtube' | 'soundcloud' | 'mixcloud'
+  ): Promise<{ success: boolean; stats?: any; error?: string }> => {
+    const existingSet = sets.find(s => s.id === setId);
+    if (!existingSet) {
+      return { success: false, error: 'Set not found' };
+    }
+
+    // Check if source already exists
+    const hasSource = existingSet.sourceLinks.some(link => link.platform === platform);
+    if (hasSource) {
+      return { success: false, error: `This set already has a ${platform} link` };
+    }
+
+    try {
+      // Call API with merge mode
+      const response = await fetch(`${API_BASE_URL}/api/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url,
+          mergeWith: {
+            existingTracks: existingSet.tracks,
+            primaryDuration: existingSet.totalDuration,
+            setId: existingSet.id,
+            setName: existingSet.name,
+          },
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        return { success: false, error: result.error || 'Import failed' };
+      }
+
+      // Update the set with merged data
+      const newSourceLink: SourceLink = { platform, url };
+      
+      setSets(prev => {
+        const updated = prev.map(set => {
+          if (set.id === setId) {
+            return {
+              ...set,
+              sourceLinks: [...set.sourceLinks, newSourceLink],
+              tracks: result.mergeResult?.mergedTracks || set.tracks,
+              conflicts: result.mergeResult?.conflicts || [],
+            };
+          }
+          return set;
+        });
+
+        // Also update submitted sets
+        const updatedSet = updated.find(s => s.id === setId);
+        if (updatedSet) {
+          setSubmittedSets(prev => {
+            const newSubmitted = prev.map(s => s.id === setId ? updatedSet : s);
+            AsyncStorage.setItem(SUBMITTED_SETS_KEY, JSON.stringify(newSubmitted));
+            return newSubmitted;
+          });
+        }
+
+        return updated;
+      });
+
+      // Add any new conflicts to global conflicts
+      if (result.mergeResult?.conflicts?.length > 0) {
+        setConflicts(prev => {
+          const newConflicts = [...prev, ...result.mergeResult.conflicts];
+          saveConflicts(newConflicts);
+          return newConflicts;
+        });
+      }
+
+      console.log('[SetsContext] Added source to set:', platform, 'Stats:', result.mergeResult?.stats);
+      return { success: true, stats: result.mergeResult?.stats };
+
+    } catch (error: any) {
+      console.error('[SetsContext] Error adding source:', error);
+      return { success: false, error: error.message || 'Failed to import' };
+    }
+  }, [sets, saveConflicts]);
+
+  /**
+   * Vote on a track conflict
+   */
+  const voteOnConflict = useCallback(async (
+    conflictId: string,
+    optionId: string,
+    oderId: string
+  ): Promise<{ success: boolean; resolved?: boolean; winnerId?: string }> => {
+    const conflict = conflicts.find(c => c.id === conflictId);
+    if (!conflict) {
+      return { success: false };
+    }
+
+    // Check if user already voted
+    if (conflict.votes.some(v => v.oderId === oderId)) {
+      return { success: false }; // Already voted
+    }
+
+    const newVote: ConflictVote = {
+      oderId,
+      optionId,
+      votedAt: new Date(),
+    };
+
+    const updatedConflict = {
+      ...conflict,
+      votes: [...conflict.votes, newVote],
+    };
+
+    // Check if conflict can be resolved (3+ votes)
+    let resolved = false;
+    let winnerId: string | undefined;
+
+    if (updatedConflict.votes.length >= 3) {
+      // Count votes
+      const voteCounts = new Map<string, number>();
+      for (const opt of conflict.options) {
+        voteCounts.set(opt.id, 0);
+      }
+      for (const vote of updatedConflict.votes) {
+        voteCounts.set(vote.optionId, (voteCounts.get(vote.optionId) || 0) + 1);
+      }
+
+      // Find winner (simple majority)
+      let maxVotes = 0;
+      for (const [optId, count] of voteCounts) {
+        if (count > maxVotes) {
+          maxVotes = count;
+          winnerId = optId;
+        }
+      }
+
+      // Only resolve if clear winner (more than 50%)
+      if (maxVotes > updatedConflict.votes.length / 2) {
+        resolved = true;
+        updatedConflict.status = 'resolved';
+        updatedConflict.winnerId = winnerId;
+        updatedConflict.resolvedAt = new Date();
+      }
+    }
+
+    // Update conflicts state
+    setConflicts(prev => {
+      const updated = prev.map(c => c.id === conflictId ? updatedConflict : c);
+      saveConflicts(updated);
+      return updated;
+    });
+
+    // If resolved, update the set's tracks
+    if (resolved && winnerId) {
+      const winningOption = conflict.options.find(o => o.id === winnerId);
+      if (winningOption) {
+        setSets(prev => {
+          return prev.map(set => {
+            if (set.id === conflict.setId) {
+              // Add winning track to set
+              const newTrack: Track = {
+                id: `track-resolved-${Date.now()}`,
+                title: winningOption.title,
+                artist: winningOption.artist,
+                duration: 0,
+                coverUrl: '',
+                addedAt: new Date(),
+                source: 'ai',
+                timestamp: conflict.timestamp,
+                verified: true, // Community verified!
+                confidence: 1.0,
+              };
+
+              const updatedTracks = [...set.tracks, newTrack]
+                .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+              // Remove conflict from set
+              const updatedConflicts = (set.conflicts || [])
+                .filter(c => c.id !== conflictId);
+
+              return { ...set, tracks: updatedTracks, conflicts: updatedConflicts };
+            }
+            return set;
+          });
+        });
+      }
+    }
+
+    console.log('[SetsContext] Vote recorded on conflict:', conflictId, resolved ? '(RESOLVED)' : '');
+    return { success: true, resolved, winnerId };
+  }, [conflicts, saveConflicts]);
+
+  /**
+   * Get active (unresolved) conflicts for a set or all sets
+   */
+  const getActiveConflicts = useCallback((setId?: string): TrackConflict[] => {
+    const active = conflicts.filter(c => c.status === 'active');
+    if (setId) {
+      return active.filter(c => c.setId === setId);
+    }
+    return active;
+  }, [conflicts]);
+
+  /**
+   * Get all conflicts needing votes (for discovery feed)
+   */
+  const getConflictsNeedingVotes = useCallback((userId: string): TrackConflict[] => {
+    return conflicts.filter(c => 
+      c.status === 'active' && 
+      !c.votes.some(v => v.oderId === userId)
+    );
+  }, [conflicts]);
+
   return {
     sets,
     savedSets,
@@ -377,6 +627,12 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     getTrackFromRepository,
     searchTracksInRepository,
     removeTrackFromRepository,
+    // Multi-source merging
+    conflicts,
+    addSourceToSet,
+    voteOnConflict,
+    getActiveConflicts,
+    getConflictsNeedingVotes,
   };
 });
 

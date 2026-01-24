@@ -862,6 +862,186 @@ async function importFromYouTube(url, apiKey) {
   return { success: true, setList, videoInfo: video, commentsCount: comments.length, tracksCount: tracks.length };
 }
 
+// ============ TRACK MERGING UTILITIES ============
+
+const TIMESTAMP_TOLERANCE = 30; // seconds
+const MIN_SIMILARITY = 0.6;
+const CONFIDENCE_BOOST = 0.2;
+
+function normalizeString(str) {
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function stringSimilarity(s1, s2) {
+  if (s1 === s2) return 1;
+  if (!s1 || !s2) return 0;
+  
+  // Check for containment
+  if (s1.includes(s2) || s2.includes(s1)) {
+    const shorter = Math.min(s1.length, s2.length);
+    const longer = Math.max(s1.length, s2.length);
+    return shorter / longer;
+  }
+  
+  // Word overlap similarity
+  const words1 = new Set(s1.split(' '));
+  const words2 = new Set(s2.split(' '));
+  
+  let overlap = 0;
+  for (const word of words1) {
+    if (words2.has(word)) overlap++;
+  }
+  
+  const total = words1.size + words2.size;
+  return total > 0 ? (overlap * 2) / total : 0;
+}
+
+function calculateTrackSimilarity(title1, artist1, title2, artist2) {
+  const titleSim = stringSimilarity(normalizeString(title1), normalizeString(title2));
+  const artistSim = stringSimilarity(normalizeString(artist1), normalizeString(artist2));
+  return titleSim * 0.6 + artistSim * 0.4;
+}
+
+function mergeTracks(primaryTracks, secondaryTracks, primaryDuration, secondaryDuration, setId, setName, secondaryPlatform) {
+  const stats = {
+    totalPrimary: primaryTracks.length,
+    totalSecondary: secondaryTracks.length,
+    matched: 0,
+    newFromSecondary: 0,
+    conflictsCreated: 0,
+    durationRatio: 1,
+  };
+
+  // Calculate duration ratio (allow 5% tolerance before scaling)
+  let durationRatio = 1;
+  if (primaryDuration && secondaryDuration) {
+    const ratio = primaryDuration / secondaryDuration;
+    if (Math.abs(ratio - 1) > 0.05) {
+      durationRatio = ratio;
+    }
+  }
+  stats.durationRatio = durationRatio;
+
+  // Scale secondary timestamps
+  const scaledSecondary = secondaryTracks.map(track => ({
+    ...track,
+    originalTimestamp: track.timestamp,
+    timestamp: Math.round(track.timestamp * durationRatio),
+  }));
+
+  // Clone primary tracks
+  const mergedTracks = primaryTracks.map(t => ({ ...t }));
+  const conflicts = [];
+
+  // Process each secondary track
+  for (const secTrack of scaledSecondary) {
+    // Find tracks within timestamp tolerance
+    const candidates = mergedTracks
+      .map((track, index) => ({ track, index }))
+      .filter(({ track }) => {
+        const timeDiff = Math.abs((track.timestamp || 0) - secTrack.timestamp);
+        return timeDiff <= TIMESTAMP_TOLERANCE;
+      });
+
+    if (candidates.length === 0) {
+      // No match - add as new track
+      mergedTracks.push({
+        id: `track-${secondaryPlatform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        title: secTrack.title,
+        artist: secTrack.artist,
+        duration: 0,
+        coverUrl: '',
+        addedAt: new Date().toISOString(),
+        source: 'ai',
+        timestamp: secTrack.timestamp,
+        contributedBy: secTrack.contributedBy,
+        verified: false,
+        confidence: secTrack.confidence || 0.7,
+        sources: [{
+          platform: secondaryPlatform,
+          timestamp: secTrack.timestamp,
+          contributedBy: secTrack.contributedBy,
+          confidence: secTrack.confidence || 0.7,
+          importedAt: new Date().toISOString(),
+        }],
+      });
+      stats.newFromSecondary++;
+      continue;
+    }
+
+    // Check for match or conflict
+    let matched = false;
+    for (const { track, index } of candidates) {
+      const similarity = calculateTrackSimilarity(
+        track.title,
+        track.artist,
+        secTrack.title,
+        secTrack.artist
+      );
+
+      if (similarity >= MIN_SIMILARITY) {
+        // Match found - boost confidence
+        mergedTracks[index].confidence = Math.min(1.0, (track.confidence || 0.7) + CONFIDENCE_BOOST);
+        
+        if (!mergedTracks[index].sources) mergedTracks[index].sources = [];
+        mergedTracks[index].sources.push({
+          platform: secondaryPlatform,
+          timestamp: secTrack.timestamp,
+          contributedBy: secTrack.contributedBy,
+          confidence: secTrack.confidence || 0.7,
+          importedAt: new Date().toISOString(),
+        });
+        
+        stats.matched++;
+        matched = true;
+        break;
+      }
+    }
+
+    if (!matched) {
+      // Conflict - same timestamp, different track
+      const primaryTrack = candidates[0].track;
+      conflicts.push({
+        id: `conflict-${setId}-${secTrack.timestamp}-${Date.now()}`,
+        setId,
+        setName,
+        timestamp: secTrack.timestamp,
+        options: [
+          {
+            id: `opt-primary-${Date.now()}`,
+            title: primaryTrack.title,
+            artist: primaryTrack.artist,
+            source: (primaryTrack.sources?.[0]?.platform) || 'youtube',
+            confidence: primaryTrack.confidence || 0.7,
+            contributedBy: primaryTrack.contributedBy,
+          },
+          {
+            id: `opt-secondary-${Date.now() + 1}`,
+            title: secTrack.title,
+            artist: secTrack.artist,
+            source: secondaryPlatform,
+            confidence: secTrack.confidence || 0.7,
+            contributedBy: secTrack.contributedBy,
+          },
+        ],
+        votes: [],
+        createdAt: new Date().toISOString(),
+        status: 'active',
+      });
+      stats.conflictsCreated++;
+    }
+  }
+
+  // Sort by timestamp
+  mergedTracks.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  return { mergedTracks, conflicts, stats };
+}
+
 // ============ MAIN HANDLER ============
 
 module.exports = async (req, res) => {
@@ -871,7 +1051,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { url } = req.body || {};
+  const { url, mergeWith } = req.body || {};
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
   try {
@@ -882,10 +1062,74 @@ module.exports = async (req, res) => {
       if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
       
       const result = await importFromYouTube(url, apiKey);
+      
+      // If merge mode, merge with existing tracks
+      if (mergeWith && result.success) {
+        const { existingTracks, primaryDuration, setId, setName } = mergeWith;
+        const newTracks = result.setList.tracks.map(t => ({
+          title: t.title,
+          artist: t.artist,
+          timestamp: t.timestamp,
+          confidence: 0.7,
+          contributedBy: t.contributedBy,
+        }));
+        
+        const mergeResult = mergeTracks(
+          existingTracks,
+          newTracks,
+          primaryDuration,
+          result.setList.totalDuration,
+          setId,
+          setName,
+          'youtube'
+        );
+        
+        return res.status(200).json({
+          ...result,
+          mergeResult: {
+            mergedTracks: mergeResult.mergedTracks,
+            conflicts: mergeResult.conflicts,
+            stats: mergeResult.stats,
+          },
+        });
+      }
+      
       return res.status(200).json(result);
       
     } else if (platform === 'soundcloud') {
       const result = await importFromSoundCloud(url);
+      
+      // If merge mode, merge with existing tracks
+      if (mergeWith && result.success) {
+        const { existingTracks, primaryDuration, setId, setName } = mergeWith;
+        const newTracks = result.setList.tracks.map(t => ({
+          title: t.title,
+          artist: t.artist,
+          timestamp: t.timestamp,
+          confidence: 0.7,
+          contributedBy: t.contributedBy,
+        }));
+        
+        const mergeResult = mergeTracks(
+          existingTracks,
+          newTracks,
+          primaryDuration,
+          result.setList.totalDuration,
+          setId,
+          setName,
+          'soundcloud'
+        );
+        
+        return res.status(200).json({
+          ...result,
+          mergeResult: {
+            mergedTracks: mergeResult.mergedTracks,
+            conflicts: mergeResult.conflicts,
+            stats: mergeResult.stats,
+          },
+        });
+      }
+      
       return res.status(200).json(result);
       
     } else if (platform === 'mixcloud') {

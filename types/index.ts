@@ -28,6 +28,18 @@ export interface Track {
   isUnreleased?: boolean;
   trackLinks?: TrackLink[];
   featuredIn?: FeaturedInSet[];
+  // Multi-source identification
+  sources?: TrackSource[];
+  confidence?: number; // 0-1 confidence score
+}
+
+// Track identification from a specific platform
+export interface TrackSource {
+  platform: 'youtube' | 'soundcloud' | 'mixcloud';
+  timestamp: number;
+  contributedBy?: string;
+  confidence: number;
+  importedAt: Date;
 }
 
 export interface SourceLink {
@@ -50,6 +62,8 @@ export interface SetList {
   commentsScraped?: number;
   tracksIdentified?: number;
   plays?: number;
+  // Multi-source merging
+  conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes
 }
 
 export interface SocialComment {
@@ -119,3 +133,70 @@ export interface Artist {
   setsCount: number;
   followersCount?: number;
 }
+
+// ==========================================
+// Track Conflict & Community Voting System
+// ==========================================
+
+// When two sources disagree on a track at the same timestamp
+export interface TrackConflict {
+  id: string;
+  setId: string;
+  setName: string;
+  timestamp: number; // Position in set (seconds)
+  options: ConflictOption[];
+  votes: ConflictVote[];
+  createdAt: Date;
+  resolvedAt?: Date;
+  winnerId?: string; // ID of winning option
+  status: 'active' | 'resolved' | 'expired';
+}
+
+export interface ConflictOption {
+  id: string;
+  title: string;
+  artist: string;
+  source: 'youtube' | 'soundcloud' | 'mixcloud';
+  confidence: number;
+  contributedBy?: string;
+}
+
+export interface ConflictVote {
+  oderId: string; // User who voted
+  optionId: string; // Which option they chose
+  votedAt: Date;
+}
+
+// ==========================================
+// Points & Gamification System
+// ==========================================
+
+export interface UserPoints {
+  oderId: string;
+  total: number;
+  breakdown: PointsBreakdown;
+  history: PointsTransaction[];
+}
+
+export interface PointsBreakdown {
+  voting: number;        // Points from voting on conflicts
+  correctVotes: number;  // Bonus for voting with majority
+  contributions: number; // Adding secondary sources
+  trackIds: number;      // Confirmed track identifications
+}
+
+export interface PointsTransaction {
+  id: string;
+  amount: number;
+  reason: PointsReason;
+  description: string;
+  relatedId?: string; // Conflict ID, Set ID, etc.
+  createdAt: Date;
+}
+
+export type PointsReason = 
+  | 'vote_cast'           // +5 for voting
+  | 'vote_correct'        // +10 bonus for correct vote
+  | 'source_added'        // +25 for adding secondary source
+  | 'track_confirmed'     // +15 for confirmed track ID
+  | 'first_import';       // +10 for first import of a set
