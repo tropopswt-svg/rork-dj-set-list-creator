@@ -1931,13 +1931,23 @@ export const scraperRouter = createTRPCRouter({
         const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="sample"; filename="audio.wav"\r\nContent-Type: audio/wav\r\n\r\n`;
         const endPart = `\r\n--${boundary}--\r\n`;
         
-        const headerBuffer = Buffer.from(headerPart);
-        const filePartBuffer = Buffer.from(filePart);
-        const endBuffer = Buffer.from(endPart);
+        // Convert all parts to Uint8Array for Vercel's fetch API compatibility
+        const headerBytes = new Uint8Array(Buffer.from(headerPart));
+        const filePartBytes = new Uint8Array(Buffer.from(filePart));
+        const audioBytes = new Uint8Array(audioBuffer);
+        const endBytes = new Uint8Array(Buffer.from(endPart));
         
-        const bodyBuffer = Buffer.concat([headerBuffer, filePartBuffer, audioBuffer, endBuffer]);
-        // Convert Buffer to Uint8Array for Vercel's fetch API compatibility
-        const body = new Uint8Array(bodyBuffer);
+        // Concatenate Uint8Arrays
+        const totalLength = headerBytes.length + filePartBytes.length + audioBytes.length + endBytes.length;
+        const body = new Uint8Array(totalLength);
+        let offset = 0;
+        body.set(headerBytes, offset);
+        offset += headerBytes.length;
+        body.set(filePartBytes, offset);
+        offset += filePartBytes.length;
+        body.set(audioBytes, offset);
+        offset += audioBytes.length;
+        body.set(endBytes, offset);
         
         console.log(`[ACRCloud] Sending request to ${host}`);
         
