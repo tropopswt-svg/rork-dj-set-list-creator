@@ -8,7 +8,7 @@
     "start-web-dev": "DEBUG=expo* bunx rork start -p 72roq2v56c1t8ob04sop2 --web --tunnel",
     "server": "bun run server.ts",
     "lint": "expo lint",
-    "import": "bun run scripts/import-csv.ts"
+    "import": "bun run scripts/import-csv.ts",
         "build": "echo 'Build completed for Vercel'",
   },
   "dependencies": {
