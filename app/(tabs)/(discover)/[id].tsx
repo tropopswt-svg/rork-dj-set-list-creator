@@ -27,7 +27,7 @@ import TrackCard from '@/components/TrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
-import TrackConflictCard from '@/components/TrackConflictCard';
+import InlineConflictOptions from '@/components/InlineConflictOptions';
 import PointsBadge from '@/components/PointsBadge';
 import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict } from '@/types';
@@ -105,6 +105,44 @@ export default function SetDetailScreen() {
   const sortedTracks = useMemo(() => {
     return [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   }, [tracks]);
+
+  // Create a combined list of tracks and inline conflicts, sorted by timestamp
+  type TracklistItem = 
+    | { type: 'track'; data: Track }
+    | { type: 'conflict'; data: TrackConflict };
+
+  const tracklistItems = useMemo<TracklistItem[]>(() => {
+    // Filter out tracks that have active conflicts (they'll be shown as conflict options instead)
+    const tracksWithoutConflicts = sortedTracks.filter(track => {
+      // If this track has a conflict, don't show it separately
+      if (track.hasConflict && track.conflictId) {
+        return !conflicts.some(c => c.id === track.conflictId);
+      }
+      return true;
+    });
+
+    // Create track items
+    const trackItems: TracklistItem[] = tracksWithoutConflicts.map(track => ({
+      type: 'track' as const,
+      data: track,
+    }));
+
+    // Create conflict items
+    const conflictItems: TracklistItem[] = conflicts.map(conflict => ({
+      type: 'conflict' as const,
+      data: conflict,
+    }));
+
+    // Combine and sort by timestamp
+    const combined = [...trackItems, ...conflictItems];
+    combined.sort((a, b) => {
+      const timestampA = a.type === 'track' ? (a.data.timestamp || 0) : a.data.timestamp;
+      const timestampB = b.type === 'track' ? (b.data.timestamp || 0) : b.data.timestamp;
+      return timestampA - timestampB;
+    });
+
+    return combined;
+  }, [sortedTracks, conflicts]);
 
   const verifiedCount = sortedTracks.filter(t => t.verified).length;
   const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
@@ -398,33 +436,12 @@ export default function SetDetailScreen() {
             </View>
           )}
 
-          {/* Track Conflicts Section */}
+          {/* Inline conflict indicator */}
           {conflicts.length > 0 && (
-            <View style={styles.conflictsSection}>
-              <Text style={styles.sectionTitle}>
-                Track Conflicts ({conflicts.length})
+            <View style={styles.conflictHintBanner}>
+              <Text style={styles.conflictHintText}>
+                {conflicts.length} track{conflicts.length !== 1 ? 's need' : ' needs'} identification - swipe right to select
               </Text>
-              <Text style={styles.conflictsSubtitle}>
-                Help identify the correct tracks by voting
-              </Text>
-              {conflicts.map((conflict) => (
-                <TrackConflictCard
-                  key={conflict.id}
-                  conflict={conflict}
-                  onVote={async (optionId) => {
-                    const result = await voteOnConflict(conflict.id, optionId, userId);
-                    if (result.success) {
-                      await addPoints('vote_cast', conflict.id);
-                      if (result.resolved && result.winnerId === optionId) {
-                        await addPoints('vote_correct', conflict.id);
-                      }
-                    }
-                    return result;
-                  }}
-                  userHasVoted={conflict.votes.some(v => v.oderId === userId)}
-                  userVotedOptionId={conflict.votes.find(v => v.oderId === userId)?.optionId}
-                />
-              ))}
             </View>
           )}
 
@@ -443,25 +460,54 @@ export default function SetDetailScreen() {
               </Pressable>
             </View>
 
-            {sortedTracks.map((track) => (
-              <TrackCard 
-                key={track.id} 
-                track={track}
-                showTimestamp
-                onPress={() => {
-                  if (setList.sourceLinks.length > 0 && track.timestamp) {
-                    const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                    if (youtubeLink) {
-                      const url = `${youtubeLink.url}&t=${track.timestamp}`;
-                      Linking.openURL(url);
+            {tracklistItems.map((item) => {
+              if (item.type === 'conflict') {
+                const conflict = item.data;
+                const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                const soundcloudLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+                
+                return (
+                  <InlineConflictOptions
+                    key={conflict.id}
+                    conflict={conflict}
+                    onSelect={async (optionId) => {
+                      const result = await voteOnConflict(conflict.id, optionId, userId);
+                      if (result.success) {
+                        await addPoints('vote_cast', conflict.id);
+                        if (result.resolved && result.winnerId === optionId) {
+                          await addPoints('vote_correct', conflict.id);
+                        }
+                      }
+                      return result;
+                    }}
+                    youtubeUrl={youtubeLink?.url}
+                    soundcloudUrl={soundcloudLink?.url}
+                  />
+                );
+              }
+              
+              // Regular track
+              const track = item.data;
+              return (
+                <TrackCard 
+                  key={track.id} 
+                  track={track}
+                  showTimestamp
+                  onPress={() => {
+                    if (setList.sourceLinks.length > 0 && track.timestamp) {
+                      const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                      if (youtubeLink) {
+                        const url = `${youtubeLink.url}&t=${track.timestamp}`;
+                        Linking.openURL(url);
+                      }
                     }
-                  }
-                }}
-                onContributorPress={(username) => setSelectedContributor(username)}
-              />
-            ))}
+                  }}
+                  onContributorPress={(username) => setSelectedContributor(username)}
+                />
+              );
+            })}
             
-            {sortedTracks.length === 0 && (
+            {tracklistItems.length === 0 && (
               <View style={styles.emptyTracks}>
                 <Sparkles size={32} color={Colors.dark.textMuted} />
                 <Text style={styles.emptyText}>No tracks identified yet</Text>
@@ -478,7 +524,7 @@ export default function SetDetailScreen() {
               </View>
             )}
 
-            {sortedTracks.length > 0 && (
+            {tracklistItems.length > 0 && (
               <View style={styles.missingTrackCta}>
                 <Text style={styles.missingTrackText}>Know a track we missed?</Text>
                 <Pressable 
@@ -684,13 +730,20 @@ const styles = StyleSheet.create({
   linkExternal: {
     marginLeft: 'auto',
   },
-  conflictsSection: {
-    marginBottom: 24,
+  conflictHintBanner: {
+    backgroundColor: 'rgba(206, 138, 75, 0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(206, 138, 75, 0.2)',
   },
-  conflictsSubtitle: {
-    fontSize: 13,
-    color: Colors.dark.textSecondary,
-    marginBottom: 12,
+  conflictHintText: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   statsSection: {
     flexDirection: 'row',
