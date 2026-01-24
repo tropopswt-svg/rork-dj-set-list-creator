@@ -200,18 +200,31 @@ function parseTrackInfo(text) {
   if (/\?\s*$/.test(cleaned) && !cleaned.includes(' - ')) return null;
   if (cleaned.length < 3 || cleaned.length > 200) return null;
 
+  // Remove any stray timestamps that might be embedded in the text
+  cleaned = cleaned.replace(/\d{1,2}:\d{2}(:\d{2})?\s*/g, '').trim();
+  
+  // Standard format: "Artist - Title"
   const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
   if (dashMatch) {
     let part1 = dashMatch[1].trim();
     let part2 = dashMatch[2].trim();
+    
+    // Check for remix/edit info - if it's in part1, that's likely the title (unusual format)
     const part1HasRemix = /remix|edit|vip|dub|bootleg/i.test(part1);
     const part2HasRemix = /remix|edit|vip|dub|bootleg/i.test(part2);
-    if (part2HasRemix && !part1HasRemix) {
-      return { artist: part1, title: part2 };
+    
+    // Standard: Artist - Title (remix info in title)
+    // So if part2 has remix info, it's standard format
+    // If part1 has remix info and part2 doesn't, it might be "Title - Artist" format
+    if (part1HasRemix && !part2HasRemix) {
+      return { title: part1, artist: part2 };
     }
-    return { title: part1, artist: part2 };
+    
+    // Default: part1 is Artist, part2 is Title (standard format)
+    return { artist: part1, title: part2 };
   }
 
+  // "Title by Artist" format
   const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
   if (byMatch) return { title: byMatch[1].trim(), artist: byMatch[2].trim() };
 
@@ -545,6 +558,11 @@ function parseSoundCloudTrackInfo(text) {
   
   // Skip if ends with ? and doesn't look like track info
   if (/\?\s*$/.test(cleaned) && !/[-–—]/.test(cleaned)) return null;
+  
+  // Remove any stray timestamps embedded in the text (e.g., "1:03:05 Chris Stussy")
+  cleaned = cleaned.replace(/^\d{1,2}:\d{2}(:\d{2})?\s*/, '').trim(); // Start
+  cleaned = cleaned.replace(/\s+\d{1,2}:\d{2}(:\d{2})?\s*$/, '').trim(); // End
+  cleaned = cleaned.replace(/\s+\d{1,2}:\d{2}(:\d{2})?\s+/g, ' ').trim(); // Middle
   
   // Try to parse formats with dash: "Artist - Title" or "Title - Artist"
   // Also handle formats like "closer -gaskin" (space before dash)
