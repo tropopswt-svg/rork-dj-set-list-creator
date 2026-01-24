@@ -98,8 +98,8 @@ export default function TrackCard({
     <>
       <Pressable style={styles.container} onPress={handlePress}>
         {showTimestamp && track.timestamp !== undefined && (
-          <View style={styles.timestampContainer}>
-            <Text style={styles.timestamp}>{formatTimestamp(track.timestamp)}</Text>
+          <View style={styles.timestampBadge}>
+            <Text style={styles.timestampText}>{formatTimestamp(track.timestamp)}</Text>
           </View>
         )}
         {showIndex !== undefined && !showTimestamp && (
@@ -234,57 +234,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
   },
-  timestampContainer: {
-    backgroundColor: Colors.dark.surfaceLight,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  timestampBadge: {
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
     marginRight: 10,
-    minWidth: 52,
+    minWidth: 56,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  timestamp: {
-    color: Colors.dark.primary,
-    fontSize: 12,
-    fontWeight: '700' as const,
+  timestampText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800' as const,
     fontVariant: ['tabular-nums'],
+    letterSpacing: 0.5,
   },
   index: {
     color: Colors.dark.textMuted,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600' as const,
-    width: 24,
+    width: 22,
     textAlign: 'center',
   },
   cover: {
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     borderRadius: 8,
   },
   info: {
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 10,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   title: {
     color: Colors.dark.text,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600' as const,
     flex: 1,
   },
   artist: {
     color: Colors.dark.textSecondary,
-    fontSize: 13,
-    marginTop: 2,
-    marginBottom: 6,
+    fontSize: 12,
+    marginTop: 1,
+    marginBottom: 4,
   },
   meta: {
     flexDirection: 'row',
@@ -327,12 +329,12 @@ const styles = StyleSheet.create({
   featuredRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(245, 158, 11, 0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginBottom: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginBottom: 4,
     alignSelf: 'flex-start',
   },
   featuredMainText: {
@@ -356,25 +358,25 @@ const styles = StyleSheet.create({
   compactContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
+    padding: 6,
   },
   compactCover: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: 6,
   },
   compactInfo: {
     flex: 1,
-    marginLeft: 10,
+    marginLeft: 8,
   },
   compactTitle: {
     color: Colors.dark.text,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500' as const,
   },
   compactArtist: {
     color: Colors.dark.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
   },
   modalOverlay: {
     flex: 1,

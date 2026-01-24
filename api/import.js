@@ -865,7 +865,7 @@ async function importFromYouTube(url, apiKey) {
 // ============ TRACK MERGING UTILITIES ============
 
 const TIMESTAMP_TOLERANCE = 30; // seconds
-const MIN_SIMILARITY = 0.6;
+const MIN_SIMILARITY = 0.7; // Increased from 0.6 to reduce false conflicts
 const CONFIDENCE_BOOST = 0.2;
 
 function normalizeString(str) {

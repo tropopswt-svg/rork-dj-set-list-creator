@@ -6,6 +6,7 @@ import {
   Pressable,
   Animated,
   Easing,
+  Linking,
 } from 'react-native';
 import { 
   Zap, 
@@ -16,6 +17,8 @@ import {
   Clock,
   Trophy,
   Sparkles,
+  Play,
+  ExternalLink,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -26,13 +29,154 @@ interface TrackConflictCardProps {
   onVote: (optionId: string) => Promise<{ success: boolean; resolved?: boolean; winnerId?: string }>;
   userHasVoted: boolean;
   userVotedOptionId?: string;
+  youtubeUrl?: string;
+  soundcloudUrl?: string;
 }
+
+// Mini waveform visualization component
+const WaveformBar = ({ platform, timestamp, onListen }: { platform: string; timestamp: number; onListen?: () => void }) => {
+  const markerPosition = Math.min(95, Math.max(5, (timestamp / 3600) * 100)); // Assume 1hr set max
+  
+  const getPlatformColor = () => {
+    switch (platform) {
+      case 'youtube': return '#FF0000';
+      case 'soundcloud': return '#FF5500';
+      default: return Colors.dark.primary;
+    }
+  };
+  
+  const getPlatformIcon = () => {
+    switch (platform) {
+      case 'youtube': return <Youtube size={14} color="#FF0000" />;
+      case 'soundcloud': return <Music2 size={14} color="#FF5500" />;
+      default: return <Music2 size={14} color={Colors.dark.textMuted} />;
+    }
+  };
+
+  // Generate pseudo-random waveform bars
+  const waveformBars = Array.from({ length: 40 }, (_, i) => {
+    const seed = (i * 7 + 13) % 17;
+    return 0.3 + (seed / 17) * 0.7;
+  });
+
+  return (
+    <View style={waveformStyles.container}>
+      <View style={waveformStyles.labelRow}>
+        {getPlatformIcon()}
+        <Text style={waveformStyles.platformLabel}>
+          {platform.charAt(0).toUpperCase() + platform.slice(1)}
+        </Text>
+        {onListen && (
+          <Pressable style={waveformStyles.listenButton} onPress={onListen}>
+            <Play size={10} color="#FFFFFF" fill="#FFFFFF" />
+            <Text style={waveformStyles.listenText}>Listen</Text>
+          </Pressable>
+        )}
+      </View>
+      <View style={waveformStyles.waveformContainer}>
+        <View style={waveformStyles.waveformTrack}>
+          {waveformBars.map((height, i) => (
+            <View
+              key={i}
+              style={[
+                waveformStyles.waveformBar,
+                { 
+                  height: height * 20,
+                  backgroundColor: i < (markerPosition / 100) * 40 
+                    ? getPlatformColor() 
+                    : `${getPlatformColor()}40`,
+                },
+              ]}
+            />
+          ))}
+        </View>
+        <View style={[waveformStyles.timestampMarker, { left: `${markerPosition}%` }]}>
+          <View style={[waveformStyles.markerLine, { backgroundColor: getPlatformColor() }]} />
+          <View style={[waveformStyles.markerDot, { backgroundColor: getPlatformColor() }]} />
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const waveformStyles = StyleSheet.create({
+  container: {
+    marginBottom: 12,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  platformLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.dark.textSecondary,
+    flex: 1,
+  },
+  listenButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  listenText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#FFFFFF',
+  },
+  waveformContainer: {
+    position: 'relative',
+    height: 24,
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 6,
+    overflow: 'hidden',
+  },
+  waveformTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: '100%',
+    paddingHorizontal: 4,
+  },
+  waveformBar: {
+    width: 2,
+    borderRadius: 1,
+    minHeight: 4,
+  },
+  timestampMarker: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    alignItems: 'center',
+  },
+  markerLine: {
+    width: 2,
+    height: '100%',
+  },
+  markerDot: {
+    position: 'absolute',
+    top: -3,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+});
 
 export default function TrackConflictCard({
   conflict,
   onVote,
   userHasVoted,
   userVotedOptionId,
+  youtubeUrl,
+  soundcloudUrl,
 }: TrackConflictCardProps) {
   const [voting, setVoting] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
@@ -82,6 +226,23 @@ export default function TrackConflictCard({
       return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
     return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleListenYouTube = () => {
+    if (youtubeUrl) {
+      const url = youtubeUrl.includes('?') 
+        ? `${youtubeUrl}&t=${conflict.timestamp}` 
+        : `${youtubeUrl}?t=${conflict.timestamp}`;
+      Linking.openURL(url);
+    }
+  };
+
+  const handleListenSoundCloud = () => {
+    if (soundcloudUrl) {
+      // SoundCloud uses #t=timestamp format
+      const url = `${soundcloudUrl}#t=${formatTimestamp(conflict.timestamp)}`;
+      Linking.openURL(url);
+    }
   };
 
   const getPlatformIcon = (platform: string, size: number = 16) => {
@@ -137,7 +298,7 @@ export default function TrackConflictCard({
 
   const glowColor = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['rgba(0, 212, 170, 0.1)', 'rgba(0, 212, 170, 0.3)'],
+    outputRange: ['rgba(206, 138, 75, 0.08)', 'rgba(206, 138, 75, 0.2)'],
   });
 
   const sparkleRotate = sparkleRotation.interpolate({
@@ -170,14 +331,32 @@ export default function TrackConflictCard({
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Animated.View style={{ transform: [{ rotate: sparkleRotate }] }}>
-            <Zap size={18} color="#FB923C" />
+            <Zap size={18} color={Colors.dark.primary} />
           </Animated.View>
           <Text style={styles.headerTitle}>TRACK CONFLICT</Text>
         </View>
-        <View style={styles.timestampBadge}>
-          <Clock size={12} color={Colors.dark.textMuted} />
-          <Text style={styles.timestampText}>@ {formatTimestamp(conflict.timestamp)}</Text>
+        <View style={styles.timestampBadgeLarge}>
+          <Clock size={14} color={Colors.dark.primary} />
+          <Text style={styles.timestampTextLarge}>@ {formatTimestamp(conflict.timestamp)}</Text>
         </View>
+      </View>
+
+      {/* Waveform Visualizations */}
+      <View style={styles.waveformsSection}>
+        {(youtubeUrl || conflict.options.some(o => o.source === 'youtube')) && (
+          <WaveformBar 
+            platform="youtube" 
+            timestamp={conflict.timestamp}
+            onListen={youtubeUrl ? handleListenYouTube : undefined}
+          />
+        )}
+        {(soundcloudUrl || conflict.options.some(o => o.source === 'soundcloud')) && (
+          <WaveformBar 
+            platform="soundcloud" 
+            timestamp={conflict.timestamp}
+            onListen={soundcloudUrl ? handleListenSoundCloud : undefined}
+          />
+        )}
       </View>
 
       {/* Options */}
@@ -278,13 +457,13 @@ const styles = StyleSheet.create({
     padding: 16,
     marginVertical: 8,
     borderWidth: 1,
-    borderColor: 'rgba(251, 146, 60, 0.3)',
+    borderColor: 'rgba(206, 138, 75, 0.3)',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -294,22 +473,29 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#FB923C',
+    color: Colors.dark.primary,
     letterSpacing: 1,
   },
-  timestampBadge: {
+  timestampBadgeLarge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.dark.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    gap: 6,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
   },
-  timestampText: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-    fontWeight: '500',
+  timestampTextLarge: {
+    fontSize: 13,
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  waveformsSection: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
   },
   optionsContainer: {
     flexDirection: 'row',
@@ -390,7 +576,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   votedIndicatorActive: {
-    backgroundColor: 'rgba(0, 212, 170, 0.15)',
+    backgroundColor: 'rgba(206, 138, 75, 0.15)',
   },
   voteCount: {
     fontSize: 12,
