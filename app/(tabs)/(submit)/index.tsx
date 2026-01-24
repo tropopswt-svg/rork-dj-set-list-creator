@@ -30,6 +30,9 @@ import Colors from '@/constants/colors';
 import { useFormValidation, validationRules } from '@/utils/hooks';
 import { useSets } from '@/contexts/SetsContext';
 import { SetList, Track, SourceLink } from '@/types';
+import ArtistAutocomplete from '@/components/ArtistAutocomplete';
+import TrackAutocomplete from '@/components/TrackAutocomplete';
+import type { DbArtist, DbTrack } from '@/lib/supabase/types';
 
 type ImportStep = 'idle' | 'fetching_metadata' | 'fetching_comments' | 'extracting_tracks' | 'complete' | 'error';
 
@@ -506,16 +509,16 @@ export default function SubmitScreen() {
               onChangeText={(text) => form.setValue('setName', text)}
             />
           </View>
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>DJ / Artist *</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="e.g., Dixon"
-              placeholderTextColor={Colors.dark.textMuted}
-              value={form.values.artistName}
-              onChangeText={(text) => form.setValue('artistName', text)}
-            />
-          </View>
+          <ArtistAutocomplete
+            value={form.values.artistName}
+            onChangeText={(text) => form.setValue('artistName', text)}
+            placeholder="e.g., Dixon"
+            label="DJ / Artist"
+            onSelectArtist={(artist) => {
+              // Optionally store the artist ID for linking
+              console.log('[Submit] Selected artist:', artist.name, artist.id);
+            }}
+          />
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Venue (optional)</Text>
             <TextInput
@@ -547,30 +550,19 @@ export default function SubmitScreen() {
 
           {isAddingTrack && (
             <View style={styles.addTrackForm}>
+              <TrackAutocomplete
+                title={newTrackTitle}
+                artist={newTrackArtist}
+                onChangeTitle={setNewTrackTitle}
+                onChangeArtist={setNewTrackArtist}
+                titlePlaceholder="Track name"
+                artistPlaceholder="Artist name"
+                onSelectTrack={(track) => {
+                  console.log('[Submit] Selected track:', track.title, track.id);
+                }}
+              />
               <View style={styles.formRow}>
                 <View style={[styles.inputGroup, { flex: 1 }]}>
-                  <Text style={styles.inputLabel}>Track Title *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Track name"
-                    placeholderTextColor={Colors.dark.textMuted}
-                    value={newTrackTitle}
-                    onChangeText={setNewTrackTitle}
-                  />
-                </View>
-              </View>
-              <View style={styles.formRow}>
-                <View style={[styles.inputGroup, { flex: 2 }]}>
-                  <Text style={styles.inputLabel}>Artist *</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Artist name"
-                    placeholderTextColor={Colors.dark.textMuted}
-                    value={newTrackArtist}
-                    onChangeText={setNewTrackArtist}
-                  />
-                </View>
-                <View style={[styles.inputGroup, { flex: 1, marginLeft: 12 }]}>
                   <Text style={styles.inputLabel}>Timestamp</Text>
                   <TextInput
                     style={styles.input}

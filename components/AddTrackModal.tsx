@@ -17,6 +17,9 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { Track, TrackLink } from '@/types';
 import { useSets } from '@/contexts/SetsContext';
+import ArtistAutocomplete from './ArtistAutocomplete';
+import { searchTracks, isSupabaseConfigured } from '@/lib/supabase';
+import type { DbTrack, DbArtist } from '@/lib/supabase/types';
 
 interface AddTrackModalProps {
   visible: boolean;
@@ -62,7 +65,41 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedFromRepo, setSelectedFromRepo] = useState(false);
   const [trackSuggestions, setTrackSuggestions] = useState<Track[]>([]);
+  
+  // Supabase track suggestions
+  const [dbTrackSuggestions, setDbTrackSuggestions] = useState<DbTrack[]>([]);
+  const [selectedDbTrack, setSelectedDbTrack] = useState<DbTrack | null>(null);
+  const [selectedDbArtist, setSelectedDbArtist] = useState<DbArtist | null>(null);
+  const [isLoadingDbTracks, setIsLoadingDbTracks] = useState(false);
 
+  // Search Supabase for tracks
+  useEffect(() => {
+    const searchDbTracks = async () => {
+      const query = title.trim() || artist.trim();
+      if (!query || query.length < 2 || selectedDbTrack) {
+        setDbTrackSuggestions([]);
+        return;
+      }
+      
+      if (!isSupabaseConfigured()) return;
+      
+      setIsLoadingDbTracks(true);
+      try {
+        const searchQuery = title && artist ? `${title} ${artist}` : query;
+        const results = await searchTracks(searchQuery, 6);
+        setDbTrackSuggestions(results);
+      } catch (error) {
+        console.error('[AddTrackModal] DB search error:', error);
+      } finally {
+        setIsLoadingDbTracks(false);
+      }
+    };
+    
+    const timer = setTimeout(searchDbTracks, 300);
+    return () => clearTimeout(timer);
+  }, [title, artist, selectedDbTrack]);
+
+  // Local repository search (existing)
   useEffect(() => {
     const loadSuggestions = async () => {
       const query = title.trim() || artist.trim();
@@ -81,9 +118,29 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
     setArtist(track.artist);
     setShowSuggestions(false);
     setSelectedFromRepo(true);
+    setSelectedDbTrack(null);
     if (track.trackLinks && track.trackLinks.length > 0) {
       setTrackUrl(track.trackLinks[0].url);
     }
+  };
+  
+  const handleSelectDbTrack = (track: DbTrack) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setTitle(track.title);
+    setArtist(track.artist_name);
+    setSelectedDbTrack(track);
+    setSelectedFromRepo(false);
+    setShowSuggestions(false);
+    setIsUnreleased(track.is_unreleased);
+    
+    // If track has links, use them
+    if (track.spotify_url) setTrackUrl(track.spotify_url);
+    else if (track.beatport_url) setTrackUrl(track.beatport_url);
+    else if (track.soundcloud_url) setTrackUrl(track.soundcloud_url);
+  };
+  
+  const handleSelectArtist = (dbArtist: DbArtist) => {
+    setSelectedDbArtist(dbArtist);
   };
 
   const detectPlatform = (url: string): LinkPlatform => {
@@ -179,6 +236,9 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
     setActiveTab('link');
     setShowSuggestions(false);
     setSelectedFromRepo(false);
+    setSelectedDbTrack(null);
+    setSelectedDbArtist(null);
+    setDbTrackSuggestions([]);
   };
 
   const handleClose = () => {
@@ -360,15 +420,15 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
             <View style={styles.inputGroup}>
               <View style={styles.labelRow}>
                 <Text style={styles.label}>Track Title</Text>
-                {trackRepository.length > 0 && (
-                  <View style={styles.repoHint}>
-                    <Search size={10} color={Colors.dark.primary} />
-                    <Text style={styles.repoHintText}>{trackRepository.length} tracks in library</Text>
-                  </View>
+                {isLoadingDbTracks && (
+                  <ActivityIndicator size="small" color={Colors.dark.primary} />
                 )}
               </View>
-              <View style={styles.inputContainer}>
-                <Music size={18} color={Colors.dark.textMuted} />
+              <View style={[
+                styles.inputContainer,
+                selectedDbTrack && styles.inputContainerSelected,
+              ]}>
+                <Music size={18} color={selectedDbTrack ? Colors.dark.primary : Colors.dark.textMuted} />
                 <TextInput
                   style={styles.input}
                   placeholder={isUnreleased ? "e.g. Unreleased ID" : "e.g. Strobe"}
@@ -377,17 +437,67 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
                   onChangeText={(text) => {
                     setTitle(text);
                     setSelectedFromRepo(false);
+                    setSelectedDbTrack(null);
                     setShowSuggestions(true);
                   }}
                   onFocus={() => setShowSuggestions(true)}
                 />
+                {selectedDbTrack && (
+                  <View style={styles.selectedBadgeSmall}>
+                    <Check size={10} color={Colors.dark.success} />
+                  </View>
+                )}
               </View>
               
-              {showSuggestions && trackSuggestions.length > 0 && (
+              {/* Supabase Track Suggestions */}
+              {showSuggestions && dbTrackSuggestions.length > 0 && (
+                <View style={styles.suggestionsContainer}>
+                  <View style={styles.suggestionsHeader}>
+                    <Search size={12} color={Colors.dark.primary} />
+                    <Text style={styles.suggestionsTitle}>Tracks Database</Text>
+                  </View>
+                  {dbTrackSuggestions.map((track) => (
+                    <Pressable
+                      key={track.id}
+                      style={styles.suggestionItem}
+                      onPress={() => handleSelectDbTrack(track)}
+                    >
+                      <View style={[
+                        styles.suggestionIconBox,
+                        track.is_unreleased && styles.suggestionIconUnreleased,
+                      ]}>
+                        {track.is_unreleased ? (
+                          <AlertCircle size={16} color={Colors.dark.primary} />
+                        ) : (
+                          <Music size={16} color={Colors.dark.textMuted} />
+                        )}
+                      </View>
+                      <View style={styles.suggestionInfo}>
+                        <Text style={styles.suggestionTitle} numberOfLines={1}>
+                          {track.title}
+                        </Text>
+                        <Text style={styles.suggestionArtist} numberOfLines={1}>
+                          {track.artist_name}
+                          {track.label && ` • ${track.label}`}
+                        </Text>
+                      </View>
+                      {track.is_unreleased && (
+                        <View style={styles.unreleasedBadgeSmall}>
+                          <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+                        </View>
+                      )}
+                      <Check size={16} color={Colors.dark.primary} style={styles.suggestionCheck} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              
+              {/* Local Repository Suggestions (fallback) */}
+              {showSuggestions && dbTrackSuggestions.length === 0 && trackSuggestions.length > 0 && (
                 <View style={styles.suggestionsContainer}>
                   <View style={styles.suggestionsHeader}>
                     <Search size={12} color={Colors.dark.textMuted} />
-                    <Text style={styles.suggestionsTitle}>From Track Library</Text>
+                    <Text style={styles.suggestionsTitle}>From Local Library</Text>
                   </View>
                   {trackSuggestions.map((track) => (
                     <Pressable
@@ -414,30 +524,29 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
               )}
             </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Artist</Text>
-              <View style={styles.inputContainer}>
-                <User size={18} color={Colors.dark.textMuted} />
-                <TextInput
-                  style={styles.input}
-                  placeholder={isUnreleased ? "e.g. Unknown / ID" : "e.g. deadmau5"}
-                  placeholderTextColor={Colors.dark.textMuted}
-                  value={artist}
-                  onChangeText={(text) => {
-                    setArtist(text);
-                    setSelectedFromRepo(false);
-                    setShowSuggestions(true);
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                />
+            <ArtistAutocomplete
+              value={artist}
+              onChangeText={(text) => {
+                setArtist(text);
+                setSelectedFromRepo(false);
+                setSelectedDbTrack(null);
+              }}
+              placeholder={isUnreleased ? "e.g. Unknown / ID" : "e.g. deadmau5"}
+              label="Artist"
+              onSelectArtist={handleSelectArtist}
+            />
+            
+            {(selectedFromRepo || selectedDbTrack) && (
+              <View style={styles.selectedBadge}>
+                <Check size={12} color={Colors.dark.success} />
+                <Text style={styles.selectedText}>
+                  {selectedDbTrack 
+                    ? `Linked to track${selectedDbTrack.is_unreleased ? ' (Unreleased)' : ''}`
+                    : 'Selected from library'
+                  }
+                </Text>
               </View>
-              {selectedFromRepo && (
-                <View style={styles.selectedBadge}>
-                  <Check size={12} color={Colors.dark.success} />
-                  <Text style={styles.selectedText}>Selected from library</Text>
-                </View>
-              )}
-            </View>
+            )}
 
             <View style={styles.infoBox}>
               <Sparkles size={16} color={Colors.dark.primary} />
@@ -812,5 +921,40 @@ const styles = StyleSheet.create({
   selectedText: {
     fontSize: 12,
     color: Colors.dark.success,
+  },
+  inputContainerSelected: {
+    borderColor: Colors.dark.success,
+    backgroundColor: 'rgba(34, 197, 94, 0.05)',
+  },
+  selectedBadgeSmall: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 6,
+    backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionIconUnreleased: {
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+  },
+  unreleasedBadgeSmall: {
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  unreleasedBadgeText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: Colors.dark.primary,
   },
 });
