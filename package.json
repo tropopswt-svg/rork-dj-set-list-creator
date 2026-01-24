@@ -8,8 +8,8 @@
     "start-web-dev": "DEBUG=expo* bunx rork start -p 72roq2v56c1t8ob04sop2 --web --tunnel",
     "server": "bun run server.ts",
     "lint": "expo lint",
-    "import": "bun run scripts/import-csv.ts"
-  },
+    "import": "bun run scripts/import-csv.ts",
+    "build": "expo export --platform web"  },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@hono/trpc-server": "^0.4.2",
@@ -57,6 +57,7 @@
     "@babel/core": "^7.25.2",
     "@expo/ngrok": "^4.1.0",
     "@types/react": "~19.1.10",
+    "@vercel/node": "^5.5.27",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
