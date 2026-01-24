@@ -25,13 +25,24 @@ function generateSlug(name) {
 }
 
 export default async function handler(req, res) {
-  // CORS headers
+  // CORS headers - allow from anywhere (Chrome extension)
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.setHeader('Access-Control-Max-Age', '86400');
   
+  // Handle preflight
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+  
+  // Allow GET for testing
+  if (req.method === 'GET') {
+    return res.status(200).json({ 
+      status: 'ok', 
+      endpoint: 'chrome-import',
+      message: 'Use POST to import data'
+    });
   }
   
   if (req.method !== 'POST') {
