@@ -6,6 +6,5 @@
 import app from "../backend/hono";
 
 // Vercel serverless function handler
-export default async function handler(req: Request): Promise<Response> {
-  return app.fetch(req);
-}
+// Hono works with Vercel's Node.js runtime using the handle function
+export default app;
