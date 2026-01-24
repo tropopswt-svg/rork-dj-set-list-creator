@@ -752,16 +752,11 @@ async function importFromSoundCloud(url) {
   // Parse tracklist from description
   const descTracks = parseDescription(description);
   
-  // Merge description tracks and comment tracks
-  const merged = new Map();
-  for (const t of descTracks) merged.set(t.timestamp, t);
-  for (const t of commentTracks) {
-    // Only add if no similar timestamp exists (within 30 seconds)
-    const existing = Array.from(merged.keys()).find(ts => Math.abs(ts - t.timestamp) < 30);
-    if (!existing) merged.set(t.timestamp, t);
-  }
+  // Combine description and comment tracks
+  const allTracks = [...descTracks, ...commentTracks];
   
-  const tracks = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
+  // Deduplicate using segment-based grouping
+  const tracks = deduplicateSingleSource(allTracks);
   
   // Parse artist/title 
   const { name, artist } = parseArtistFromTitle(title);
@@ -811,6 +806,61 @@ async function importFromSoundCloud(url) {
 
 // ============ YOUTUBE IMPORT ============
 
+/**
+ * Deduplicate tracks from a single source using segment-based grouping.
+ * Picks the highest confidence track within each time segment.
+ */
+function deduplicateSingleSource(tracks) {
+  if (tracks.length === 0) return [];
+  
+  // Sort by timestamp
+  const sorted = [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  
+  const deduped = [];
+  let currentSegment = [sorted[0]];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    const track = sorted[i];
+    const lastTrack = currentSegment[currentSegment.length - 1];
+    const timeDiff = (track.timestamp || 0) - (lastTrack.timestamp || 0);
+    
+    if (timeDiff <= SEGMENT_WINDOW) {
+      // Same segment - check if it's a duplicate or different track
+      const isSimilar = currentSegment.some(t => {
+        const sim = calculateTrackSimilarity(t.title, t.artist, track.title, track.artist);
+        return sim >= MIN_SIMILARITY;
+      });
+      
+      if (isSimilar) {
+        // Duplicate - add to segment (will pick best later)
+        currentSegment.push(track);
+      } else {
+        // Different track at similar timestamp - keep both but adjust timestamp slightly
+        track.timestamp = (lastTrack.timestamp || 0) + 5; // Slight offset
+        currentSegment.push(track);
+      }
+    } else {
+      // New segment - resolve current segment and start new one
+      const best = currentSegment.reduce((best, t) => 
+        (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+      );
+      deduped.push(best);
+      currentSegment = [track];
+    }
+  }
+  
+  // Don't forget the last segment
+  if (currentSegment.length > 0) {
+    const best = currentSegment.reduce((best, t) => 
+      (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+    );
+    deduped.push(best);
+  }
+  
+  console.log(`Deduplication: ${tracks.length} -> ${deduped.length} tracks`);
+  return deduped;
+}
+
 async function importFromYouTube(url, apiKey) {
   const videoId = extractVideoId(url);
   if (!videoId) throw new Error('Invalid YouTube URL');
@@ -823,14 +873,12 @@ async function importFromYouTube(url, apiKey) {
   const descTracks = parseDescription(video.description);
   const commentTracks = parseComments(comments);
 
-  const merged = new Map();
-  for (const t of descTracks) merged.set(t.timestamp, t);
-  for (const t of commentTracks) {
-    const existing = Array.from(merged.keys()).find(ts => Math.abs(ts - t.timestamp) < 30);
-    if (!existing) merged.set(t.timestamp, t);
-  }
-
-  const tracks = Array.from(merged.values()).sort((a, b) => a.timestamp - b.timestamp);
+  // Combine description and comment tracks
+  const allTracks = [...descTracks, ...commentTracks];
+  
+  // Deduplicate using segment-based grouping
+  const tracks = deduplicateSingleSource(allTracks);
+  
   const { name, artist } = parseArtistFromTitle(video.title);
 
   const setList = {
@@ -863,10 +911,13 @@ async function importFromYouTube(url, apiKey) {
 }
 
 // ============ TRACK MERGING UTILITIES ============
+// Smart deduplication and track segmentation
 
-const TIMESTAMP_TOLERANCE = 30; // seconds
-const MIN_SIMILARITY = 0.7; // Increased from 0.6 to reduce false conflicts
+const SEGMENT_WINDOW = 30; // seconds - tracks within this window are considered same segment
+const MIN_SIMILARITY = 0.7; // Threshold for tracks to be considered the same
+const HIGH_SIMILARITY = 0.85; // Threshold for auto-merge without conflict
 const CONFIDENCE_BOOST = 0.2;
+const MIN_TRACK_GAP = 60; // Minimum expected gap between tracks (1 min typical for DJ sets)
 
 function normalizeString(str) {
   return str
@@ -906,13 +957,260 @@ function calculateTrackSimilarity(title1, artist1, title2, artist2) {
   return titleSim * 0.6 + artistSim * 0.4;
 }
 
+/**
+ * Group tracks into time segments. Tracks within SEGMENT_WINDOW seconds 
+ * of each other belong to the same segment.
+ */
+function groupIntoSegments(tracks) {
+  if (tracks.length === 0) return [];
+  
+  // Sort by timestamp first
+  const sorted = [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  
+  const segments = [];
+  let currentSegment = [sorted[0]];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    const track = sorted[i];
+    const lastTrack = currentSegment[currentSegment.length - 1];
+    const timeDiff = (track.timestamp || 0) - (lastTrack.timestamp || 0);
+    
+    if (timeDiff <= SEGMENT_WINDOW) {
+      // Same segment
+      currentSegment.push(track);
+    } else {
+      // New segment
+      segments.push(currentSegment);
+      currentSegment = [track];
+    }
+  }
+  
+  // Don't forget the last segment
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+  
+  return segments;
+}
+
+/**
+ * Find the best track within a segment by comparing similarity and confidence.
+ * Returns: { bestTrack, allSources, isConflict, conflictOptions }
+ */
+function resolveSegment(tracksInSegment, setId, setName) {
+  if (tracksInSegment.length === 0) {
+    return null;
+  }
+  
+  if (tracksInSegment.length === 1) {
+    return {
+      bestTrack: tracksInSegment[0],
+      allSources: tracksInSegment[0].sources || [{ 
+        platform: tracksInSegment[0].platform || 'youtube',
+        timestamp: tracksInSegment[0].timestamp,
+        confidence: tracksInSegment[0].confidence || 0.7,
+      }],
+      isConflict: false,
+      conflictOptions: null,
+    };
+  }
+  
+  // Multiple tracks in segment - need to dedupe or create conflict
+  // First, try to find matching tracks to merge
+  const trackGroups = []; // Groups of similar tracks
+  
+  for (const track of tracksInSegment) {
+    let foundGroup = false;
+    
+    for (const group of trackGroups) {
+      const similarity = calculateTrackSimilarity(
+        track.title,
+        track.artist,
+        group[0].title,
+        group[0].artist
+      );
+      
+      if (similarity >= MIN_SIMILARITY) {
+        group.push(track);
+        foundGroup = true;
+        break;
+      }
+    }
+    
+    if (!foundGroup) {
+      trackGroups.push([track]);
+    }
+  }
+  
+  // If all tracks grouped together, they're the same track
+  if (trackGroups.length === 1) {
+    // Merge all sources, pick best track info, boost confidence
+    const group = trackGroups[0];
+    const bestTrack = group.reduce((best, t) => 
+      (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+    );
+    
+    const allSources = group.flatMap(t => t.sources || [{
+      platform: t.platform || 'unknown',
+      timestamp: t.timestamp,
+      confidence: t.confidence || 0.7,
+    }]);
+    
+    // Boost confidence since multiple sources agree
+    const boostedConfidence = Math.min(1.0, (bestTrack.confidence || 0.7) + (group.length - 1) * 0.1);
+    
+    return {
+      bestTrack: { ...bestTrack, confidence: boostedConfidence },
+      allSources,
+      isConflict: false,
+      conflictOptions: null,
+    };
+  }
+  
+  // Multiple distinct track groups = potential conflict
+  // But first, check if one group has significantly higher confidence
+  const groupConfidences = trackGroups.map(group => ({
+    group,
+    avgConfidence: group.reduce((sum, t) => sum + (t.confidence || 0.7), 0) / group.length,
+    totalSources: group.length,
+  }));
+  
+  groupConfidences.sort((a, b) => {
+    // Sort by: more sources first, then higher confidence
+    if (b.totalSources !== a.totalSources) return b.totalSources - a.totalSources;
+    return b.avgConfidence - a.avgConfidence;
+  });
+  
+  const topGroup = groupConfidences[0];
+  const secondGroup = groupConfidences[1];
+  
+  // If top group has significantly more sources or higher confidence, auto-pick it
+  const confidenceGap = topGroup.avgConfidence - secondGroup.avgConfidence;
+  const sourceGap = topGroup.totalSources - secondGroup.totalSources;
+  
+  if (sourceGap >= 2 || confidenceGap >= 0.25 || topGroup.avgConfidence >= HIGH_SIMILARITY) {
+    // Clear winner - no conflict needed
+    const bestTrack = topGroup.group.reduce((best, t) => 
+      (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+    );
+    
+    const allSources = topGroup.group.flatMap(t => t.sources || [{
+      platform: t.platform || 'unknown',
+      timestamp: t.timestamp,
+      confidence: t.confidence || 0.7,
+    }]);
+    
+    return {
+      bestTrack,
+      allSources,
+      isConflict: false,
+      conflictOptions: null,
+    };
+  }
+  
+  // Genuine conflict - create voting options
+  const timestamp = tracksInSegment[0].timestamp || 0;
+  const conflictOptions = groupConfidences.slice(0, 2).map((gc, i) => {
+    const representative = gc.group.reduce((best, t) => 
+      (t.confidence || 0.7) > (best.confidence || 0.7) ? t : best
+    );
+    return {
+      id: `opt-${i}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      title: representative.title,
+      artist: representative.artist,
+      source: representative.platform || representative.sources?.[0]?.platform || 'unknown',
+      confidence: gc.avgConfidence,
+      contributedBy: representative.contributedBy,
+      duration: representative.duration,
+    };
+  });
+  
+  // Use the higher-confidence option as the default track (can be overridden by voting)
+  const bestTrack = groupConfidences[0].group[0];
+  
+  return {
+    bestTrack,
+    allSources: tracksInSegment.flatMap(t => t.sources || [{
+      platform: t.platform || 'unknown',
+      timestamp: t.timestamp,
+      confidence: t.confidence || 0.7,
+    }]),
+    isConflict: true,
+    conflictOptions,
+    conflictTimestamp: timestamp,
+  };
+}
+
+/**
+ * Identify gaps in the tracklist where no tracks were identified.
+ * Returns array of { start, end, duration } for significant gaps.
+ */
+function identifyGaps(tracks, totalDuration) {
+  const gaps = [];
+  const sorted = [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  
+  // Gap at the start
+  if (sorted.length > 0 && sorted[0].timestamp > MIN_TRACK_GAP * 2) {
+    gaps.push({
+      start: 0,
+      end: sorted[0].timestamp,
+      duration: sorted[0].timestamp,
+    });
+  }
+  
+  // Gaps between tracks
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const currentEnd = (sorted[i].timestamp || 0) + (sorted[i].duration || 180); // Assume 3 min if unknown
+    const nextStart = sorted[i + 1].timestamp || 0;
+    const gapDuration = nextStart - currentEnd;
+    
+    // If gap is larger than expected (more than 5 minutes of unidentified content)
+    if (gapDuration > 300) {
+      gaps.push({
+        start: currentEnd,
+        end: nextStart,
+        duration: gapDuration,
+        afterTrack: i,
+      });
+    }
+  }
+  
+  // Gap at the end
+  if (totalDuration && sorted.length > 0) {
+    const lastTrackEnd = (sorted[sorted.length - 1].timestamp || 0) + 180;
+    if (totalDuration - lastTrackEnd > 300) {
+      gaps.push({
+        start: lastTrackEnd,
+        end: totalDuration,
+        duration: totalDuration - lastTrackEnd,
+      });
+    }
+  }
+  
+  return gaps;
+}
+
+/**
+ * Main merge function - combines tracks from multiple sources with smart deduplication.
+ * 
+ * Strategy:
+ * 1. Combine all tracks from both sources with platform tags
+ * 2. Scale timestamps if durations differ
+ * 3. Group into time segments (tracks within 30s of each other)
+ * 4. For each segment, resolve to single track or create conflict
+ * 5. Identify gaps where no tracks were found
+ * 6. Return clean tracklist + conflicts + gaps
+ */
 function mergeTracks(primaryTracks, secondaryTracks, primaryDuration, secondaryDuration, setId, setName, secondaryPlatform) {
   const stats = {
     totalPrimary: primaryTracks.length,
     totalSecondary: secondaryTracks.length,
+    totalBeforeMerge: primaryTracks.length + secondaryTracks.length,
     matched: 0,
+    deduped: 0,
     newFromSecondary: 0,
     conflictsCreated: 0,
+    gapsIdentified: 0,
     durationRatio: 1,
   };
 
@@ -926,120 +1224,110 @@ function mergeTracks(primaryTracks, secondaryTracks, primaryDuration, secondaryD
   }
   stats.durationRatio = durationRatio;
 
-  // Scale secondary timestamps
-  const scaledSecondary = secondaryTracks.map(track => ({
-    ...track,
-    originalTimestamp: track.timestamp,
-    timestamp: Math.round(track.timestamp * durationRatio),
+  // Tag primary tracks with their platform
+  const taggedPrimary = primaryTracks.map(t => ({
+    ...t,
+    platform: t.sources?.[0]?.platform || 'youtube',
+    sources: t.sources || [{
+      platform: 'youtube',
+      timestamp: t.timestamp,
+      confidence: t.confidence || 0.7,
+      importedAt: new Date().toISOString(),
+    }],
   }));
 
-  // Clone primary tracks
-  const mergedTracks = primaryTracks.map(t => ({ ...t }));
+  // Scale secondary timestamps and tag with platform
+  const taggedSecondary = secondaryTracks.map(track => ({
+    ...track,
+    platform: secondaryPlatform,
+    originalTimestamp: track.timestamp,
+    timestamp: Math.round((track.timestamp || 0) * durationRatio),
+    sources: [{
+      platform: secondaryPlatform,
+      timestamp: Math.round((track.timestamp || 0) * durationRatio),
+      contributedBy: track.contributedBy,
+      confidence: track.confidence || 0.7,
+      importedAt: new Date().toISOString(),
+    }],
+  }));
+
+  // Combine all tracks
+  const allTracks = [...taggedPrimary, ...taggedSecondary];
+  
+  // Group into time segments
+  const segments = groupIntoSegments(allTracks);
+  
+  console.log(`Merging: ${allTracks.length} total tracks -> ${segments.length} segments`);
+  
+  // Resolve each segment
+  const mergedTracks = [];
   const conflicts = [];
-
-  // Process each secondary track
-  for (const secTrack of scaledSecondary) {
-    // Find tracks within timestamp tolerance
-    const candidates = mergedTracks
-      .map((track, index) => ({ track, index }))
-      .filter(({ track }) => {
-        const timeDiff = Math.abs((track.timestamp || 0) - secTrack.timestamp);
-        return timeDiff <= TIMESTAMP_TOLERANCE;
-      });
-
-    if (candidates.length === 0) {
-      // No match - add as new track
-      mergedTracks.push({
-        id: `track-${secondaryPlatform}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        title: secTrack.title,
-        artist: secTrack.artist,
-        duration: 0,
-        coverUrl: '',
-        addedAt: new Date().toISOString(),
-        source: 'ai',
-        timestamp: secTrack.timestamp,
-        contributedBy: secTrack.contributedBy,
-        verified: false,
-        confidence: secTrack.confidence || 0.7,
-        sources: [{
-          platform: secondaryPlatform,
-          timestamp: secTrack.timestamp,
-          contributedBy: secTrack.contributedBy,
-          confidence: secTrack.confidence || 0.7,
-          importedAt: new Date().toISOString(),
-        }],
-      });
-      stats.newFromSecondary++;
-      continue;
-    }
-
-    // Check for match or conflict
-    let matched = false;
-    for (const { track, index } of candidates) {
-      const similarity = calculateTrackSimilarity(
-        track.title,
-        track.artist,
-        secTrack.title,
-        secTrack.artist
-      );
-
-      if (similarity >= MIN_SIMILARITY) {
-        // Match found - boost confidence
-        mergedTracks[index].confidence = Math.min(1.0, (track.confidence || 0.7) + CONFIDENCE_BOOST);
-        
-        if (!mergedTracks[index].sources) mergedTracks[index].sources = [];
-        mergedTracks[index].sources.push({
-          platform: secondaryPlatform,
-          timestamp: secTrack.timestamp,
-          contributedBy: secTrack.contributedBy,
-          confidence: secTrack.confidence || 0.7,
-          importedAt: new Date().toISOString(),
-        });
-        
-        stats.matched++;
-        matched = true;
-        break;
-      }
-    }
-
-    if (!matched) {
-      // Conflict - same timestamp, different track
-      const primaryTrack = candidates[0].track;
+  
+  for (const segment of segments) {
+    const resolution = resolveSegment(segment, setId, setName);
+    
+    if (!resolution) continue;
+    
+    if (resolution.isConflict && resolution.conflictOptions) {
+      // Create a conflict for voting
       conflicts.push({
-        id: `conflict-${setId}-${secTrack.timestamp}-${Date.now()}`,
+        id: `conflict-${setId}-${resolution.conflictTimestamp}-${Date.now()}`,
         setId,
         setName,
-        timestamp: secTrack.timestamp,
-        options: [
-          {
-            id: `opt-primary-${Date.now()}`,
-            title: primaryTrack.title,
-            artist: primaryTrack.artist,
-            source: (primaryTrack.sources?.[0]?.platform) || 'youtube',
-            confidence: primaryTrack.confidence || 0.7,
-            contributedBy: primaryTrack.contributedBy,
-          },
-          {
-            id: `opt-secondary-${Date.now() + 1}`,
-            title: secTrack.title,
-            artist: secTrack.artist,
-            source: secondaryPlatform,
-            confidence: secTrack.confidence || 0.7,
-            contributedBy: secTrack.contributedBy,
-          },
-        ],
+        timestamp: resolution.conflictTimestamp,
+        options: resolution.conflictOptions,
         votes: [],
         createdAt: new Date().toISOString(),
         status: 'active',
       });
       stats.conflictsCreated++;
     }
+    
+    // Track deduplication stats
+    const sourcesInSegment = segment.length;
+    const platformsInSegment = new Set(segment.map(t => t.platform)).size;
+    
+    if (platformsInSegment > 1 && !resolution.isConflict) {
+      stats.matched++; // Cross-platform match
+    }
+    if (sourcesInSegment > 1 && platformsInSegment === 1) {
+      stats.deduped += sourcesInSegment - 1; // Same-platform deduplication
+    }
+    
+    // Add the resolved track
+    mergedTracks.push({
+      id: resolution.bestTrack.id || `track-merged-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: resolution.bestTrack.title,
+      artist: resolution.bestTrack.artist,
+      duration: resolution.bestTrack.duration || 0,
+      coverUrl: resolution.bestTrack.coverUrl || '',
+      addedAt: new Date().toISOString(),
+      source: 'ai',
+      timestamp: resolution.bestTrack.timestamp,
+      contributedBy: resolution.bestTrack.contributedBy,
+      verified: false,
+      confidence: resolution.bestTrack.confidence || 0.7,
+      sources: resolution.allSources,
+      hasConflict: resolution.isConflict,
+    });
   }
 
   // Sort by timestamp
   mergedTracks.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-  return { mergedTracks, conflicts, stats };
+  // Identify gaps
+  const gaps = identifyGaps(mergedTracks, primaryDuration || secondaryDuration);
+  stats.gapsIdentified = gaps.length;
+  stats.newFromSecondary = secondaryTracks.length - stats.matched - stats.conflictsCreated;
+
+  console.log(`Merge complete: ${mergedTracks.length} tracks, ${conflicts.length} conflicts, ${gaps.length} gaps`);
+
+  return { 
+    mergedTracks, 
+    conflicts, 
+    gaps,
+    stats,
+  };
 }
 
 // ============ MAIN HANDLER ============
