@@ -85,7 +85,7 @@ export async function fetchVideoInfo(videoId: string): Promise<YouTubeVideoInfo>
 
 export async function fetchVideoComments(
   videoId: string,
-  maxResults: number = 100
+  maxResults: number = 500
 ): Promise<YouTubeComment[]> {
   const apiKey = getApiKey();
   const comments: YouTubeComment[] = [];
@@ -118,11 +118,12 @@ export async function fetchVideoComments(
 
     for (const item of data.items) {
       const comment = item.snippet.topLevelComment.snippet;
+      // Use textOriginal (clean text) instead of textDisplay (HTML formatted)
       comments.push({
         id: item.id,
         authorName: comment.authorDisplayName,
         authorAvatar: comment.authorProfileImageUrl,
-        text: comment.textDisplay,
+        text: comment.textOriginal || comment.textDisplay,
         likeCount: comment.likeCount,
         publishedAt: comment.publishedAt,
       });
