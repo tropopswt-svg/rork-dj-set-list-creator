@@ -479,34 +479,146 @@ async function fetchSoundCloudComments(trackId, clientId) {
   }
 }
 
+// Convert to title case: "all night long" -> "All Night Long"
+function toTitleCase(str) {
+  if (!str) return str;
+  // Don't change if already has mixed case (likely intentional)
+  if (str !== str.toLowerCase() && str !== str.toUpperCase()) {
+    return str;
+  }
+  // Common words to keep lowercase (unless first word)
+  const lowercase = ['a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 'to', 'by', 'of', 'in'];
+  return str.split(' ').map((word, i) => {
+    if (i > 0 && lowercase.includes(word.toLowerCase())) {
+      return word.toLowerCase();
+    }
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  }).join(' ');
+}
+
+// Clean SoundCloud comment text - strip @mentions, emojis, etc.
+function cleanSoundCloudComment(text) {
+  let cleaned = cleanText(text);
+  
+  // Strip @mentions at the start (SoundCloud replies like "@username: track info")
+  cleaned = cleaned.replace(/^@[\w-]+:?\s*/i, '').trim();
+  cleaned = cleaned.replace(/^@[\w-]+\s+/i, '').trim();
+  
+  // Strip common prefixes
+  cleaned = cleaned.replace(/^(track\s*id|id|this\s+is|that's|it's|its)\s*:?\s*/i, '').trim();
+  
+  // Remove excessive emojis but keep some context
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu;
+  cleaned = cleaned.replace(emojiRegex, ' ').replace(/\s+/g, ' ').trim();
+  
+  return cleaned;
+}
+
+// Parse SoundCloud comment to extract track info
+function parseSoundCloudTrackInfo(text) {
+  let cleaned = cleanSoundCloudComment(text);
+  
+  // Skip noise
+  const noisePatterns = [
+    /^(id\??|track\s*id\??|what|anyone|need|fire|banger|heater|crazy|insane|unreal|tune\??|sick|wow|omg|yes+|finally)$/i,
+    /^(i need|anyone know|what song|what track|please id|need this)/i,
+    /^(best|love|great|amazing|perfect|incredible)\s*(set|track|tune|song|mix)?$/i,
+    /^\d+:\d+\s*$/,  // Just a timestamp
+    /^@/,  // Just an @mention
+  ];
+  
+  for (const pattern of noisePatterns) {
+    if (pattern.test(cleaned)) return null;
+  }
+  
+  // Too short or too long
+  if (cleaned.length < 5 || cleaned.length > 200) return null;
+  
+  // Skip if ends with ? and doesn't look like track info
+  if (/\?\s*$/.test(cleaned) && !/[-–—]/.test(cleaned)) return null;
+  
+  // Try to parse "Title - Artist" or "Artist - Title" format
+  const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
+  if (dashMatch) {
+    let part1 = dashMatch[1].trim();
+    let part2 = dashMatch[2].trim();
+    
+    // Skip if either part is too short or just noise
+    if (part1.length < 2 || part2.length < 2) return null;
+    if (/^(id|unknown|tba|\?+)$/i.test(part1) || /^(id|unknown|tba|\?+)$/i.test(part2)) return null;
+    
+    // Determine which is artist vs title
+    // Remix/edit info usually in title
+    const part1HasRemix = /remix|edit|vip|dub|bootleg|rework/i.test(part1);
+    const part2HasRemix = /remix|edit|vip|dub|bootleg|rework/i.test(part2);
+    
+    // Artist names often have fewer words than titles
+    const part1Words = part1.split(/\s+/).length;
+    const part2Words = part2.split(/\s+/).length;
+    
+    let artist, title;
+    
+    if (part2HasRemix && !part1HasRemix) {
+      // "Artist - Track (Remix)" format
+      artist = toTitleCase(part1);
+      title = toTitleCase(part2);
+    } else if (part1HasRemix && !part2HasRemix) {
+      // "Track (Remix) - Artist" format
+      title = toTitleCase(part1);
+      artist = toTitleCase(part2);
+    } else if (part1Words > part2Words + 1) {
+      // Longer first part is likely title
+      title = toTitleCase(part1);
+      artist = toTitleCase(part2);
+    } else {
+      // Default: "Title - Artist" (common in SoundCloud comments)
+      title = toTitleCase(part1);
+      artist = toTitleCase(part2);
+    }
+    
+    return { artist, title };
+  }
+  
+  // Try "by" format: "Track Name by Artist"
+  const byMatch = cleaned.match(/^(.+?)\s+by\s+(.+)$/i);
+  if (byMatch) {
+    return { 
+      title: toTitleCase(byMatch[1].trim()), 
+      artist: toTitleCase(byMatch[2].trim()) 
+    };
+  }
+  
+  return null;
+}
+
 function parseSoundCloudComments(comments) {
   // SoundCloud comments are tied to timestamps, so we can extract track info
   const tracks = [];
   const seen = new Set();
   
-  for (const comment of comments) {
-    const text = cleanText(comment.text);
+  // Sort by likes/engagement - more liked comments are more reliable
+  const sortedComments = [...comments].sort((a, b) => (b.likeCount || 0) - (a.likeCount || 0));
+  
+  for (const comment of sortedComments) {
+    const info = parseSoundCloudTrackInfo(comment.text);
     
-    // Skip very short comments or questions
-    if (text.length < 5) continue;
-    if (/\?\s*$/.test(text) && !text.includes(' - ')) continue;
-    if (/^(id|track\s*id|what|anyone|need|fire|banger)/i.test(text)) continue;
-    
-    // Try to parse track info from comment
-    const info = parseTrackInfo(text);
     if (info && info.artist && info.title) {
       // Use the comment's timestamp (SoundCloud comments are positioned on the waveform)
       const timestamp = comment.timestamp || 0;
-      const key = `${timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+      const key = `${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
       
-      if (!seen.has(key)) {
-        seen.add(key);
+      // Allow same track at different timestamps (could be played twice)
+      // But dedupe exact same track at same timestamp
+      const fullKey = `${timestamp}-${key}`;
+      
+      if (!seen.has(fullKey)) {
+        seen.add(fullKey);
         tracks.push({
           timestamp,
           timestampFormatted: formatSecondsToTimestamp(timestamp),
           title: info.title,
           artist: info.artist,
-          confidence: 0.7,
+          confidence: 0.75,
           sourceAuthor: comment.authorName,
           likes: comment.likeCount || 0,
         });
@@ -514,6 +626,7 @@ function parseSoundCloudComments(comments) {
     }
   }
   
+  // Sort by timestamp for tracklist order
   return tracks.sort((a, b) => a.timestamp - b.timestamp);
 }
 
