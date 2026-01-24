@@ -13,13 +13,19 @@ async function getApiUrl() {
 async function sendToApi(data) {
   const apiUrl = await getApiUrl();
   
+  // Add chrome extension flag
+  const payload = {
+    ...data,
+    chromeExtension: true,
+  };
+  
   try {
-    const response = await fetch(`${apiUrl}/api/chrome-import`, {
+    const response = await fetch(`${apiUrl}/api/import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
     
     const result = await response.json();

@@ -2058,6 +2058,124 @@ function mergeTracks(primaryTracks, secondaryTracks, primaryDuration, secondaryD
   };
 }
 
+// ============ CHROME EXTENSION HANDLER ============
+
+async function handleChromeExtensionImport(req, res, data) {
+  const { createClient } = require('@supabase/supabase-js');
+  
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  
+  if (!supabaseUrl || !supabaseKey) {
+    return res.status(500).json({ 
+      error: 'Database not configured',
+      message: 'Supabase credentials not found'
+    });
+  }
+  
+  const supabase = createClient(supabaseUrl, supabaseKey);
+  
+  function normalizeText(text) {
+    if (!text) return '';
+    return text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, '').trim();
+  }
+  
+  function generateSlug(name) {
+    return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  }
+  
+  console.log(`[Chrome Import] Received from ${data.source}:`, {
+    artists: data.artists?.length || 0,
+    tracks: data.tracks?.length || 0,
+  });
+  
+  const results = {
+    artistsCreated: 0,
+    artistsSkipped: 0,
+    tracksCreated: 0,
+    tracksSkipped: 0,
+  };
+  
+  // Process artists
+  if (data.artists && Array.isArray(data.artists)) {
+    for (const artist of data.artists) {
+      if (!artist.name) continue;
+      const slug = generateSlug(artist.name);
+      
+      const { data: existing } = await supabase.from('artists').select('id').eq('slug', slug).single();
+      
+      if (existing) {
+        results.artistsSkipped++;
+        continue;
+      }
+      
+      const { error } = await supabase.from('artists').insert({
+        name: artist.name,
+        slug,
+        genres: artist.genres || [],
+        country: artist.country || null,
+        beatport_url: artist.beatport_url || null,
+        soundcloud_url: artist.soundcloud_url || null,
+      });
+      
+      if (error && !error.message.includes('duplicate')) {
+        console.error(`Artist error: ${artist.name}`, error.message);
+      }
+      error ? results.artistsSkipped++ : results.artistsCreated++;
+    }
+  }
+  
+  // Process tracks
+  if (data.tracks && Array.isArray(data.tracks)) {
+    for (const track of data.tracks) {
+      if (!track.title) continue;
+      const titleNormalized = normalizeText(track.title);
+      const artistName = track.artist || track.artists?.[0] || 'Unknown';
+      
+      const { data: existing } = await supabase.from('tracks').select('id').eq('title_normalized', titleNormalized).eq('artist_name', artistName).single();
+      
+      if (existing) {
+        results.tracksSkipped++;
+        continue;
+      }
+      
+      // Find artist ID
+      let artistId = null;
+      const { data: artistData } = await supabase.from('artists').select('id').eq('slug', generateSlug(artistName)).single();
+      if (artistData) artistId = artistData.id;
+      
+      const { error } = await supabase.from('tracks').insert({
+        title: track.title,
+        title_normalized: titleNormalized,
+        artist_id: artistId,
+        artist_name: artistName,
+        label: track.label || null,
+        release_year: track.release_year || null,
+        is_unreleased: track.is_unreleased || false,
+        bpm: track.bpm || null,
+        key: track.key || null,
+        duration_seconds: track.duration_seconds || null,
+        beatport_url: track.beatport_url || null,
+        soundcloud_url: track.soundcloud_url || null,
+        times_played: 0,
+      });
+      
+      if (error && !error.message.includes('duplicate')) {
+        console.error(`Track error: ${track.title}`, error.message);
+      }
+      error ? results.tracksSkipped++ : results.tracksCreated++;
+    }
+  }
+  
+  console.log('[Chrome Import] Results:', results);
+  
+  return res.status(200).json({
+    success: true,
+    source: data.source,
+    ...results,
+  });
+}
+
 // ============ MAIN HANDLER ============
 
 module.exports = async (req, res) => {
@@ -2067,7 +2185,14 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { url, mergeWith } = req.body || {};
+  const body = req.body || {};
+  
+  // Handle Chrome Extension import
+  if (body.chromeExtension) {
+    return handleChromeExtensionImport(req, res, body);
+  }
+
+  const { url, mergeWith } = body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
   try {
