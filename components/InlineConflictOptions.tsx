@@ -1,30 +1,22 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   Animated,
-  PanResponder,
-  Dimensions,
+  Pressable,
   Linking,
+  Easing,
 } from 'react-native';
 import { 
   HelpCircle,
   Check,
   Play,
-  Youtube,
-  Music2,
-  Radio,
   Sparkles,
-  ChevronRight,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { TrackConflict, ConflictOption } from '@/types';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.35; // 35% of screen width to trigger selection
-const SWIPE_OUT_DURATION = 250;
 
 interface InlineConflictOptionsProps {
   conflict: TrackConflict;
@@ -44,185 +36,133 @@ const formatTimestamp = (seconds: number) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-// Single swipeable option card
-const SwipeableOption = ({
+// Floating option pill button
+const FloatingOptionPill = ({
   option,
   index,
   totalOptions,
-  timestamp,
   onSelect,
   onPlay,
   isSelecting,
+  shakeDelay,
 }: {
   option: ConflictOption;
   index: number;
   totalOptions: number;
-  timestamp: number;
   onSelect: () => void;
   onPlay: () => void;
   isSelecting: boolean;
+  shakeDelay: number;
 }) => {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(1)).current;
-  const [swiping, setSwiping] = useState(false);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
-  const getPlatformIcon = (platform: string, size: number = 14) => {
-    switch (platform) {
-      case 'youtube':
-        return <Youtube size={size} color="#FF0000" />;
-      case 'soundcloud':
-        return <Music2 size={size} color="#FF5500" />;
-      case 'mixcloud':
-        return <Radio size={size} color="#5000FF" />;
-      default:
-        return <Music2 size={size} color={Colors.dark.textMuted} />;
-    }
+  // Shake animation - periodic attention grabber
+  useEffect(() => {
+    const startShake = () => {
+      Animated.sequence([
+        Animated.delay(shakeDelay),
+        Animated.sequence([
+          Animated.timing(shakeAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -1, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 1, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: -1, duration: 50, useNativeDriver: true }),
+          Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+        ]),
+        Animated.delay(4000 + Math.random() * 2000), // Random delay between shakes
+      ]).start(() => startShake());
+    };
+    
+    const timeout = setTimeout(startShake, shakeDelay);
+    return () => clearTimeout(timeout);
+  }, [shakeDelay]);
+
+  // Floating animation
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { 
+          toValue: -2, 
+          duration: 1500 + index * 200, 
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true 
+        }),
+        Animated.timing(floatAnim, { 
+          toValue: 2, 
+          duration: 1500 + index * 200, 
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true 
+        }),
+      ])
+    ).start();
+  }, [index]);
+
+  const handlePress = () => {
+    if (isSelecting) return;
+    
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    // Scale down animation
+    Animated.sequence([
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 100, useNativeDriver: true }),
+      Animated.timing(scaleAnim, { toValue: 1.1, duration: 100, useNativeDriver: true }),
+    ]).start(() => {
+      onSelect();
+    });
   };
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !isSelecting,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only respond to horizontal swipes
-        return !isSelecting && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
-      },
-      onPanResponderGrant: () => {
-        setSwiping(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      },
-      onPanResponderMove: (_, gestureState) => {
-        // Only allow right swipe (positive dx)
-        if (gestureState.dx > 0) {
-          translateX.setValue(gestureState.dx);
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        setSwiping(false);
-        
-        if (gestureState.dx > SWIPE_THRESHOLD) {
-          // Swipe threshold reached - select this option
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          
-          // Animate off screen
-          Animated.parallel([
-            Animated.timing(translateX, {
-              toValue: SCREEN_WIDTH,
-              duration: SWIPE_OUT_DURATION,
-              useNativeDriver: true,
-            }),
-            Animated.timing(opacity, {
-              toValue: 0,
-              duration: SWIPE_OUT_DURATION,
-              useNativeDriver: true,
-            }),
-          ]).start(() => {
-            onSelect();
-          });
-        } else {
-          // Spring back
-          Animated.spring(translateX, {
-            toValue: 0,
-            friction: 8,
-            tension: 100,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        setSwiping(false);
-        Animated.spring(translateX, {
-          toValue: 0,
-          friction: 8,
-          tension: 100,
-          useNativeDriver: true,
-        }).start();
-      },
-    })
-  ).current;
+  const handlePlayPress = (e: any) => {
+    e.stopPropagation();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPlay();
+  };
 
-  // Calculate background color based on swipe progress
-  const backgroundColor = translateX.interpolate({
-    inputRange: [0, SWIPE_THRESHOLD, SCREEN_WIDTH],
-    outputRange: [Colors.dark.surface, 'rgba(34, 197, 94, 0.3)', 'rgba(34, 197, 94, 0.5)'],
-    extrapolate: 'clamp',
-  });
-
-  // Scale hint icon based on swipe
-  const hintScale = translateX.interpolate({
-    inputRange: [0, SWIPE_THRESHOLD],
-    outputRange: [1, 1.5],
-    extrapolate: 'clamp',
-  });
-
-  const hintOpacity = translateX.interpolate({
-    inputRange: [0, SWIPE_THRESHOLD / 2, SWIPE_THRESHOLD],
-    outputRange: [0.3, 0.7, 1],
-    extrapolate: 'clamp',
+  const shakeTranslate = shakeAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-3, 0, 3],
   });
 
   return (
-    <View style={styles.optionWrapper}>
-      {/* Swipe hint background */}
-      <Animated.View style={[styles.swipeHintBg, { opacity: hintOpacity }]}>
-        <Animated.View style={{ transform: [{ scale: hintScale }] }}>
-          <Check size={24} color="#22C55E" />
-        </Animated.View>
-        <Text style={styles.swipeHintText}>This one!</Text>
-      </Animated.View>
-
-      {/* The actual option card */}
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[
-          styles.optionCard,
-          {
-            transform: [{ translateX }],
-            opacity,
-            backgroundColor,
-          },
-          swiping && styles.optionCardSwiping,
-        ]}
+    <Animated.View
+      style={[
+        styles.floatingPill,
+        {
+          transform: [
+            { translateX: shakeTranslate },
+            { translateY: floatAnim },
+            { scale: scaleAnim },
+          ],
+        },
+      ]}
+    >
+      <Pressable
+        style={styles.pillContent}
+        onPress={handlePress}
+        disabled={isSelecting}
       >
-        {/* Timestamp badge */}
-        <View style={styles.timestampBadge}>
-          <Text style={styles.timestampText}>{formatTimestamp(timestamp)}</Text>
-        </View>
-
         {/* Play button */}
-        <Animated.View style={styles.playButton}>
-          <Play 
-            size={16} 
-            color={option.source === 'youtube' ? '#FF0000' : '#FF5500'} 
-            fill={option.source === 'youtube' ? '#FF0000' : '#FF5500'}
-            onPress={onPlay}
-          />
-        </Animated.View>
+        <Pressable style={styles.miniPlayButton} onPress={handlePlayPress}>
+          <Play size={10} color="#FFFFFF" fill="#FFFFFF" />
+        </Pressable>
 
         {/* Track info */}
-        <View style={styles.trackInfo}>
-          <View style={styles.titleRow}>
-            {getPlatformIcon(option.source, 12)}
-            <Text style={styles.trackTitle} numberOfLines={1}>
-              {option.title}
-            </Text>
-          </View>
-          <Text style={styles.trackArtist} numberOfLines={1}>
+        <View style={styles.pillInfo}>
+          <Text style={styles.pillTitle} numberOfLines={1}>
+            {option.title}
+          </Text>
+          <Text style={styles.pillArtist} numberOfLines={1}>
             {option.artist}
           </Text>
         </View>
 
         {/* Option indicator */}
-        <View style={styles.optionIndicator}>
-          <HelpCircle size={14} color={Colors.dark.primary} />
-          <Text style={styles.optionNumber}>{index + 1}/{totalOptions}</Text>
+        <View style={styles.pillIndicator}>
+          <HelpCircle size={10} color={Colors.dark.primary} />
+          <Text style={styles.pillNumber}>{index + 1}/{totalOptions}</Text>
         </View>
-
-        {/* Swipe arrow hint */}
-        <View style={styles.swipeArrow}>
-          <ChevronRight size={16} color={Colors.dark.textMuted} />
-        </View>
-      </Animated.View>
-    </View>
+      </Pressable>
+    </Animated.View>
   );
 };
 
@@ -234,7 +174,8 @@ export default function InlineConflictOptions({
 }: InlineConflictOptionsProps) {
   const [selecting, setSelecting] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const containerHeight = useRef(new Animated.Value(conflict.options.length * 64)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const expandAnim = useRef(new Animated.Value(0)).current;
 
   const handleSelect = async (optionId: string) => {
     if (selecting) return;
@@ -242,25 +183,32 @@ export default function InlineConflictOptions({
     setSelecting(true);
     setSelectedId(optionId);
     
-    try {
-      await onSelect(optionId);
-      
-      // Collapse the container
-      Animated.timing(containerHeight, {
-        toValue: 64, // Height of one track
+    // Animate the transition
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }),
+      Animated.timing(expandAnim, {
+        toValue: 1,
         duration: 300,
         useNativeDriver: false,
-      }).start();
+      }),
+    ]).start();
+    
+    try {
+      await onSelect(optionId);
     } catch (error) {
       console.error('Selection error:', error);
       setSelecting(false);
       setSelectedId(null);
+      fadeAnim.setValue(1);
+      expandAnim.setValue(0);
     }
   };
 
   const handlePlay = (option: ConflictOption) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
     if (option.source === 'youtube' && youtubeUrl) {
       const url = youtubeUrl.includes('?') 
         ? `${youtubeUrl}&t=${conflict.timestamp}` 
@@ -272,17 +220,17 @@ export default function InlineConflictOptions({
     }
   };
 
-  // If resolved, show the winner
+  // If resolved, show the winner as a regular track
   if (conflict.status === 'resolved' || selectedId) {
     const winner = conflict.options.find(o => o.id === (selectedId || conflict.winnerId));
     if (winner) {
       return (
         <View style={styles.resolvedCard}>
-          <View style={styles.resolvedBadge}>
-            <Check size={12} color="#22C55E" />
-          </View>
           <View style={styles.timestampBadge}>
             <Text style={styles.timestampText}>{formatTimestamp(conflict.timestamp)}</Text>
+          </View>
+          <View style={styles.resolvedCover}>
+            <Check size={16} color="#22C55E" />
           </View>
           <View style={styles.resolvedInfo}>
             <Text style={styles.resolvedTitle} numberOfLines={1}>{winner.title}</Text>
@@ -298,212 +246,185 @@ export default function InlineConflictOptions({
   }
 
   return (
-    <Animated.View style={[styles.container, { minHeight: containerHeight }]}>
-      {/* Header hint */}
-      <View style={styles.header}>
-        <HelpCircle size={12} color={Colors.dark.primary} />
-        <Text style={styles.headerText}>Which track? Swipe right to select</Text>
-        <View style={styles.pointsChip}>
-          <Sparkles size={8} color={Colors.dark.primary} />
-          <Text style={styles.pointsChipText}>+10</Text>
+    <View style={styles.container}>
+      {/* Ghost track slot - the "empty" track position */}
+      <View style={styles.ghostTrackSlot}>
+        <View style={styles.timestampBadge}>
+          <Text style={styles.timestampText}>{formatTimestamp(conflict.timestamp)}</Text>
+        </View>
+        
+        {/* Placeholder dashed area */}
+        <View style={styles.placeholderArea}>
+          <View style={styles.dashedBorder}>
+            <HelpCircle size={16} color={Colors.dark.textMuted} />
+            <Text style={styles.placeholderText}>Tap to identify</Text>
+          </View>
         </View>
       </View>
 
-      {/* Swipeable options */}
-      <View style={styles.optionsStack}>
+      {/* Floating option pills that overlay the slot */}
+      <Animated.View style={[styles.floatingContainer, { opacity: fadeAnim }]}>
         {conflict.options.map((option, index) => (
-          <SwipeableOption
+          <FloatingOptionPill
             key={option.id}
             option={option}
             index={index}
             totalOptions={conflict.options.length}
-            timestamp={conflict.timestamp}
             onSelect={() => handleSelect(option.id)}
             onPlay={() => handlePlay(option)}
             isSelecting={selecting}
+            shakeDelay={index * 500 + 1000}
           />
         ))}
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    marginVertical: 2,
-    borderRadius: 12,
-    backgroundColor: 'rgba(206, 138, 75, 0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(206, 138, 75, 0.25)',
-    overflow: 'hidden',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  headerText: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
-  },
-  pointsChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    backgroundColor: 'rgba(206, 138, 75, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  pointsChipText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: Colors.dark.primary,
-  },
-  optionsStack: {
-    paddingHorizontal: 8,
-    paddingBottom: 8,
-    gap: 4,
-  },
-  optionWrapper: {
     position: 'relative',
-    height: 56,
+    marginVertical: 4,
+    minHeight: 70,
   },
-  swipeHintBg: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    borderRadius: 10,
-  },
-  swipeHintText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#22C55E',
-  },
-  optionCard: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
+  
+  // Ghost track slot (the underlying "empty" position)
+  ghostTrackSlot: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-  },
-  optionCardSwiping: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 8,
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: 'rgba(206, 138, 75, 0.3)',
+    borderStyle: 'dashed',
   },
   timestampBadge: {
     backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginRight: 10,
   },
   timestampText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '800',
     color: '#FFFFFF',
     fontVariant: ['tabular-nums'],
   },
-  playButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.dark.surfaceLight,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 8,
-  },
-  trackInfo: {
+  placeholderArea: {
     flex: 1,
   },
-  titleRow: {
+  dashedBorder: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 8,
   },
-  trackTitle: {
-    flex: 1,
-    fontSize: 13,
+  placeholderText: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    fontWeight: '500',
+  },
+
+  // Floating options container
+  floatingContainer: {
+    position: 'absolute',
+    top: -8,
+    left: 70,
+    right: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    zIndex: 10,
+  },
+
+  // Individual floating pill
+  floatingPill: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: Colors.dark.primary,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  pillContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 4,
+    paddingRight: 8,
+    paddingVertical: 4,
+    gap: 6,
+  },
+  miniPlayButton: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: Colors.dark.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pillInfo: {
+    maxWidth: 100,
+  },
+  pillTitle: {
+    fontSize: 11,
     fontWeight: '600',
     color: Colors.dark.text,
   },
-  trackArtist: {
-    fontSize: 11,
+  pillArtist: {
+    fontSize: 9,
     color: Colors.dark.textSecondary,
-    marginTop: 1,
   },
-  optionIndicator: {
+  pillIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(206, 138, 75, 0.15)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    marginRight: 4,
+    gap: 2,
+    backgroundColor: 'rgba(206, 138, 75, 0.2)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  optionNumber: {
-    fontSize: 10,
+  pillNumber: {
+    fontSize: 9,
     fontWeight: '700',
     color: Colors.dark.primary,
   },
-  swipeArrow: {
-    opacity: 0.5,
-  },
-  // Resolved state
+
+  // Resolved state - looks like a normal track
   resolvedCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 10,
-    marginVertical: 2,
-    borderLeftWidth: 3,
-    borderLeftColor: '#22C55E',
+    marginVertical: 4,
   },
-  resolvedBadge: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  resolvedCover: {
+    width: 44,
+    height: 44,
+    borderRadius: 8,
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
   },
   resolvedInfo: {
     flex: 1,
-    marginLeft: 8,
+    marginLeft: 10,
   },
   resolvedTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: Colors.dark.text,
   },
   resolvedArtist: {
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.dark.textSecondary,
-    marginTop: 1,
+    marginTop: 2,
   },
   pointsEarned: {
     flexDirection: 'row',
