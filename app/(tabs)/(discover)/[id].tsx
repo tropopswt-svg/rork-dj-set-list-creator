@@ -38,11 +38,10 @@ import { useUser } from '@/contexts/UserContext';
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { addSourceToSet, voteOnConflict, getActiveConflicts } = useSets();
+  const { sets, addSourceToSet, voteOnConflict, getActiveConflicts, addTracksToSet } = useSets();
   const { userId, addPoints } = useUser();
   
   const [showAddModal, setShowAddModal] = useState(false);
-  const [tracks, setTracks] = useState<Track[]>([]);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
@@ -51,13 +50,27 @@ export default function SetDetailScreen() {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud' | 'mixcloud'>('youtube');
   
+  // Look up set from real context first, then fallback to mock data
+  // Using sets directly in useMemo for proper reactivity
   const setList = useMemo(() => {
-    const found = mockSetLists.find(s => s.id === id);
-    if (found && tracks.length === 0) {
-      setTracks(found.tracks);
+    // First try real sets from context
+    const realSet = sets.find(s => s.id === id);
+    if (realSet) {
+      console.log('[SetDetail] Found real set:', realSet.name, 'with', realSet.tracks?.length, 'tracks');
+      return realSet;
     }
-    return found;
-  }, [id, tracks.length]);
+    // Fallback to mock data for demo
+    const mockSet = mockSetLists.find(s => s.id === id);
+    if (mockSet) {
+      console.log('[SetDetail] Using mock set:', mockSet.name);
+    }
+    return mockSet;
+  }, [id, sets]); // Re-run when sets or id changes
+  
+  // Tracks come directly from setList (no separate state needed for reactivity)
+  const tracks = useMemo(() => {
+    return setList?.tracks || [];
+  }, [setList]);
 
   // Get conflicts for this set
   const conflicts = useMemo(() => {
@@ -115,6 +128,8 @@ export default function SetDetailScreen() {
   };
 
   const handleAddTrack = (trackData: Partial<Track>) => {
+    if (!setList) return;
+    
     const newTrack: Track = {
       id: trackData.id || Date.now().toString(),
       title: trackData.title || '',
@@ -131,7 +146,8 @@ export default function SetDetailScreen() {
       verified: false,
     };
     
-    setTracks(prev => [...prev, newTrack]);
+    // Add track to set via context (persists to storage)
+    addTracksToSet(setList.id, [newTrack]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
