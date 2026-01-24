@@ -17,7 +17,7 @@ import { X, Upload, FileSpreadsheet, Music, List, Check, AlertCircle, Copy, Tras
 import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
 import { SetList, Track } from '@/types';
-import { trpc } from '@/lib/trpc.js';
+import { trpc } from '@/lib/trpc';
 
 type TabType = 'sets' | 'tracks' | 'soundcloud' | 'repository';
 
