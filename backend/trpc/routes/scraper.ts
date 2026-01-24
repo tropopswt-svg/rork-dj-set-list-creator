@@ -1935,7 +1935,9 @@ export const scraperRouter = createTRPCRouter({
         const filePartBuffer = Buffer.from(filePart);
         const endBuffer = Buffer.from(endPart);
         
-        const body = Buffer.concat([headerBuffer, filePartBuffer, audioBuffer, endBuffer]);
+        const bodyBuffer = Buffer.concat([headerBuffer, filePartBuffer, audioBuffer, endBuffer]);
+        // Convert Buffer to Uint8Array for Vercel's fetch API compatibility
+        const body = new Uint8Array(bodyBuffer);
         
         console.log(`[ACRCloud] Sending request to ${host}`);
         
