@@ -5,7 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import React, { useEffect } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import Colors from "@/constants/colors";
-import { trpc, trpcClient } from "@/lib/trpc";
+import { trpc, trpcClient } from "@/lib/trpc.js";
 import { SetsProvider } from "@/contexts/SetsContext";
 
 SplashScreen.preventAutoHideAsync();
