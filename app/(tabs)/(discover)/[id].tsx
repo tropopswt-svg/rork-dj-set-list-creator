@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,84 +20,48 @@ import {
   CheckCircle,
   Bookmark,
   BookmarkCheck,
-  Scan,
-  AlertTriangle,
-  Brain,
-  RefreshCw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
-import TrackGapCard from '@/components/TrackGapCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ContributorModal from '@/components/ContributorModal';
-import IdentifyTrackModal from '@/components/IdentifyTrackModal';
+import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink } from '@/types';
-import { useSets } from '@/contexts/SetsContext';
-import { trpc } from '@/lib/trpc';
-
-interface TrackGap {
-  id: string;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  previousTrack: { id: string; title: string; artist: string } | null;
-  nextTrack: { id: string; title: string; artist: string } | null;
-  estimatedTracks: number;
-  suggestions: TrackSuggestion[];
-  confidence: 'high' | 'medium' | 'low';
-}
-
-interface TrackSuggestion {
-  id: string;
-  title: string;
-  artist: string;
-  duration: number;
-  matchReason: string;
-  confidence: number;
-  featuredInCount: number;
-}
-
-interface GapAnalysisResult {
-  gaps: TrackGap[];
-  coverage: number;
-  estimatedMissingTracks: number;
-  confidence: number;
-}
+import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
 
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { trackRepository, getSetById } = useSets();
   const [showAddModal, setShowAddModal] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [isSaved, setIsSaved] = useState(false);
+  const [loadingSaved, setLoadingSaved] = useState(true);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
-  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
-  const [identifyTimestamp, setIdentifyTimestamp] = useState(0);
-  const [showGaps, setShowGaps] = useState(true);
-  const [gapAnalysis, setGapAnalysis] = useState<GapAnalysisResult | null>(null);
-  
-  const gapAnalysisMutation = trpc.gapAnalysis.analyzeSet.useMutation({
-    onSuccess: (data) => {
-      console.log('[SetDetail] Gap analysis complete:', data);
-      setGapAnalysis(data);
-    },
-    onError: (error) => {
-      console.error('[SetDetail] Gap analysis error:', error);
-    },
-  });
   
   const setList = useMemo(() => {
-    const contextSet = getSetById(id || '');
-    if (contextSet) {
-      if (tracks.length === 0) {
-        setTracks(contextSet.tracks);
-      }
-      return contextSet;
+    const found = mockSetLists.find(s => s.id === id);
+    if (found && tracks.length === 0) {
+      setTracks(found.tracks);
     }
-    return undefined;
-  }, [id, getSetById, tracks.length]);
+    return found;
+  }, [id, tracks.length]);
+
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (id) {
+        try {
+          const saved = await isSetSaved(id);
+          setIsSaved(saved);
+        } catch (error) {
+          console.error('Error checking saved status:', error);
+        } finally {
+          setLoadingSaved(false);
+        }
+      }
+    };
+    checkSavedStatus();
+  }, [id]);
 
   if (!setList) {
     return (
@@ -111,84 +75,8 @@ export default function SetDetailScreen() {
     return [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   }, [tracks]);
 
-  const runGapAnalysis = useCallback(() => {
-    if (!setList) return;
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    const repoTracks = trackRepository.map(t => ({
-      id: t.id,
-      title: t.title,
-      artist: t.artist,
-      duration: t.duration,
-      featuredIn: t.featuredIn?.map(f => ({
-        setId: f.setId,
-        setName: f.setName,
-        artist: f.artist,
-        timestamp: f.timestamp,
-      })),
-    }));
-    
-    gapAnalysisMutation.mutate({
-      setId: setList.id,
-      setArtist: setList.artist,
-      totalDuration: setList.totalDuration || 3600,
-      tracks: sortedTracks.map(t => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist,
-        duration: t.duration,
-        timestamp: t.timestamp,
-        verified: t.verified,
-      })),
-      repositoryTracks: repoTracks,
-    });
-  }, [setList, sortedTracks, trackRepository, gapAnalysisMutation]);
-
-  useEffect(() => {
-    if (setList && sortedTracks.length > 0 && !gapAnalysis && !gapAnalysisMutation.isPending) {
-      const timer = setTimeout(() => {
-        runGapAnalysis();
-      }, 500);
-      return () => clearTimeout(timer);
-    }
-  }, [setList, sortedTracks.length]);
-
-  const tracksWithGaps = useMemo(() => {
-    if (!gapAnalysis || !showGaps) {
-      return sortedTracks.map(track => ({ type: 'track' as const, data: track }));
-    }
-
-    const items: Array<{ type: 'track'; data: Track } | { type: 'gap'; data: TrackGap }> = [];
-    const gaps = [...gapAnalysis.gaps].sort((a, b) => a.startTime - b.startTime);
-    
-    let gapIndex = 0;
-    
-    for (const gap of gaps) {
-      if (!gap.previousTrack) {
-        items.push({ type: 'gap', data: gap });
-        gapIndex++;
-        break;
-      }
-    }
-    
-    for (const track of sortedTracks) {
-      items.push({ type: 'track', data: track });
-      
-      const gapAfterTrack = gaps.find(g => g.previousTrack?.id === track.id);
-      if (gapAfterTrack) {
-        items.push({ type: 'gap', data: gapAfterTrack });
-      }
-    }
-    
-    return items;
-  }, [sortedTracks, gapAnalysis, showGaps]);
-
   const verifiedCount = sortedTracks.filter(t => t.verified).length;
   const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
-  const tracksIdentified = sortedTracks.length;
-  // Use stored commentsScraped if available, otherwise 0 (will be updated when scraping happens)
-  const commentsScraped = setList?.commentsScraped || 0;
 
   const formatTotalDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -229,90 +117,26 @@ export default function SetDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  const handleSave = () => {
+  const handleSave = useCallback(async () => {
+    if (!setList) return;
+    
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setIsSaved(!isSaved);
-  };
-
-  const handleOpenIdentify = (timestamp?: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIdentifyTimestamp(timestamp || 0);
-    setShowIdentifyModal(true);
-  };
-
-  const handleGapAddTrack = (timestamp: number) => {
-    setIdentifyTimestamp(timestamp);
-    setShowAddModal(true);
-  };
-
-  const handleGapSelectSuggestion = (suggestion: TrackSuggestion, timestamp: number) => {
-    const newTrack: Track = {
-      id: Date.now().toString(),
-      title: suggestion.title,
-      artist: suggestion.artist,
-      duration: suggestion.duration,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
-      addedAt: new Date(),
-      source: 'ai',
-      timestamp,
-      contributedBy: 'AI Suggestion',
-      verified: false,
-    };
     
-    setTracks(prev => [...prev, newTrack]);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    setTimeout(() => runGapAnalysis(), 100);
-  };
-
-  const handleGapIdentify = (timestamp: number) => {
-    handleOpenIdentify(timestamp);
-  };
-
-  const handleTrackIdentified = (identifiedTrack: {
-    title: string;
-    artist: string;
-    album?: string;
-    releaseDate?: string;
-    label?: string;
-    confidence: number;
-    duration?: number;
-    links: {
-      spotify?: string;
-      youtube?: string;
-      isrc?: string;
-    };
-  }, timestamp: number) => {
-    const newTrack: Track = {
-      id: Date.now().toString(),
-      title: identifiedTrack.title,
-      artist: identifiedTrack.artist,
-      album: identifiedTrack.album,
-      duration: identifiedTrack.duration || 0,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
-      addedAt: new Date(),
-      source: 'ai',
-      timestamp,
-      contributedBy: 'ACRCloud',
-      verified: true,
-      trackLinks: identifiedTrack.links.spotify ? [{ platform: 'spotify', url: identifiedTrack.links.spotify }] : undefined,
-    };
-    
-    setTracks(prev => [...prev, newTrack]);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-  };
-
-  const getAudioUrl = (): string | undefined => {
-    const youtubeLink = setList?.sourceLinks.find(l => l.platform === 'youtube');
-    if (youtubeLink) {
-      return youtubeLink.url;
+    try {
+      if (isSaved) {
+        await removeSetFromLibrary(setList.id);
+        setIsSaved(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        await saveSetToLibrary(setList);
+        setIsSaved(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Error saving/removing set:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
-    const soundcloudLink = setList?.sourceLinks.find(l => l.platform === 'soundcloud');
-    if (soundcloudLink) {
-      return soundcloudLink.url;
-    }
-    return undefined;
-  };
+  }, [setList, isSaved]);
 
   const getPlatformIcon = (platform: string, size: number = 18) => {
     switch (platform) {
@@ -386,6 +210,10 @@ export default function SetDetailScreen() {
             )}
 
             <View style={styles.quickStats}>
+              {setList.plays && (
+                <Text style={styles.quickStatText}>{formatPlays(setList.plays)} plays</Text>
+              )}
+              <Text style={styles.quickStatDot}>•</Text>
               <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration || 0)}</Text>
               <Text style={styles.quickStatDot}>•</Text>
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
@@ -419,7 +247,7 @@ export default function SetDetailScreen() {
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.15)' }]}>
                 <Sparkles size={18} color={Colors.dark.primary} />
               </View>
-              <Text style={styles.statValue}>{tracksIdentified}</Text>
+              <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
               <Text style={styles.statLabel}>Identified</Text>
             </View>
             
@@ -443,7 +271,7 @@ export default function SetDetailScreen() {
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.15)' }]}>
                 <MessageSquare size={18} color="#FB923C" />
               </View>
-              <Text style={styles.statValue}>{commentsScraped}</Text>
+              <Text style={styles.statValue}>{setList.commentsScraped || 0}</Text>
               <Text style={styles.statLabel}>Scraped</Text>
             </View>
           </View>
@@ -452,120 +280,43 @@ export default function SetDetailScreen() {
             <View style={styles.aiInfoBanner}>
               <Sparkles size={16} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                {commentsScraped > 0 ? (
-                  <>Tracklist built from {commentsScraped.toLocaleString()} comments & 1001Tracklists</>
-                ) : (
-                  <>Tracklist with {tracksIdentified} identified tracks</>
-                )}
+                Tracklist built from {setList.commentsScraped?.toLocaleString()} comments & 1001Tracklists
               </Text>
-            </View>
-          )}
-
-          {gapAnalysis && gapAnalysis.gaps.length > 0 && (
-            <View style={styles.gapAnalysisBanner}>
-              <View style={styles.gapBannerHeader}>
-                <View style={styles.gapBannerLeft}>
-                  <Brain size={18} color="#FB923C" />
-                  <View>
-                    <Text style={styles.gapBannerTitle}>Gap Analysis</Text>
-                    <Text style={styles.gapBannerSubtitle}>
-                      {gapAnalysis.gaps.length} gap{gapAnalysis.gaps.length > 1 ? 's' : ''} detected • ~{gapAnalysis.estimatedMissingTracks} missing
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.gapBannerActions}>
-                  <Pressable 
-                    style={styles.refreshButton}
-                    onPress={runGapAnalysis}
-                    disabled={gapAnalysisMutation.isPending}
-                  >
-                    {gapAnalysisMutation.isPending ? (
-                      <ActivityIndicator size="small" color="#FB923C" />
-                    ) : (
-                      <RefreshCw size={16} color="#FB923C" />
-                    )}
-                  </Pressable>
-                  <Pressable 
-                    style={[styles.toggleGapsButton, !showGaps && styles.toggleGapsButtonOff]}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setShowGaps(!showGaps);
-                    }}
-                  >
-                    <Text style={[styles.toggleGapsText, !showGaps && styles.toggleGapsTextOff]}>
-                      {showGaps ? 'Hide' : 'Show'}
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-              <View style={styles.coverageBar}>
-                <View style={[styles.coverageFill, { width: `${gapAnalysis.coverage}%` }]} />
-              </View>
-              <Text style={styles.coverageText}>{gapAnalysis.coverage}% coverage</Text>
-            </View>
-          )}
-
-          {gapAnalysisMutation.isPending && !gapAnalysis && (
-            <View style={styles.analyzingBanner}>
-              <ActivityIndicator size="small" color={Colors.dark.primary} />
-              <Text style={styles.analyzingText}>Analyzing tracklist for gaps...</Text>
             </View>
           )}
 
           <View style={styles.tracksSection}>
             <View style={styles.tracksSectionHeader}>
               <Text style={styles.sectionTitle}>Tracklist</Text>
-              <View style={styles.trackActions}>
-                <Pressable 
-                  style={styles.identifyButton}
-                  onPress={() => handleOpenIdentify()}
-                >
-                  <Scan size={16} color="#8B5CF6" />
-                  <Text style={styles.identifyButtonText}>Identify</Text>
-                </Pressable>
-                <Pressable 
-                  style={styles.addTrackButton}
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    setShowAddModal(true);
-                  }}
-                >
-                  <Plus size={16} color={Colors.dark.primary} />
-                  <Text style={styles.addTrackText}>Add Track</Text>
-                </Pressable>
-              </View>
+              <Pressable 
+                style={styles.addTrackButton}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setShowAddModal(true);
+                }}
+              >
+                <Plus size={16} color={Colors.dark.primary} />
+                <Text style={styles.addTrackText}>Add Track</Text>
+              </Pressable>
             </View>
 
-            {tracksWithGaps.map((item, index) => {
-              if (item.type === 'gap') {
-                return (
-                  <TrackGapCard
-                    key={item.data.id}
-                    gap={item.data}
-                    onAddTrack={handleGapAddTrack}
-                    onSelectSuggestion={handleGapSelectSuggestion}
-                    onIdentify={handleGapIdentify}
-                  />
-                );
-              }
-              return (
-                <TrackCard 
-                  key={item.data.id} 
-                  track={item.data}
-                  showTimestamp
-                  onPress={() => {
-                    if (setList.sourceLinks.length > 0 && item.data.timestamp) {
-                      const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                      if (youtubeLink) {
-                        const url = `${youtubeLink.url}&t=${item.data.timestamp}`;
-                        Linking.openURL(url);
-                      }
+            {sortedTracks.map((track) => (
+              <TrackCard 
+                key={track.id} 
+                track={track}
+                showTimestamp
+                onPress={() => {
+                  if (setList.sourceLinks.length > 0 && track.timestamp) {
+                    const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                    if (youtubeLink) {
+                      const url = `${youtubeLink.url}&t=${track.timestamp}`;
+                      Linking.openURL(url);
                     }
-                  }}
-                  onContributorPress={(username) => setSelectedContributor(username)}
-                />
-              );
-            })}
+                  }
+                }}
+                onContributorPress={(username) => setSelectedContributor(username)}
+              />
+            ))}
             
             {sortedTracks.length === 0 && (
               <View style={styles.emptyTracks}>
@@ -613,15 +364,6 @@ export default function SetDetailScreen() {
         visible={selectedContributor !== null}
         username={selectedContributor || ''}
         onClose={() => setSelectedContributor(null)}
-      />
-
-      <IdentifyTrackModal
-        visible={showIdentifyModal}
-        onClose={() => setShowIdentifyModal(false)}
-        onIdentified={handleTrackIdentified}
-        timestamp={identifyTimestamp}
-        setTitle={setList.name}
-        audioUrl={getAudioUrl()}
       />
     </View>
   );
@@ -810,94 +552,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.textSecondary,
   },
-  gapAnalysisBanner: {
-    backgroundColor: 'rgba(251, 146, 60, 0.1)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(251, 146, 60, 0.2)',
-  },
-  gapBannerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  gapBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    flex: 1,
-  },
-  gapBannerTitle: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: '#FB923C',
-  },
-  gapBannerSubtitle: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-    marginTop: 2,
-  },
-  gapBannerActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  refreshButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(251, 146, 60, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toggleGapsButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'rgba(251, 146, 60, 0.2)',
-  },
-  toggleGapsButtonOff: {
-    backgroundColor: Colors.dark.surface,
-  },
-  toggleGapsText: {
-    fontSize: 12,
-    fontWeight: '600' as const,
-    color: '#FB923C',
-  },
-  toggleGapsTextOff: {
-    color: Colors.dark.textMuted,
-  },
-  coverageBar: {
-    height: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    borderRadius: 2,
-    overflow: 'hidden',
-  },
-  coverageFill: {
-    height: '100%',
-    backgroundColor: '#FB923C',
-    borderRadius: 2,
-  },
-  coverageText: {
-    fontSize: 11,
-    color: Colors.dark.textMuted,
-    marginTop: 6,
-  },
-  analyzingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 24,
-    gap: 10,
-  },
-  analyzingText: {
-    fontSize: 13,
-    color: Colors.dark.textSecondary,
-  },
   tracksSection: {},
   tracksSectionHeader: {
     flexDirection: 'row',
@@ -909,24 +563,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-  },
-  trackActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  identifyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(139, 92, 246, 0.15)',
-    borderRadius: 20,
-  },
-  identifyButtonText: {
-    fontSize: 13,
-    color: '#8B5CF6',
-    fontWeight: '500' as const,
   },
   addTrackButton: {
     flexDirection: 'row',

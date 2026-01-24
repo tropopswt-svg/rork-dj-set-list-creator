@@ -1,32 +1,27 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
-import { Search, Link2, TrendingUp, Clock, Flame } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import ImportSetModal from '@/components/ImportSetModal';
-import { useSets, useFilteredSets } from '@/contexts/SetsContext';
+import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
+import { useDebounce } from '@/utils/hooks';
+import { ImportResult } from '@/services/importService';
 
 type FilterType = 'trending' | 'recent';
 
 export default function DiscoverScreen() {
   const router = useRouter();
-  const { allArtists, addSet } = useSets();
+  const [setLists, setSetLists] = useState<SetList[]>(mockSetLists);
   const [showImportModal, setShowImportModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('trending');
   const [refreshing, setRefreshing] = useState(false);
-
-  const filteredSets = useFilteredSets(searchQuery, activeFilter);
-
-  const hotArtists = allArtists
-    .filter(a => a.imageUrl)
-    .sort((a, b) => (b.setsCount || 0) - (a.setsCount || 0))
-    .slice(0, 8);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
@@ -35,26 +30,43 @@ export default function DiscoverScreen() {
     }, 1000);
   }, []);
 
-  const handleImport = async (url: string, platform: 'youtube' | 'soundcloud' | 'mixcloud' | '1001tracklists') => {
-    // The ImportSetModal now handles the scraping internally
-    // This callback is called after successful scrape
-    // We'll use the library screen's import logic as reference
+  const handleImport = (result: ImportResult) => {
+    if (!result.success || !result.setList) {
+      return;
+    }
+
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    setSetLists([result.setList, ...setLists]);
     setShowImportModal(false);
-    
-    // The modal will handle the actual import and navigation
-    // This is just a placeholder - the real work happens in ImportSetModal
+
+    router.push(`/(tabs)/(discover)/${result.setList.id}`);
   };
 
-  const handleArtistPress = (artistName: string) => {
-    Haptics.selectionAsync();
-    setSearchQuery(artistName);
-  };
+  const filteredSets = useMemo(() => {
+    return setLists
+      .filter(set => {
+        if (!debouncedSearchQuery) return true;
+        const query = debouncedSearchQuery.toLowerCase();
+        return (
+          set.name.toLowerCase().includes(query) ||
+          set.artist.toLowerCase().includes(query) ||
+          set.venue?.toLowerCase().includes(query)
+        );
+      })
+      .sort((a, b) => {
+        if (activeFilter === 'trending') {
+          return (b.plays || 0) - (a.plays || 0);
+        }
+        return new Date(b.date).getTime() - new Date(a.date).getTime();
+      });
+  }, [setLists, debouncedSearchQuery, activeFilter]);
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Discover</Text>
+          <Text style={styles.title}>Sets</Text>
           <Pressable 
             style={styles.addButton}
             onPress={() => {
@@ -62,12 +74,12 @@ export default function DiscoverScreen() {
               setShowImportModal(true);
             }}
           >
-            <Link2 size={18} color="#fff" />
+            <Link2 size={20} color={Colors.dark.background} />
           </Pressable>
         </View>
 
         <View style={styles.searchContainer}>
-          <Search size={16} color={Colors.dark.textMuted} />
+          <Search size={18} color={Colors.dark.textMuted} />
           <TextInput
             style={styles.searchInput}
             placeholder="Search sets, artists, venues..."
@@ -75,6 +87,29 @@ export default function DiscoverScreen() {
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
+        </View>
+
+        <View style={styles.filterRow}>
+          <Pressable 
+            style={[styles.filterChip, activeFilter === 'trending' && styles.filterChipActive]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveFilter('trending');
+            }}
+          >
+            <TrendingUp size={14} color={activeFilter === 'trending' ? Colors.dark.background : Colors.dark.textSecondary} />
+            <Text style={[styles.filterText, activeFilter === 'trending' && styles.filterTextActive]}>Trending</Text>
+          </Pressable>
+          <Pressable 
+            style={[styles.filterChip, activeFilter === 'recent' && styles.filterChipActive]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveFilter('recent');
+            }}
+          >
+            <Clock size={14} color={activeFilter === 'recent' ? Colors.dark.background : Colors.dark.textSecondary} />
+            <Text style={[styles.filterText, activeFilter === 'recent' && styles.filterTextActive]}>Recent</Text>
+          </Pressable>
         </View>
 
         <ScrollView 
@@ -89,64 +124,6 @@ export default function DiscoverScreen() {
             />
           }
         >
-          {!searchQuery && (
-            <View style={styles.hotSection}>
-              <View style={styles.sectionHeader}>
-                <Flame size={16} color={Colors.dark.primary} />
-                <Text style={styles.sectionTitle}>Hot Artists</Text>
-              </View>
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.hotArtistsContainer}
-              >
-                {hotArtists.map((artist) => (
-                  <Pressable 
-                    key={artist.id} 
-                    style={styles.hotArtistItem}
-                    onPress={() => handleArtistPress(artist.name)}
-                  >
-                    <View style={styles.hotArtistImageWrapper}>
-                      <View style={styles.hotArtistGradientRing}>
-                        <View style={styles.hotArtistInnerRing}>
-                          <Image 
-                            source={{ uri: artist.imageUrl }} 
-                            style={styles.hotArtistImage}
-                            contentFit="cover"
-                          />
-                        </View>
-                      </View>
-                    </View>
-                    <Text style={styles.hotArtistName} numberOfLines={1}>{artist.name}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.filterRow}>
-            <Pressable 
-              style={[styles.filterChip, activeFilter === 'trending' && styles.filterChipActive]}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setActiveFilter('trending');
-              }}
-            >
-              <TrendingUp size={13} color={activeFilter === 'trending' ? '#fff' : Colors.dark.textSecondary} />
-              <Text style={[styles.filterText, activeFilter === 'trending' && styles.filterTextActive]}>Trending</Text>
-            </Pressable>
-            <Pressable 
-              style={[styles.filterChip, activeFilter === 'recent' && styles.filterChipActive]}
-              onPress={() => {
-                Haptics.selectionAsync();
-                setActiveFilter('recent');
-              }}
-            >
-              <Clock size={13} color={activeFilter === 'recent' ? '#fff' : Colors.dark.textSecondary} />
-              <Text style={[styles.filterText, activeFilter === 'recent' && styles.filterTextActive]}>Recent</Text>
-            </Pressable>
-          </View>
-
           {filteredSets.map(setList => (
             <SetFeedCard 
               key={setList.id} 
@@ -158,7 +135,7 @@ export default function DiscoverScreen() {
           {filteredSets.length === 0 && (
             <View style={styles.emptyState}>
               <View style={styles.emptyIcon}>
-                <Search size={28} color={Colors.dark.textMuted} />
+                <Search size={32} color={Colors.dark.textMuted} />
               </View>
               <Text style={styles.emptyTitle}>No sets found</Text>
               <Text style={styles.emptySubtitle}>
@@ -191,19 +168,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   title: {
-    fontSize: 28,
+    fontSize: 34,
     fontWeight: '700' as const,
     color: Colors.dark.text,
-    letterSpacing: -0.3,
+    letterSpacing: -0.5,
   },
   addButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -213,74 +190,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: Colors.dark.surface,
     marginHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 16,
     paddingHorizontal: 14,
     borderRadius: 12,
-    height: 44,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
+    height: 46,
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
     color: Colors.dark.text,
-  },
-  hotSection: {
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    marginBottom: 14,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: '600' as const,
-    color: Colors.dark.text,
-  },
-  hotArtistsContainer: {
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  hotArtistItem: {
-    alignItems: 'center',
-    width: 76,
-  },
-  hotArtistImageWrapper: {
-    marginBottom: 8,
-  },
-  hotArtistGradientRing: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: Colors.dark.primary,
-    padding: 2.5,
-    shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  hotArtistInnerRing: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 34,
-    backgroundColor: Colors.dark.background,
-    padding: 2.5,
-  },
-  hotArtistImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 32,
-  },
-  hotArtistName: {
-    fontSize: 12,
-    fontWeight: '500' as const,
-    color: Colors.dark.text,
-    textAlign: 'center',
   },
   filterRow: {
     flexDirection: 'row',
@@ -296,12 +215,9 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     backgroundColor: Colors.dark.surface,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
   },
   filterChipActive: {
     backgroundColor: Colors.dark.primary,
-    borderColor: Colors.dark.primary,
   },
   filterText: {
     fontSize: 13,
@@ -309,7 +225,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
   },
   filterTextActive: {
-    color: '#fff',
+    color: Colors.dark.background,
   },
   scrollView: {
     flex: 1,
@@ -323,24 +239,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
   },
   emptyIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     backgroundColor: Colors.dark.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   emptySubtitle: {
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.dark.textSecondary,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 20,
   },
 });
