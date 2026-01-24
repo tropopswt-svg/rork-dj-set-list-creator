@@ -98,10 +98,12 @@ export default function LibraryScreen() {
                     <Text style={styles.setArtist}>{setList.artist}</Text>
                     <Text style={styles.setName} numberOfLines={1}>{setList.name}</Text>
                     <View style={styles.setMeta}>
-                      <View style={styles.metaItem}>
-                        <Clock size={12} color={Colors.dark.textMuted} />
-                        <Text style={styles.metaText}>{formatDuration(setList.totalDuration || 0)}</Text>
-                      </View>
+                      {(setList.totalDuration || 0) > 0 && (
+                        <View style={styles.metaItem}>
+                          <Clock size={12} color={Colors.dark.textMuted} />
+                          <Text style={styles.metaText}>{formatDuration(setList.totalDuration)}</Text>
+                        </View>
+                      )}
                       <View style={styles.metaItem}>
                         <Music size={12} color={Colors.dark.textMuted} />
                         <Text style={styles.metaText}>{setList.tracks.length} tracks</Text>

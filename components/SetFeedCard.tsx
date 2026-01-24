@@ -126,9 +126,11 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
               <Play size={18} color="#fff" fill="#fff" />
             </View>
           </View>
-          <View style={styles.durationBadge}>
-            <Text style={styles.durationText}>{formatDuration(setList.totalDuration || 0)}</Text>
-          </View>
+          {(setList.totalDuration || 0) > 0 && (
+            <View style={styles.durationBadge}>
+              <Text style={styles.durationText}>{formatDuration(setList.totalDuration)}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.content}>

@@ -284,12 +284,18 @@ export default function SetDetailScreen() {
             )}
 
             <View style={styles.quickStats}>
-              {setList.plays && (
-                <Text style={styles.quickStatText}>{formatPlays(setList.plays)} plays</Text>
-              )}
-              <Text style={styles.quickStatDot}>•</Text>
-              <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration || 0)}</Text>
-              <Text style={styles.quickStatDot}>•</Text>
+              {setList.plays ? (
+                <>
+                  <Text style={styles.quickStatText}>{formatPlays(setList.plays)} plays</Text>
+                  <Text style={styles.quickStatDot}>•</Text>
+                </>
+              ) : null}
+              {(setList.totalDuration || 0) > 0 ? (
+                <>
+                  <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration)}</Text>
+                  <Text style={styles.quickStatDot}>•</Text>
+                </>
+              ) : null}
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
             </View>
           </View>
@@ -397,7 +403,7 @@ export default function SetDetailScreen() {
             </View>
           </View>
 
-          {setList.aiProcessed && (
+          {setList.aiProcessed && (setList.commentsScraped || 0) > 0 && (
             <View style={styles.aiInfoBanner}>
               <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
