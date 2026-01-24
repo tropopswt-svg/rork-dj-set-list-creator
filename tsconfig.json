@@ -5,6 +5,9 @@
     "strict": true,
     "jsx": "react-native",
     "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "target": "ES2022",
     "paths": {
       "@/*": [
         "./*"
