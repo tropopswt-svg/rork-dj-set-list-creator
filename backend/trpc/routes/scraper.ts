@@ -536,6 +536,7 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
   let title = "Unknown Set";
   let artist = "Unknown Artist";
   let thumbnail = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+  let duration: string | undefined;
   
   try {
     // Try to fetch comments (don't fail if this doesn't work)
@@ -567,6 +568,52 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
     } catch (oembedError) {
       console.warn(`[Scraper] YouTube oEmbed failed, using defaults:`, oembedError);
     }
+    
+    // Try to fetch duration from the YouTube page
+    try {
+      const pageResponse = await fetch(youtubeUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      
+      if (pageResponse.ok) {
+        const html = await pageResponse.text();
+        
+        // Try to extract duration from page data - look for "lengthSeconds":"X"
+        const lengthMatch = html.match(/"lengthSeconds"\s*:\s*"?(\d+)"?/);
+        if (lengthMatch) {
+          const seconds = parseInt(lengthMatch[1], 10);
+          if (seconds > 0) {
+            // Convert to ISO 8601 duration format (PT1H30M45S)
+            const hours = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
+            console.log(`[Scraper] Found YouTube duration: ${seconds}s -> ${duration}`);
+          }
+        }
+        
+        // Also try approxDurationMs as fallback
+        if (!duration) {
+          const approxMatch = html.match(/"approxDurationMs"\s*:\s*"?(\d+)"?/);
+          if (approxMatch) {
+            const seconds = Math.floor(parseInt(approxMatch[1], 10) / 1000);
+            if (seconds > 0) {
+              const hours = Math.floor(seconds / 3600);
+              const mins = Math.floor((seconds % 3600) / 60);
+              const secs = seconds % 60;
+              duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
+              console.log(`[Scraper] Found YouTube duration from approxDurationMs: ${seconds}s -> ${duration}`);
+            }
+          }
+        }
+      }
+    } catch (pageError) {
+      console.warn(`[Scraper] Failed to fetch YouTube page for duration:`, pageError);
+    }
   } catch (error) {
     console.error(`[Scraper] YouTube fetch error:`, error);
     // Continue with defaults
@@ -576,6 +623,7 @@ async function fetchYouTubeData(videoId: string): Promise<z.infer<typeof Scraped
     title,
     artist,
     thumbnail,
+    duration,
     platform: "youtube",
     tracks,
     comments,
@@ -714,8 +762,56 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
   let title = parts[1]?.replace(/-/g, ' ') || "Unknown Set";
   let artist = parts[0]?.replace(/-/g, ' ') || "Unknown Artist";
   let thumbnail: string | undefined;
+  let duration: string | undefined;
   
   try {
+    // Try to fetch the page to get duration and other metadata
+    try {
+      const pageResponse = await fetch(soundcloudUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+      
+      if (pageResponse.ok) {
+        const html = await pageResponse.text();
+        
+        // Try to extract from hydration data
+        const hydrationMatch = html.match(/window\.__sc_hydration\s*=\s*(\[.*?\]);/s);
+        if (hydrationMatch) {
+          try {
+            const hydrationData = JSON.parse(hydrationMatch[1]);
+            for (const item of hydrationData) {
+              if (item.hydratable === 'sound' && item.data) {
+                // Get duration in milliseconds, convert to ISO 8601
+                if (item.data.duration) {
+                  const seconds = Math.floor(item.data.duration / 1000);
+                  if (seconds > 0) {
+                    const hours = Math.floor(seconds / 3600);
+                    const mins = Math.floor((seconds % 3600) / 60);
+                    const secs = seconds % 60;
+                    duration = `PT${hours > 0 ? hours + 'H' : ''}${mins > 0 ? mins + 'M' : ''}${secs > 0 ? secs + 'S' : ''}`;
+                    console.log(`[Scraper] Found SoundCloud duration: ${seconds}s -> ${duration}`);
+                  }
+                }
+                // Also get title and artist from hydration
+                if (item.data.title) title = item.data.title;
+                if (item.data.user?.username) artist = item.data.user.username;
+                if (item.data.artwork_url) thumbnail = item.data.artwork_url.replace('-large', '-t500x500');
+                break;
+              }
+            }
+          } catch (parseError) {
+            console.warn(`[Scraper] Failed to parse SoundCloud hydration data:`, parseError);
+          }
+        }
+      }
+    } catch (pageError) {
+      console.warn(`[Scraper] Failed to fetch SoundCloud page:`, pageError);
+    }
+    
     // Try to fetch comments (don't fail if this doesn't work)
     try {
       comments = await fetchSoundCloudComments(soundcloudUrl);
@@ -724,25 +820,27 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
       console.warn(`[Scraper] Failed to fetch SoundCloud comments, continuing:`, commentError);
     }
     
-    // Try to fetch metadata via oEmbed
-    try {
-      const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(soundcloudUrl)}&format=json`;
-      const response = await fetch(oembedUrl, {
-        signal: AbortSignal.timeout(10000), // 10 second timeout
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`[Scraper] SoundCloud oEmbed data:`, data);
+    // Try to fetch metadata via oEmbed (as fallback for title/artist/thumbnail)
+    if (!thumbnail || title.includes('-')) {
+      try {
+        const oembedUrl = `https://soundcloud.com/oembed?url=${encodeURIComponent(soundcloudUrl)}&format=json`;
+        const response = await fetch(oembedUrl, {
+          signal: AbortSignal.timeout(10000),
+        });
         
-        title = data.title || title;
-        artist = data.author_name || artist;
-        thumbnail = data.thumbnail_url;
-      } else {
-        console.warn(`[Scraper] SoundCloud oEmbed returned ${response.status}, using defaults`);
+        if (response.ok) {
+          const data = await response.json();
+          console.log(`[Scraper] SoundCloud oEmbed data:`, data);
+          
+          if (!title || title.includes('-')) title = data.title || title;
+          if (!artist || artist.includes('-')) artist = data.author_name || artist;
+          if (!thumbnail) thumbnail = data.thumbnail_url;
+        } else {
+          console.warn(`[Scraper] SoundCloud oEmbed returned ${response.status}, using defaults`);
+        }
+      } catch (oembedError) {
+        console.warn(`[Scraper] SoundCloud oEmbed failed, using defaults:`, oembedError);
       }
-    } catch (oembedError) {
-      console.warn(`[Scraper] SoundCloud oEmbed failed, using defaults:`, oembedError);
     }
   } catch (error) {
     console.error(`[Scraper] SoundCloud fetch error:`, error);
@@ -753,6 +851,7 @@ async function fetchSoundCloudData(trackPath: string): Promise<z.infer<typeof Sc
     title,
     artist,
     thumbnail,
+    duration,
     platform: "soundcloud",
     tracks,
     comments,
