@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert } from 'react-native';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert, LayoutChangeEvent } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,6 +24,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
+import DraggableTrackCard from '@/components/DraggableTrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ArtistLink from '@/components/ArtistLink';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
@@ -72,6 +73,13 @@ export default function SetDetailScreen() {
 
   // Track votes on timestamp conflicts (conflictTimestamp -> selected track)
   const [timestampVotes, setTimestampVotes] = useState<Record<number, Track>>({});
+
+  // Gap positions for drag-and-drop (gapId -> { y, timestamp })
+  const [gapPositions, setGapPositions] = useState<Record<string, { y: number; timestamp: number }>>({});
+  const [isDraggingTrack, setIsDraggingTrack] = useState(false);
+  const [highlightedGap, setHighlightedGap] = useState<string | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollOffset = useRef(0);
 
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -567,6 +575,76 @@ export default function SetDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  // Handle gap position measurement for drag-and-drop
+  const handleGapLayout = (gapId: string, timestamp: number) => (event: LayoutChangeEvent) => {
+    const { y, height } = event.nativeEvent.layout;
+    // We need to account for scroll offset and get absolute position
+    setGapPositions(prev => ({
+      ...prev,
+      [gapId]: { y: y + scrollOffset.current, timestamp },
+    }));
+  };
+
+  // Handle track drop from unplaced section
+  const handleTrackDrop = (track: Track, dropY: number) => {
+    if (!setList) return;
+
+    // Find the closest gap above the drop position
+    const gaps = Object.entries(gapPositions);
+    let closestGap: { gapId: string; timestamp: number } | null = null;
+    let closestDistance = Infinity;
+
+    for (const [gapId, { y, timestamp }] of gaps) {
+      // Calculate distance from drop point to gap
+      const distance = Math.abs(dropY - y);
+      if (distance < closestDistance && dropY > y - 100) {
+        closestDistance = distance;
+        closestGap = { gapId, timestamp };
+      }
+    }
+
+    // If we found a close enough gap, place the track there
+    if (closestGap && closestDistance < 300) {
+      console.log('[Drop] Placing track at timestamp:', closestGap.timestamp);
+
+      // Create a new track with the timestamp
+      const placedTrack: Track = {
+        ...track,
+        id: `placed-${Date.now()}`,
+        timestamp: closestGap.timestamp,
+        source: 'manual',
+        contributedBy: 'You',
+      };
+
+      // Add the track to the set
+      addTracksToSet(setList.id, [placedTrack]);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert(
+        'Track Placed',
+        `"${track.title}" has been added at ${formatTimestamp(closestGap.timestamp)}`,
+        [{ text: 'OK' }]
+      );
+    } else {
+      // No gap found nearby
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      Alert.alert(
+        'Drop Cancelled',
+        'Drag the track higher to place it in a gap in the timeline.',
+        [{ text: 'OK' }]
+      );
+    }
+
+    setIsDraggingTrack(false);
+    setHighlightedGap(null);
+  };
+
+  // Format timestamp helper
+  const formatTimestamp = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${mins}:${s.toString().padStart(2, '0')}`;
+  };
+
   // Handle identification submission from audio preview modal
   const handleIdentifyTrack = async (artist: string, title: string) => {
     if (!audioPreviewTrack || !setList) return;
@@ -669,10 +747,15 @@ export default function SetDetailScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
       
-      <ScrollView 
+      <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          scrollOffset.current = e.nativeEvent.contentOffset.y;
+        }}
       >
         <View style={styles.headerImage}>
           <Image
@@ -1282,11 +1365,17 @@ export default function SetDetailScreen() {
                   return `${mins}:${s.toString().padStart(2, '0')}`;
                 };
                 const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
+                const isHighlighted = isDraggingTrack && highlightedGap === item.gapId;
 
                 return (
                   <Pressable
                     key={item.gapId}
-                    style={styles.gapIndicator}
+                    style={[
+                      styles.gapIndicator,
+                      isDraggingTrack && styles.gapIndicatorDropTarget,
+                      isHighlighted && styles.gapIndicatorHighlighted,
+                    ]}
+                    onLayout={handleGapLayout(item.gapId, item.timestamp)}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setShowAddModal(true);
@@ -1296,13 +1385,13 @@ export default function SetDetailScreen() {
                       <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
                     </View>
                     <View style={styles.gapContent}>
-                      <View style={styles.gapLine} />
-                      <Text style={styles.gapText}>
-                        ~{estimatedTracks} track{estimatedTracks > 1 ? 's' : ''} missing
+                      <View style={[styles.gapLine, isDraggingTrack && styles.gapLineActive]} />
+                      <Text style={[styles.gapText, isDraggingTrack && styles.gapTextActive]}>
+                        {isDraggingTrack ? 'Drop here' : `~${estimatedTracks} track${estimatedTracks > 1 ? 's' : ''} missing`}
                       </Text>
-                      <View style={styles.gapLine} />
+                      <View style={[styles.gapLine, isDraggingTrack && styles.gapLineActive]} />
                     </View>
-                    <Plus size={16} color={Colors.dark.primary} />
+                    <Plus size={16} color={isDraggingTrack ? Colors.dark.primary : Colors.dark.primary} />
                   </Pressable>
                 );
               }
@@ -1451,22 +1540,39 @@ export default function SetDetailScreen() {
                     </Text>
                   </View>
                   <Text style={styles.unplacedSubtitle}>
-                    {tracklistItems.length > 0
+                    {tracklistItems.length > 0 && estimatedMissingTracks > 0
+                      ? 'Drag tracks up to place them in gaps above'
+                      : tracklistItems.length > 0
                       ? 'Add a YouTube or SoundCloud source to place these in the timeline'
                       : 'From 1001Tracklists - add a source to get timestamps'}
                   </Text>
                 </View>
                 {unplacedTracks.map((track, index) => (
-                  <TrackCard
-                    key={track.id}
-                    track={track}
-                    showIndex={index + 1}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSelectedTrack(track);
-                    }}
-                    onContributorPress={(username) => setSelectedContributor(username)}
-                  />
+                  // Use draggable card if there are gaps to fill
+                  estimatedMissingTracks > 0 ? (
+                    <DraggableTrackCard
+                      key={track.id}
+                      track={track}
+                      index={index}
+                      onDragStart={() => setIsDraggingTrack(true)}
+                      onDragEnd={handleTrackDrop}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedTrack(track);
+                      }}
+                    />
+                  ) : (
+                    <TrackCard
+                      key={track.id}
+                      track={track}
+                      showIndex={index + 1}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedTrack(track);
+                      }}
+                      onContributorPress={(username) => setSelectedContributor(username)}
+                    />
+                  )
                 ))}
               </View>
             )}
@@ -2291,6 +2397,26 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.dark.primary,
     fontWeight: '500' as const,
+  },
+  gapIndicatorDropTarget: {
+    backgroundColor: 'rgba(255, 107, 53, 0.12)',
+    borderColor: Colors.dark.primary,
+    borderStyle: 'dashed',
+    minHeight: 44,
+  },
+  gapIndicatorHighlighted: {
+    backgroundColor: 'rgba(255, 107, 53, 0.25)',
+    borderColor: Colors.dark.primary,
+    borderWidth: 2,
+  },
+  gapLineActive: {
+    backgroundColor: Colors.dark.primary,
+    height: 2,
+  },
+  gapTextActive: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.dark.primary,
   },
   unplacedIdsBanner: {
     flexDirection: 'row',
