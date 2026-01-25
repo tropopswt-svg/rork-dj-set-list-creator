@@ -21,6 +21,56 @@ const coverImages = [
   'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
 ];
 
+// Venue to location mapping for deriving location from venue
+const VENUE_LOCATIONS: Record<string, string> = {
+  'Ushuaïa': 'Ibiza, Spain',
+  'Hï Ibiza': 'Ibiza, Spain',
+  'Pacha': 'Ibiza, Spain',
+  'Amnesia': 'Ibiza, Spain',
+  'DC-10': 'Ibiza, Spain',
+  'Privilege': 'Ibiza, Spain',
+  'Berghain': 'Berlin, Germany',
+  'Tresor': 'Berlin, Germany',
+  'Watergate': 'Berlin, Germany',
+  'Fabric': 'London, UK',
+  'Printworks': 'London, UK',
+  'The Warehouse Project': 'Manchester, UK',
+  'Motion': 'Bristol, UK',
+  'Brooklyn Mirage': 'New York, USA',
+  'Avant Gardner': 'New York, USA',
+  'Nowadays': 'New York, USA',
+  'Hudson River': 'New York, USA',
+  'Club Space': 'Miami, USA',
+  'E11EVEN': 'Miami, USA',
+  'Exchange LA': 'Los Angeles, USA',
+  'Sound Nightclub': 'Los Angeles, USA',
+  'De School': 'Amsterdam, Netherlands',
+  'Shelter': 'Amsterdam, Netherlands',
+  'Tomorrowland': 'Belgium',
+  'Coachella': 'California, USA',
+  'Awakenings': 'Amsterdam, Netherlands',
+  'Time Warp': 'Germany',
+  'Movement': 'Detroit, USA',
+  'Ultra Music Festival': 'Miami, USA',
+  'EDC': 'Las Vegas, USA',
+  'Creamfields': 'UK',
+  'Sónar': 'Barcelona, Spain',
+  'BPM Festival': 'Various',
+  'BBC Radio 1': 'UK',
+  'Essential Mix': 'BBC Radio 1',
+  'Boiler Room': 'Various',
+  'Cercle': 'Various',
+  'Circoloco': 'Various',
+  'Defected': 'Various',
+  'Drumcode': 'Various',
+  'Afterlife': 'Various',
+  'ANTS': 'Ibiza, Spain',
+  'Resistance': 'Various',
+  'elrow': 'Various',
+  'Music On': 'Various',
+  'Teksupport': 'New York, USA',
+};
+
 export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
@@ -164,7 +214,11 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   };
 
-  const { cleanName, eventDate, venue, location } = parseSetName(setList.name, artists);
+  const { cleanName, eventDate, venue: parsedVenue, location: parsedLocation } = parseSetName(setList.name, artists);
+
+  // Use database fields if available, fall back to parsed values, then venue lookup
+  const venue = setList.venue || parsedVenue;
+  const location = setList.location || parsedLocation || (venue ? VENUE_LOCATIONS[venue] : null);
 
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);

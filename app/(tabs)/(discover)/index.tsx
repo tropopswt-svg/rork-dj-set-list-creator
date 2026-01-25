@@ -79,6 +79,7 @@ export default function DiscoverScreen() {
           name: set.name,
           artist: set.artist,
           venue: set.venue,
+          location: set.location,
           date: new Date(set.date),
           totalDuration: set.totalDuration || 0,
           coverUrl: set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',

@@ -95,6 +95,7 @@ export default async function handler(req, res) {
         name: set.title,
         artist: set.dj_name || 'Unknown Artist',
         venue: set.venue || null,
+        location: set.location || null,
         date: set.event_date || set.created_at,
         totalDuration: set.duration_seconds || 0,
         trackCount: set.track_count || 0,
