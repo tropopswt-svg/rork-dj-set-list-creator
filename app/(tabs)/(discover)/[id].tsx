@@ -708,10 +708,23 @@ export default function SetDetailScreen() {
         onImport={async (url) => {
           if (!setList) return { success: false, error: 'Set not found' };
 
-          // For database sets, use the direct API
+          // For database sets, scrape comments and update the set
           if (dbSet) {
             try {
-              const response = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
+              // First, scrape the URL for track IDs
+              const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url }),
+              });
+              const importResult = await importResponse.json();
+
+              if (!importResult.success) {
+                return { success: false, error: importResult.error || 'Failed to scrape comments' };
+              }
+
+              // Now save the source URL to the database
+              const addSourceResponse = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -720,19 +733,30 @@ export default function SetDetailScreen() {
                   platform: selectedPlatform,
                 }),
               });
-              const result = await response.json();
+              const addSourceResult = await addSourceResponse.json();
 
-              if (result.success) {
-                // Update local state to reflect the new source
-                setDbSet(prev => prev ? {
-                  ...prev,
-                  sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
-                } : prev);
-                await addPoints('source_added', setList.id);
-                return { success: true, stats: { matched: 0, newFromSecondary: 0 } };
-              } else {
-                return { success: false, error: result.error || 'Failed to add source' };
+              if (!addSourceResult.success) {
+                // URL might already exist, but scraping worked
+                console.log('Add source warning:', addSourceResult.error);
               }
+
+              // Update local state to reflect the new source
+              setDbSet(prev => prev ? {
+                ...prev,
+                sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
+              } : prev);
+
+              await addPoints('source_added', setList.id);
+
+              // Return stats from the import
+              return {
+                success: true,
+                stats: {
+                  matched: importResult.tracksCount || 0,
+                  newFromSecondary: importResult.setList?.tracks?.length || 0,
+                  commentsScraped: importResult.commentsCount || 0,
+                },
+              };
             } catch (error: any) {
               return { success: false, error: error.message || 'Network error' };
             }
