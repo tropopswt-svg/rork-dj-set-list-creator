@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -16,17 +16,19 @@ interface TrackCardProps {
   compact?: boolean;
   onUpvote?: () => void;
   onContributorPress?: (username: string) => void;
+  onIdentify?: () => void;
 }
 
-export default function TrackCard({ 
-  track, 
-  onPress, 
-  onAddToSet, 
-  showIndex, 
+export default function TrackCard({
+  track,
+  onPress,
+  onAddToSet,
+  showIndex,
   showTimestamp,
   compact,
   onUpvote,
   onContributorPress,
+  onIdentify,
 }: TrackCardProps) {
   const router = useRouter();
   const [showFeaturedModal, setShowFeaturedModal] = useState(false);
@@ -229,26 +231,36 @@ export default function TrackCard({
     );
   }
 
+  // Check if this is an unidentified track that needs to be filled in
+  const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
+
   return (
     <>
-      <Pressable style={styles.container} onPress={handlePress}>
+      <Pressable style={[styles.container, isUnidentified && styles.unidentifiedContainer]} onPress={handlePress}>
         {showTimestamp && track.timestamp !== undefined && (
-          <View style={styles.timestampBadge}>
+          <View style={[styles.timestampBadge, isUnidentified && styles.unidentifiedTimestamp]}>
             <Text style={styles.timestampText}>{formatTimestamp(track.timestamp)}</Text>
           </View>
         )}
         {showIndex !== undefined && !showTimestamp && (
           <Text style={styles.index}>{showIndex}</Text>
         )}
-        <Image source={{ uri: track.coverUrl }} style={styles.cover} />
+        <Image source={{ uri: track.coverUrl }} style={[styles.cover, isUnidentified && styles.unidentifiedCover]} />
         <View style={styles.info}>
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1}>{track.title}</Text>
-            {track.isUnreleased && (
+            <Text style={[styles.title, isUnidentified && styles.unidentifiedTitle]} numberOfLines={1}>
+              {isUnidentified ? 'Unknown Track' : track.title}
+            </Text>
+            {isUnidentified && (
+              <HelpCircle size={14} color="#F59E0B" />
+            )}
+            {track.isUnreleased && !isUnidentified && (
               <AlertCircle size={14} color="#EC4899" />
             )}
           </View>
-          <Text style={styles.artist} numberOfLines={1}>{track.artist}</Text>
+          <Text style={[styles.artist, isUnidentified && styles.unidentifiedArtist]} numberOfLines={1}>
+            {isUnidentified ? 'Help identify this track' : track.artist}
+          </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
               <Disc3 size={12} color="#F59E0B" />
@@ -288,9 +300,22 @@ export default function TrackCard({
           </View>
         </View>
         <View style={styles.actions}>
-          {onUpvote && !track.verified && (
-            <Pressable 
-              style={styles.upvoteButton} 
+          {/* Show identify button for unidentified tracks */}
+          {isUnidentified && onIdentify && (
+            <Pressable
+              style={styles.identifyButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onIdentify();
+              }}
+            >
+              <Wand2 size={14} color="#FFF" />
+              <Text style={styles.identifyButtonText}>ID</Text>
+            </Pressable>
+          )}
+          {onUpvote && !track.verified && !isUnidentified && (
+            <Pressable
+              style={styles.upvoteButton}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 onUpvote();
@@ -371,6 +396,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     marginBottom: 8,
+  },
+  unidentifiedContainer: {
+    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 158, 11, 0.2)',
+    borderStyle: 'dashed',
   },
   timestampBadge: {
     backgroundColor: Colors.dark.primary,
@@ -524,6 +555,34 @@ const styles = StyleSheet.create({
     padding: 8,
     backgroundColor: Colors.dark.surfaceLight,
     borderRadius: 8,
+  },
+  identifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F59E0B',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  identifyButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FFF',
+  },
+  unidentifiedTimestamp: {
+    backgroundColor: 'rgba(245, 158, 11, 0.3)',
+  },
+  unidentifiedCover: {
+    opacity: 0.5,
+  },
+  unidentifiedTitle: {
+    color: '#F59E0B',
+    fontStyle: 'italic',
+  },
+  unidentifiedArtist: {
+    color: 'rgba(245, 158, 11, 0.7)',
+    fontStyle: 'italic',
   },
   compactContainer: {
     flexDirection: 'row',
