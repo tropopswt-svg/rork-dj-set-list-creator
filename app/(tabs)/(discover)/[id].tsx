@@ -416,14 +416,11 @@ export default function SetDetailScreen() {
             const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
             const hasAnalyzableSource = ytLink || scLink;
 
-            // Check if analysis has been run (stored as flags on set)
-            const hasYouTubeAnalysis = (setList as any).youtubeAnalyzed === true;
-            const hasSoundCloudAnalysis = (setList as any).soundcloudAnalyzed === true;
+            // Check if analysis has been run by looking for tracks with timestamps > 0
+            const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
 
-            // Needs analysis if we have a source but haven't analyzed it yet
-            const ytNeedsAnalysis = ytLink && !hasYouTubeAnalysis;
-            const scNeedsAnalysis = scLink && !hasSoundCloudAnalysis;
-            const anyNeedsAnalysis = ytNeedsAnalysis || scNeedsAnalysis;
+            // Needs analysis if we have a source but no timestamps yet
+            const anyNeedsAnalysis = hasAnalyzableSource && !hasTimestamps;
 
             if (!hasAnalyzableSource) {
               return (
@@ -466,12 +463,12 @@ export default function SetDetailScreen() {
               {/* YouTube */}
               {(() => {
                 const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                // Check if YouTube analysis has been run (stored as flag on set)
-                const hasYouTubeAnalysis = (setList as any).youtubeAnalyzed === true;
-                const needsAnalysis = ytLink && !hasYouTubeAnalysis;
+                // Check if analysis has been run by looking for tracks with timestamps > 0
+                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+                const needsAnalysis = ytLink && !hasTimestamps;
 
                 // Debug logging
-                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'youtubeAnalyzed:', hasYouTubeAnalysis, 'needsAnalysis:', needsAnalysis);
+                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasTimestamps:', hasTimestamps, 'needsAnalysis:', needsAnalysis);
 
                 return ytLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -561,7 +558,7 @@ export default function SetDetailScreen() {
                         <Sparkles size={12} color="#FFF" />
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
-                    ) : hasYouTubeAnalysis ? (
+                    ) : hasTimestamps ? (
                       <View style={styles.analyzedBadge}>
                         <CheckCircle size={10} color="#22C55E" />
                         <Text style={styles.analyzedBadgeText}>Analyzed</Text>
@@ -589,9 +586,9 @@ export default function SetDetailScreen() {
               {/* SoundCloud */}
               {(() => {
                 const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
-                // Check if SoundCloud analysis has been run (stored as flag on set)
-                const hasSoundCloudAnalysis = (setList as any).soundcloudAnalyzed === true;
-                const needsAnalysis = scLink && !hasSoundCloudAnalysis;
+                // Check if analysis has been run by looking for tracks with timestamps > 0
+                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+                const needsAnalysis = scLink && !hasTimestamps;
 
                 return scLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -679,7 +676,7 @@ export default function SetDetailScreen() {
                         <Sparkles size={12} color="#FFF" />
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
-                    ) : hasSoundCloudAnalysis ? (
+                    ) : hasTimestamps ? (
                       <View style={[styles.analyzedBadge, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
                         <CheckCircle size={10} color="#FF5500" />
                         <Text style={[styles.analyzedBadgeText, { color: '#FF5500' }]}>Analyzed</Text>
