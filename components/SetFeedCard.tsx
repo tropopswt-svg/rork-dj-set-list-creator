@@ -358,8 +358,9 @@ const styles = StyleSheet.create({
   badgeSection: {
     flexDirection: 'row',
     gap: 4,
-    flexShrink: 0,
+    flexShrink: 1,
     maxWidth: '45%',
+    overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
@@ -472,7 +473,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    maxWidth: 100,
+    maxWidth: 80,
+    flexShrink: 1,
   },
   venueBadgeText: {
     fontSize: 8,
@@ -487,7 +489,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    maxWidth: 80,
+    maxWidth: 70,
+    flexShrink: 1,
   },
   locationBadgeText: {
     fontSize: 8,
