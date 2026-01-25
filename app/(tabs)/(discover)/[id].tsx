@@ -416,9 +416,9 @@ export default function SetDetailScreen() {
             const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
             const hasAnalyzableSource = ytLink || scLink;
 
-            // Check if analysis has been run (track sources indicate this)
-            const hasYouTubeAnalysis = setList.tracks?.some(t => t.source === 'youtube');
-            const hasSoundCloudAnalysis = setList.tracks?.some(t => t.source === 'soundcloud');
+            // Check if analysis has been run (stored as flags on set)
+            const hasYouTubeAnalysis = (setList as any).youtubeAnalyzed === true;
+            const hasSoundCloudAnalysis = (setList as any).soundcloudAnalyzed === true;
 
             // Needs analysis if we have a source but haven't analyzed it yet
             const ytNeedsAnalysis = ytLink && !hasYouTubeAnalysis;
@@ -466,13 +466,12 @@ export default function SetDetailScreen() {
               {/* YouTube */}
               {(() => {
                 const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                // Check if any track was sourced from YouTube (indicates analysis was run)
-                const hasYouTubeAnalysis = setList.tracks?.some(t => t.source === 'youtube');
+                // Check if YouTube analysis has been run (stored as flag on set)
+                const hasYouTubeAnalysis = (setList as any).youtubeAnalyzed === true;
                 const needsAnalysis = ytLink && !hasYouTubeAnalysis;
 
                 // Debug logging
-                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasYouTubeAnalysis:', hasYouTubeAnalysis, 'needsAnalysis:', needsAnalysis);
-                console.log('[YT Analysis Check] Track sources:', setList.tracks?.map(t => t.source).filter((v, i, a) => a.indexOf(v) === i));
+                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'youtubeAnalyzed:', hasYouTubeAnalysis, 'needsAnalysis:', needsAnalysis);
 
                 return ytLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -590,8 +589,8 @@ export default function SetDetailScreen() {
               {/* SoundCloud */}
               {(() => {
                 const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
-                // Check if any track was sourced from SoundCloud (indicates analysis was run)
-                const hasSoundCloudAnalysis = setList.tracks?.some(t => t.source === 'soundcloud');
+                // Check if SoundCloud analysis has been run (stored as flag on set)
+                const hasSoundCloudAnalysis = (setList as any).soundcloudAnalyzed === true;
                 const needsAnalysis = scLink && !hasSoundCloudAnalysis;
 
                 return scLink ? (

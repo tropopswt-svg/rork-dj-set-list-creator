@@ -173,7 +173,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // Update the set's track count if we added new tracks
+    // Update the set with analysis info
+    const setUpdateData = {};
+
+    // Update track count if we added new tracks
     if (newTracksAdded > 0) {
       const { data: set } = await supabase
         .from('sets')
@@ -182,10 +185,28 @@ export default async function handler(req, res) {
         .single();
 
       if (set) {
-        await supabase
-          .from('sets')
-          .update({ track_count: (set.track_count || 0) + newTracksAdded })
-          .eq('id', setId);
+        setUpdateData.track_count = (set.track_count || 0) + newTracksAdded;
+      }
+    }
+
+    // Mark the set as analyzed by this source
+    if (source === 'youtube') {
+      setUpdateData.youtube_analyzed = true;
+    } else if (source === 'soundcloud') {
+      setUpdateData.soundcloud_analyzed = true;
+    }
+
+    // Apply set updates
+    if (Object.keys(setUpdateData).length > 0) {
+      const { error: setUpdateError } = await supabase
+        .from('sets')
+        .update(setUpdateData)
+        .eq('id', setId);
+
+      if (setUpdateError) {
+        console.log('[Update Tracks] Set update error:', setUpdateError);
+      } else {
+        console.log('[Update Tracks] Updated set with:', setUpdateData);
       }
     }
 
