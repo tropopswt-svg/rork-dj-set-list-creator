@@ -93,33 +93,34 @@ export default function TrackCard({
   };
 
   // Get platform-specific source icon and color
-  // Priority: Show the most specific/interesting source, not just "1001" for everything
+  // Clear hierarchy:
+  // - 1001tracklists = baseline, not yet confirmed by user comments
+  // - youtube/soundcloud = CONFIRMED by comment analysis (most trusted)
+  // - manual/user = added by community
   const getSourceInfo = () => {
-    const sources = getVerificationLevel();
+    // CONFIRMED: Track was validated by YouTube comment analysis
+    if (track.source === 'youtube') {
+      return { icon: 'confirmed', color: '#22C55E', label: 'Confirmed', subIcon: 'youtube' };
+    }
 
-    // If user manually added it, show that
+    // CONFIRMED: Track was validated by SoundCloud comment analysis
+    if (track.source === 'soundcloud') {
+      return { icon: 'confirmed', color: '#22C55E', label: 'Confirmed', subIcon: 'soundcloud' };
+    }
+
+    // User manually added this track
     if (track.source === 'manual' || track.source === 'user') {
       return { icon: 'user', color: '#8B5CF6', label: 'Added' };
     }
 
-    // If only from YouTube comments, show YT
-    if (track.source === 'youtube' && !sources.includes('1001')) {
-      return { icon: 'youtube', color: '#FF0000', label: 'YT' };
-    }
-
-    // If only from SoundCloud comments, show SC
-    if (track.source === 'soundcloud' && !sources.includes('1001')) {
-      return { icon: 'soundcloud', color: '#FF5500', label: 'SC' };
-    }
-
-    // If matched/verified by our system (1001 or database), show "ID" badge
-    if (track.source === '1001tracklists' || track.source === 'database' || track.source === 'ai') {
-      return { icon: 'id', color: '#00D4AA', label: 'ID' };
-    }
-
     // Community/social contributions
     if (track.source === 'social') {
-      return { icon: 'user', color: '#10B981', label: 'Comm' };
+      return { icon: 'user', color: '#10B981', label: 'Community' };
+    }
+
+    // BASELINE: From 1001Tracklists - not yet confirmed by comments
+    if (track.source === '1001tracklists' || track.source === 'database') {
+      return { icon: '1001', color: '#06B6D4', label: '1001' };
     }
 
     // Fallback for ID tracks (unidentified)
@@ -127,8 +128,8 @@ export default function TrackCard({
       return { icon: 'unknown', color: Colors.dark.textMuted, label: '?' };
     }
 
-    // Default: our system identified it
-    return { icon: 'id', color: '#00D4AA', label: 'ID' };
+    // Default: baseline data
+    return { icon: '1001', color: '#06B6D4', label: '1001' };
   };
 
   const renderSourceIcon = () => {
@@ -139,15 +140,19 @@ export default function TrackCard({
     let IconComponent = null;
 
     switch (info.icon) {
+      case 'confirmed':
+        // Confirmed by YouTube or SoundCloud analysis - show checkmark with platform indicator
+        IconComponent = <CheckCircle size={iconSize} color={info.color} />;
+        break;
+      case '1001':
+        // Baseline from 1001Tracklists - not yet confirmed
+        IconComponent = <Wand2 size={iconSize} color={info.color} />;
+        break;
       case 'youtube':
         IconComponent = <Youtube size={iconSize} color={info.color} />;
         break;
       case 'soundcloud':
         IconComponent = <Music2 size={iconSize} color={info.color} />;
-        break;
-      case 'id':
-        // Our magical "IDentifier" badge with wand icon
-        IconComponent = <Wand2 size={iconSize} color={info.color} />;
         break;
       case 'user':
         IconComponent = <User size={iconSize} color={info.color} />;
@@ -157,6 +162,24 @@ export default function TrackCard({
         break;
       default:
         return null;
+    }
+
+    // For confirmed tracks, show both the checkmark and a small platform indicator
+    if (info.icon === 'confirmed' && (info as any).subIcon) {
+      const subIconSize = 9;
+      const SubIcon = (info as any).subIcon === 'youtube'
+        ? <Youtube size={subIconSize} color="#FF0000" />
+        : <Music2 size={subIconSize} color="#FF5500" />;
+
+      return (
+        <View style={[styles.sourceTag, styles.confirmedTag]}>
+          {IconComponent}
+          <Text style={[styles.sourceTagText, { color: info.color }]}>{info.label}</Text>
+          <View style={styles.subIconContainer}>
+            {SubIcon}
+          </View>
+        </View>
+      );
     }
 
     return (
@@ -221,9 +244,6 @@ export default function TrackCard({
         <View style={styles.info}>
           <View style={styles.titleRow}>
             <Text style={styles.title} numberOfLines={1}>{track.title}</Text>
-            {track.verified && (
-              <CheckCircle size={14} color={Colors.dark.success} />
-            )}
             {track.isUnreleased && (
               <AlertCircle size={14} color="#EC4899" />
             )}
@@ -424,6 +444,15 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700' as const,
     letterSpacing: 0.3,
+  },
+  confirmedTag: {
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  subIconContainer: {
+    marginLeft: 2,
+    opacity: 0.8,
   },
   verificationBadge: {
     flexDirection: 'row',

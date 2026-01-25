@@ -470,6 +470,10 @@ export default function SetDetailScreen() {
                 const hasYouTubeAnalysis = setList.tracks?.some(t => t.source === 'youtube');
                 const needsAnalysis = ytLink && !hasYouTubeAnalysis;
 
+                // Debug logging
+                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasYouTubeAnalysis:', hasYouTubeAnalysis, 'needsAnalysis:', needsAnalysis);
+                console.log('[YT Analysis Check] Track sources:', setList.tracks?.map(t => t.source).filter((v, i, a) => a.indexOf(v) === i));
+
                 return ytLink ? (
                   <View style={styles.linkCardWrapper}>
                     <Pressable
