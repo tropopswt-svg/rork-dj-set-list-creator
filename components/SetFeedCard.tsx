@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, MessageSquare, AlertCircle, Calendar, MapPin, Ticket } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -31,12 +31,6 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     const mins = Math.floor((seconds % 3600) / 60);
     if (hours > 0) return `${hours}h ${mins}m`;
     return `${mins}m`;
-  };
-
-  const formatPlays = (plays: number) => {
-    if (plays >= 1000000) return `${(plays / 1000000).toFixed(1)}M`;
-    if (plays >= 1000) return `${(plays / 1000).toFixed(0)}K`;
-    return plays.toString();
   };
 
   const formatDate = (date: Date) => {
@@ -105,14 +99,6 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 
       // Clean name is everything before @
       workingName = workingName.replace(/@\s*.+$/, '').trim();
-    } else {
-      // No @ symbol - try splitting by comma for radio shows etc
-      // e.g., "Marsolo - Circoloco Radio 429"
-      const dashMatch = workingName.match(/^(.+?)\s*-\s*(.+)$/);
-      if (dashMatch) {
-        venue = dashMatch[2].trim();
-        workingName = dashMatch[1].trim();
-      }
     }
 
     return { cleanName: workingName, eventDate, venue, location };
@@ -167,7 +153,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     const unique = [...new Set(platforms)];
 
     return unique.slice(0, 3).map((platform, index) => {
-      const iconProps = { size: 12 };
+      const iconProps = { size: 16 };
       switch (platform) {
         case 'youtube':
           return <Youtube key={index} {...iconProps} color="#FF0000" />;
@@ -187,14 +173,32 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
   );
 
   return (
-    <Pressable 
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]} 
+    <Pressable
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
     >
+      {/* Location badges in top right */}
+      {(venue || location) && (
+        <View style={styles.topBadges}>
+          {venue && (
+            <View style={styles.venueBadge}>
+              <Ticket size={8} color={Colors.dark.primary} />
+              <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
+            </View>
+          )}
+          {location && (
+            <View style={styles.locationBadge}>
+              <MapPin size={8} color="#6B7280" />
+              <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       <View style={styles.row}>
         <View style={styles.coverContainer}>
-          <Image 
-            source={{ uri: getCoverImage() }} 
+          <Image
+            source={{ uri: getCoverImage() }}
             style={styles.cover}
             contentFit="cover"
             onError={handleImageError}
@@ -202,7 +206,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
           />
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
-              <Play size={18} color="#fff" fill="#fff" />
+              <Play size={14} color="#fff" fill="#fff" />
             </View>
           </View>
           {(setList.totalDuration || 0) > 0 && (
@@ -214,43 +218,9 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 
         <View style={styles.content}>
           <Text style={styles.artist}>{setList.artist}</Text>
-          <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
+          <Text style={styles.name} numberOfLines={1}>{cleanName || setList.name}</Text>
 
           <View style={styles.footer}>
-            {/* Venue and Location badges row */}
-            <View style={styles.badgesRow}>
-              {venue && (
-                <View style={styles.venueBadge}>
-                  <Ticket size={9} color={Colors.dark.primary} />
-                  <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
-                </View>
-              )}
-              {location && (
-                <View style={styles.locationBadge}>
-                  <MapPin size={9} color="#6B7280" />
-                  <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.stats}>
-              {eventDate && (
-                <View style={styles.eventDateBadge}>
-                  <Calendar size={10} color={Colors.dark.primary} />
-                  <Text style={styles.eventDateText}>{formatEventDate(eventDate)}</Text>
-                </View>
-              )}
-              <View style={styles.tracksStat}>
-                <Music size={11} color={Colors.dark.textMuted} />
-                <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
-              </View>
-              {setList.commentsScraped && setList.commentsScraped > 0 && (
-                <View style={styles.tracksStat}>
-                  <MessageSquare size={11} color={Colors.dark.textMuted} />
-                  <Text style={styles.statText}>{setList.commentsScraped}</Text>
-                </View>
-              )}
-            </View>
             <View style={styles.metaRow}>
               <View style={styles.platforms}>
                 {needsSource ? (
@@ -262,7 +232,19 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
                   getPlatformIcons()
                 )}
               </View>
-              <Text style={styles.date}>{formatDate(setList.date)}</Text>
+              <View style={styles.statsRow}>
+                {eventDate && (
+                  <View style={styles.eventDateBadge}>
+                    <Calendar size={9} color={Colors.dark.primary} />
+                    <Text style={styles.eventDateText}>{formatEventDate(eventDate)}</Text>
+                  </View>
+                )}
+                <View style={styles.tracksStat}>
+                  <Music size={10} color={Colors.dark.textMuted} />
+                  <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
+                </View>
+                <Text style={styles.date}>{formatDate(setList.date)}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -274,31 +256,40 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 8,
     backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowRadius: 3,
     elevation: 2,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+    position: 'relative',
   },
   pressed: {
     opacity: 0.95,
     transform: [{ scale: 0.99 }],
   },
+  topBadges: {
+    position: 'absolute',
+    top: 6,
+    right: 8,
+    flexDirection: 'row',
+    gap: 4,
+    zIndex: 10,
+  },
   row: {
     flexDirection: 'row',
-    padding: 10,
+    padding: 8,
   },
   coverContainer: {
     position: 'relative',
-    width: 85,
-    height: 85,
-    borderRadius: 10,
+    width: 64,
+    height: 64,
+    borderRadius: 8,
     overflow: 'hidden',
   },
   cover: {
@@ -316,9 +307,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -326,46 +317,86 @@ const styles = StyleSheet.create({
   },
   durationBadge: {
     position: 'absolute',
-    bottom: 5,
-    right: 5,
+    bottom: 3,
+    right: 3,
     backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   durationText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '600' as const,
     color: '#fff',
   },
   content: {
     flex: 1,
-    marginLeft: 12,
-    justifyContent: 'space-between',
+    marginLeft: 10,
+    justifyContent: 'center',
   },
   artist: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
     marginBottom: 1,
   },
   name: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 18,
-    marginBottom: 1,
+    lineHeight: 16,
+    marginBottom: 4,
+    paddingRight: 80,
   },
   footer: {
     marginTop: 'auto',
   },
-  badgesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 4,
-  },
   venueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: `${Colors.dark.primary}18`,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 100,
+  },
+  venueBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.primary,
+    fontWeight: '600' as const,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(107, 114, 128, 0.15)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 80,
+  },
+  locationBadgeText: {
+    fontSize: 8,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tracksStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  statText: {
+    fontSize: 9,
+    color: Colors.dark.textMuted,
+    fontWeight: '500' as const,
+  },
+  eventDateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -373,57 +404,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    maxWidth: '60%',
-  },
-  venueBadgeText: {
-    fontSize: 9,
-    color: Colors.dark.primary,
-    fontWeight: '600' as const,
-  },
-  locationBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(107, 114, 128, 0.1)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-    maxWidth: '50%',
-  },
-  locationBadgeText: {
-    fontSize: 9,
-    color: '#6B7280',
-    fontWeight: '500' as const,
-  },
-  stats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
-  },
-  tracksStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  statText: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: '500' as const,
-  },
-  eventDateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: `${Colors.dark.primary}15`,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
   },
   eventDateText: {
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.dark.primary,
-    fontWeight: '600' as const,
+    fontWeight: '500' as const,
   },
   metaRow: {
     flexDirection: 'row',
@@ -433,12 +418,12 @@ const styles = StyleSheet.create({
   platforms: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 6,
   },
   date: {
-    fontSize: 10,
+    fontSize: 9,
     color: Colors.dark.textMuted,
-    fontWeight: '500' as const,
+    fontWeight: '400' as const,
   },
   needsSourceBadge: {
     flexDirection: 'row',
@@ -446,7 +431,7 @@ const styles = StyleSheet.create({
     gap: 3,
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   needsSourceText: {

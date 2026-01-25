@@ -1,7 +1,7 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Link2, TrendingUp, Clock, Database } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -18,17 +18,52 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-
 
 type FilterType = 'trending' | 'recent';
 
+interface Filters {
+  artists: string[];
+  years: string[];
+  countries: string[];
+}
+
+// Extract country from location string (last part after comma)
+const extractCountry = (name: string): string | null => {
+  const atMatch = name.match(/@\s*(.+)$/);
+  if (atMatch) {
+    const parts = atMatch[1].split(',').map(p => p.trim());
+    if (parts.length >= 2) {
+      // Remove any date from the end
+      let country = parts[parts.length - 1];
+      country = country.replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
+      if (country && country.length > 1) return country;
+    }
+  }
+  return null;
+};
+
+// Extract year from date
+const extractYear = (date: Date | string): string => {
+  const d = new Date(date);
+  return d.getFullYear().toString();
+};
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const [setLists, setSetLists] = useState<SetList[]>([]);
   const [dbSets, setDbSets] = useState<SetList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [expandedFilter, setExpandedFilter] = useState<'artists' | 'years' | 'countries' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const dropdownAnim = useRef(new Animated.Value(0)).current;
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
   const [refreshing, setRefreshing] = useState(false);
   const [dbStats, setDbStats] = useState({ sets: 0, tracks: 0 });
+  const [selectedFilters, setSelectedFilters] = useState<Filters>({
+    artists: [],
+    years: [],
+    countries: [],
+  });
 
   // Fetch sets from database
   const fetchSets = useCallback(async () => {
@@ -100,16 +135,59 @@ export default function DiscoverScreen() {
     router.push(`/(tabs)/(discover)/${result.setList.id}`);
   };
 
+  // Extract unique filter options from sets
+  const filterOptions = useMemo(() => {
+    const artists = new Set<string>();
+    const years = new Set<string>();
+    const countries = new Set<string>();
+
+    setLists.forEach(set => {
+      if (set.artist) artists.add(set.artist);
+      if (set.date) years.add(extractYear(set.date));
+      const country = extractCountry(set.name);
+      if (country) countries.add(country);
+    });
+
+    return {
+      artists: Array.from(artists).sort(),
+      years: Array.from(years).sort((a, b) => b.localeCompare(a)), // Newest first
+      countries: Array.from(countries).sort(),
+    };
+  }, [setLists]);
+
+  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length;
+
   const filteredSets = useMemo(() => {
     return setLists
       .filter(set => {
-        if (!debouncedSearchQuery) return true;
-        const query = debouncedSearchQuery.toLowerCase();
-        return (
-          set.name.toLowerCase().includes(query) ||
-          set.artist.toLowerCase().includes(query) ||
-          set.venue?.toLowerCase().includes(query)
-        );
+        // Search filter
+        if (debouncedSearchQuery) {
+          const query = debouncedSearchQuery.toLowerCase();
+          const matchesSearch =
+            set.name.toLowerCase().includes(query) ||
+            set.artist.toLowerCase().includes(query) ||
+            set.venue?.toLowerCase().includes(query);
+          if (!matchesSearch) return false;
+        }
+
+        // Artist filter
+        if (selectedFilters.artists.length > 0) {
+          if (!selectedFilters.artists.includes(set.artist)) return false;
+        }
+
+        // Year filter
+        if (selectedFilters.years.length > 0) {
+          const setYear = extractYear(set.date);
+          if (!selectedFilters.years.includes(setYear)) return false;
+        }
+
+        // Country filter
+        if (selectedFilters.countries.length > 0) {
+          const country = extractCountry(set.name);
+          if (!country || !selectedFilters.countries.includes(country)) return false;
+        }
+
+        return true;
       })
       .sort((a, b) => {
         if (activeFilter === 'trending') {
@@ -117,7 +195,40 @@ export default function DiscoverScreen() {
         }
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
-  }, [setLists, debouncedSearchQuery, activeFilter]);
+  }, [setLists, debouncedSearchQuery, activeFilter, selectedFilters]);
+
+  const toggleFilter = (type: keyof Filters, value: string) => {
+    setSelectedFilters(prev => {
+      const current = prev[type];
+      const updated = current.includes(value)
+        ? current.filter(v => v !== value)
+        : [...current, value];
+      return { ...prev, [type]: updated };
+    });
+  };
+
+  const clearFilters = () => {
+    setSelectedFilters({ artists: [], years: [], countries: [] });
+  };
+
+  const toggleFilterDropdown = () => {
+    Haptics.selectionAsync();
+    const toValue = showFilterDropdown ? 0 : 1;
+    setShowFilterDropdown(!showFilterDropdown);
+    Animated.timing(dropdownAnim, {
+      toValue,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+    if (showFilterDropdown) {
+      setExpandedFilter(null);
+    }
+  };
+
+  const toggleFilterSection = (section: 'artists' | 'years' | 'countries') => {
+    Haptics.selectionAsync();
+    setExpandedFilter(expandedFilter === section ? null : section);
+  };
 
   return (
     <View style={styles.container}>
@@ -170,13 +281,101 @@ export default function DiscoverScreen() {
             <Clock size={14} color={activeFilter === 'recent' ? Colors.dark.background : Colors.dark.textSecondary} />
             <Text style={[styles.filterText, activeFilter === 'recent' && styles.filterTextActive]}>Recent</Text>
           </Pressable>
-          {dbStats.sets > 0 && (
-            <View style={styles.dbBadge}>
-              <Database size={12} color={Colors.dark.primary} />
-              <Text style={styles.dbBadgeText}>{dbStats.sets} sets</Text>
-            </View>
-          )}
+          <Pressable
+            style={[styles.filterButton, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonActive]}
+            onPress={toggleFilterDropdown}
+          >
+            <Filter size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+            <Text style={[styles.filterButtonText, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonTextActive]}>
+              {activeFilterCount > 0 ? `${filteredSets.length} of ${dbStats.sets}` : `${dbStats.sets} sets`}
+            </Text>
+            {showFilterDropdown ? (
+              <ChevronUp size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+            ) : (
+              <ChevronDown size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+            )}
+          </Pressable>
         </View>
+
+        {/* Filter Dropdown */}
+        {showFilterDropdown && (
+          <Animated.View style={[styles.filterDropdown]}>
+            {/* Filter section buttons */}
+            <View style={styles.filterSectionButtons}>
+              <Pressable
+                style={[styles.filterSectionBtn, expandedFilter === 'artists' && styles.filterSectionBtnActive]}
+                onPress={() => toggleFilterSection('artists')}
+              >
+                <User size={14} color={expandedFilter === 'artists' ? Colors.dark.background : Colors.dark.text} />
+                <Text style={[styles.filterSectionBtnText, expandedFilter === 'artists' && styles.filterSectionBtnTextActive]}>
+                  Artist {selectedFilters.artists.length > 0 && `(${selectedFilters.artists.length})`}
+                </Text>
+                <ChevronDown size={12} color={expandedFilter === 'artists' ? Colors.dark.background : Colors.dark.textMuted} />
+              </Pressable>
+
+              <Pressable
+                style={[styles.filterSectionBtn, expandedFilter === 'years' && styles.filterSectionBtnActive]}
+                onPress={() => toggleFilterSection('years')}
+              >
+                <Calendar size={14} color={expandedFilter === 'years' ? Colors.dark.background : Colors.dark.text} />
+                <Text style={[styles.filterSectionBtnText, expandedFilter === 'years' && styles.filterSectionBtnTextActive]}>
+                  Year {selectedFilters.years.length > 0 && `(${selectedFilters.years.length})`}
+                </Text>
+                <ChevronDown size={12} color={expandedFilter === 'years' ? Colors.dark.background : Colors.dark.textMuted} />
+              </Pressable>
+
+              <Pressable
+                style={[styles.filterSectionBtn, expandedFilter === 'countries' && styles.filterSectionBtnActive]}
+                onPress={() => toggleFilterSection('countries')}
+              >
+                <MapPin size={14} color={expandedFilter === 'countries' ? Colors.dark.background : Colors.dark.text} />
+                <Text style={[styles.filterSectionBtnText, expandedFilter === 'countries' && styles.filterSectionBtnTextActive]}>
+                  Country {selectedFilters.countries.length > 0 && `(${selectedFilters.countries.length})`}
+                </Text>
+                <ChevronDown size={12} color={expandedFilter === 'countries' ? Colors.dark.background : Colors.dark.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* Expanded filter options */}
+            {expandedFilter && (
+              <ScrollView style={styles.filterOptionsList} horizontal={false} showsVerticalScrollIndicator={true}>
+                <View style={styles.filterOptionsWrap}>
+                  {filterOptions[expandedFilter].map(option => (
+                    <Pressable
+                      key={option}
+                      style={[
+                        styles.filterOptionChip,
+                        selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipSelected,
+                      ]}
+                      onPress={() => {
+                        Haptics.selectionAsync();
+                        toggleFilter(expandedFilter, option);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.filterOptionChipText,
+                          selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipTextSelected,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {option}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+
+            {/* Clear filters */}
+            {activeFilterCount > 0 && (
+              <Pressable style={styles.clearFiltersBtn} onPress={clearFilters}>
+                <X size={12} color={Colors.dark.primary} />
+                <Text style={styles.clearFiltersBtnText}>Clear all filters</Text>
+              </Pressable>
+            )}
+          </Animated.View>
+        )}
 
         <ScrollView
           style={styles.scrollView}
@@ -225,6 +424,7 @@ export default function DiscoverScreen() {
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
         />
+
       </SafeAreaView>
     </View>
   );
@@ -341,17 +541,100 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: Colors.dark.textSecondary,
   },
-  dbBadge: {
+  filterButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
     marginLeft: 'auto',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.surface,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
   },
-  dbBadgeText: {
+  filterButtonActive: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: Colors.dark.text,
+    fontWeight: '600',
+  },
+  filterButtonTextActive: {
+    color: Colors.dark.background,
+  },
+  filterDropdown: {
+    marginHorizontal: 16,
+    marginBottom: 12,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  filterSectionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  filterSectionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    backgroundColor: Colors.dark.background,
+  },
+  filterSectionBtnActive: {
+    backgroundColor: Colors.dark.primary,
+  },
+  filterSectionBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.dark.text,
+  },
+  filterSectionBtnTextActive: {
+    color: Colors.dark.background,
+  },
+  filterOptionsList: {
+    maxHeight: 150,
+    marginTop: 12,
+  },
+  filterOptionsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  filterOptionChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: Colors.dark.background,
+  },
+  filterOptionChipSelected: {
+    backgroundColor: Colors.dark.primary,
+  },
+  filterOptionChipText: {
+    fontSize: 12,
+    color: Colors.dark.text,
+    fontWeight: '500',
+  },
+  filterOptionChipTextSelected: {
+    color: Colors.dark.background,
+  },
+  clearFiltersBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    marginTop: 12,
+    paddingVertical: 8,
+  },
+  clearFiltersBtnText: {
     fontSize: 12,
     color: Colors.dark.primary,
     fontWeight: '500',
