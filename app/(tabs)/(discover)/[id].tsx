@@ -50,6 +50,7 @@ export default function SetDetailScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
+  const [analyzing, setAnalyzing] = useState(false);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
 
   // Database set state
@@ -475,7 +476,7 @@ export default function SetDetailScreen() {
                           setSelectedPlatform('youtube');
                           // Trigger analysis directly without showing modal
                           try {
-                            setLoading(true);
+                            setAnalyzing(true);
                             const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -536,7 +537,7 @@ export default function SetDetailScreen() {
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
                           } finally {
-                            setLoading(false);
+                            setAnalyzing(false);
                           }
                         }}
                       >
@@ -588,7 +589,7 @@ export default function SetDetailScreen() {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setSelectedPlatform('soundcloud');
                           try {
-                            setLoading(true);
+                            setAnalyzing(true);
                             const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },
@@ -648,7 +649,7 @@ export default function SetDetailScreen() {
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
                           } finally {
-                            setLoading(false);
+                            setAnalyzing(false);
                           }
                         }}
                       >
