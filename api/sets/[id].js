@@ -73,7 +73,8 @@ export default async function handler(req, res) {
       isId: track.is_id || false,
       trackId: track.track_id, // Reference to tracks table
       addedAt: track.created_at,
-      source: 'database',
+      // Source is '1001tracklists' since that's where set_tracks come from
+      source: track.source || '1001tracklists',
       verified: !track.is_id,
       confidence: track.is_id ? 0 : 1,
     })) || [];

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, ListMusic, Database } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -61,22 +61,70 @@ export default function TrackCard({
     router.push(`/${setId}`);
   };
 
+  // Get platform-specific source icon and color
+  const getSourceInfo = () => {
+    // Check for specific platforms first
+    if (track.source === 'youtube' || track.contributedBy?.includes('youtube')) {
+      return { icon: 'youtube', color: '#FF0000', label: 'YT' };
+    }
+    if (track.source === 'soundcloud' || track.contributedBy?.includes('soundcloud')) {
+      return { icon: 'soundcloud', color: '#FF5500', label: 'SC' };
+    }
+    if (track.source === '1001tracklists' || track.source === 'database') {
+      return { icon: '1001', color: '#00D4AA', label: '1001' };
+    }
+    if (track.source === 'manual' || track.source === 'user') {
+      return { icon: 'user', color: '#8B5CF6', label: 'User' };
+    }
+    if (track.source === 'ai') {
+      return { icon: 'ai', color: Colors.dark.primary, label: 'AI' };
+    }
+    if (track.source === 'social') {
+      return { icon: 'user', color: '#10B981', label: 'Comm' };
+    }
+    return null;
+  };
+
+  const renderSourceIcon = () => {
+    const info = getSourceInfo();
+    if (!info) return null;
+
+    const iconSize = 10;
+    let IconComponent = null;
+
+    switch (info.icon) {
+      case 'youtube':
+        IconComponent = <Youtube size={iconSize} color={info.color} />;
+        break;
+      case 'soundcloud':
+        IconComponent = <Music2 size={iconSize} color={info.color} />;
+        break;
+      case '1001':
+        IconComponent = <ListMusic size={iconSize} color={info.color} />;
+        break;
+      case 'user':
+        IconComponent = <User size={iconSize} color={info.color} />;
+        break;
+      case 'ai':
+        IconComponent = <Database size={iconSize} color={info.color} />;
+        break;
+      default:
+        return null;
+    }
+
+    return (
+      <View style={[styles.sourceIcon, { backgroundColor: `${info.color}15` }]}>
+        {IconComponent}
+      </View>
+    );
+  };
+
   const getSourceBadge = () => {
     if (track.isUnreleased) {
       return { label: 'Unreleased', color: '#EC4899' };
     }
-    switch (track.source) {
-      case 'ai':
-        return { label: 'AI', color: Colors.dark.primary };
-      case 'social':
-        return { label: 'Community', color: '#10B981' };
-      case 'manual':
-        return { label: 'User', color: '#8B5CF6' };
-      case 'link':
-        return { label: 'Linked', color: '#3B82F6' };
-      default:
-        return null;
-    }
+    // Don't show text badge if we're showing icon
+    return null;
   };
 
   const sourceBadge = getSourceBadge();
@@ -126,6 +174,7 @@ export default function TrackCard({
             </Pressable>
           )}
           <View style={styles.meta}>
+            {renderSourceIcon()}
             {sourceBadge && (
               <View style={[styles.sourceBadge, { backgroundColor: `${sourceBadge.color}20` }]}>
                 <Text style={[styles.sourceBadgeText, { color: sourceBadge.color }]}>
@@ -297,6 +346,13 @@ const styles = StyleSheet.create({
   metaText: {
     color: Colors.dark.textMuted,
     fontSize: 11,
+  },
+  sourceIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sourceBadge: {
     paddingHorizontal: 6,
