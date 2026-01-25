@@ -161,13 +161,14 @@ export default function DiscoverScreen() {
   const filteredSets = useMemo(() => {
     return setLists
       .filter(set => {
-        // Search filter
+        // Search filter - searches full name, artist, venue, and location
         if (debouncedSearchQuery) {
           const query = debouncedSearchQuery.toLowerCase();
           const matchesSearch =
             set.name.toLowerCase().includes(query) ||
             set.artist.toLowerCase().includes(query) ||
-            set.venue?.toLowerCase().includes(query);
+            set.venue?.toLowerCase().includes(query) ||
+            set.location?.toLowerCase().includes(query);
           if (!matchesSearch) return false;
         }
 

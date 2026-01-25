@@ -217,10 +217,14 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
   const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
 
+  // Keep full name for search indexing
+  const searchableText = `${setList.name} ${setList.artist} ${venue || ''} ${location || ''}`.trim();
+
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
+      accessibilityLabel={searchableText}
     >
       <View style={styles.row}>
         <View style={styles.coverContainer}>
