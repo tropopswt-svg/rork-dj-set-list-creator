@@ -160,28 +160,34 @@
       }
 
       // Debug: Log all elements that might contain timestamps
+      // The actual timestamp element has class "cue" with id like "cue_11479797"
       console.log('[1001TL] Looking for timestamp elements...');
-      const allCueVals = document.querySelectorAll('.cueVal');
-      const allCueIs = document.querySelectorAll('.cueI');
-      console.log('[1001TL] Found .cueVal:', allCueVals.length, 'Found .cueI:', allCueIs.length);
-      if (allCueVals.length > 0) {
-        console.log('[1001TL] First .cueVal text:', allCueVals[0].textContent);
-      }
-      if (allCueIs.length > 0) {
-        console.log('[1001TL] First .cueI text:', allCueIs[0].textContent);
+      const allCues = document.querySelectorAll('div.cue[id^="cue_"], .cue.noWrap');
+      console.log('[1001TL] Found div.cue elements:', allCues.length);
+      if (allCues.length > 0) {
+        console.log('[1001TL] First .cue text:', allCues[0].textContent);
       }
 
-      // Try to find timestamp containers at the page level
-      // The timestamp might be in a separate element that's a sibling of the track info
+      // Build a map of track IDs to timestamps
+      // The cue element ID contains the track ID: cue_11479797
       const timestampMap = new Map();
 
-      // Method 1: Try finding timestamps via .cueI elements and map them by position
-      document.querySelectorAll('.cueI').forEach((cueEl, i) => {
+      allCues.forEach((cueEl) => {
         const text = cueEl.textContent?.trim() || '';
         const match = text.match(/^(\d{1,2}:\d{2}(:\d{2})?)$/);
         if (match) {
-          timestampMap.set(i, match[1]);
-          console.log('[1001TL] Timestamp found at position', i, ':', match[1]);
+          // Extract the track ID from the cue element's ID (cue_XXXXXXX)
+          const cueId = cueEl.id?.replace('cue_', '') || '';
+          if (cueId) {
+            timestampMap.set(cueId, match[1]);
+          }
+          // Also try to find the parent track item and store by index
+          const parentItem = cueEl.closest('.bItm, .tlpItem');
+          if (parentItem) {
+            // Store the timestamp directly on the parent for later lookup
+            parentItem.dataset.timestamp = match[1];
+          }
+          console.log('[1001TL] Timestamp found:', match[1], 'for cue ID:', cueId);
         }
       });
 
@@ -202,49 +208,38 @@
           const trackEl = item.querySelector('.trackValue, span[itemprop="name"]');
           const labelEl = item.querySelector('a[href*="/label/"]');
 
-          // Find timestamp - check multiple locations
+          // Find timestamp - the actual element is div.cue with id="cue_XXXXXXX"
           let timeStr = '';
 
-          // Method 1: Check if we have a timestamp from the map at this index
-          if (timestampMap.has(index)) {
-            timeStr = timestampMap.get(index);
+          // Method 1: Check if we stored a timestamp on this item via dataset
+          if (item.dataset.timestamp) {
+            timeStr = item.dataset.timestamp;
           }
 
-          // Method 2: Look for timestamp in .cueI or .cueVal within this item
+          // Method 2: Look for div.cue element within this item
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
-            const cueEl = item.querySelector('.cueI, .cueVal');
+            const cueEl = item.querySelector('div.cue[id^="cue_"], .cue.noWrap, .cue.action');
             if (cueEl) {
               const text = cueEl.textContent?.trim() || '';
-              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              const match = text.match(/^(\d{1,2}:\d{2}(:\d{2})?)$/);
               if (match) timeStr = match[1];
             }
           }
 
-          // Method 3: Look in the artM (artwork) area - timestamp is displayed below artwork
+          // Method 3: Look for any element with "cue" in the class
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
-            const artM = item.querySelector('.artM');
-            if (artM) {
-              const text = artM.textContent?.trim() || '';
-              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+            const cueEl = item.querySelector('[class*="cue"]');
+            if (cueEl) {
+              const text = cueEl.textContent?.trim() || '';
+              const match = text.match(/^(\d{1,2}:\d{2}(:\d{2})?)$/);
               if (match) timeStr = match[1];
             }
           }
 
-          // Method 4: Look in the bPlay (play button) area
+          // Method 4: Search for timestamp pattern in item text (last resort)
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
-            const bPlay = item.querySelector('.bPlay');
-            if (bPlay) {
-              const text = bPlay.textContent?.trim() || '';
-              // Exclude just numbers (track positions like "01", "02")
-              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
-              if (match) timeStr = match[1];
-            }
-          }
-
-          // Method 5: Search entire item text for timestamp pattern
-          if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
+            // Look specifically for time patterns, avoiding track numbers
             const allText = item.textContent || '';
-            // Match MM:SS or HH:MM:SS format
             const tsMatch = allText.match(/\b(\d{1,2}:\d{2}(:\d{2})?)\b/);
             if (tsMatch) {
               timeStr = tsMatch[1];
@@ -252,8 +247,9 @@
           }
 
           // Debug: Log what we found for first few tracks
-          if (index < 3) {
-            console.log(`[1001TL] Track ${index}: timeStr="${timeStr}"`);
+          if (index < 5) {
+            const cueEl = item.querySelector('div.cue, [class*="cue"]');
+            console.log(`[1001TL] Track ${index}: timeStr="${timeStr}", cueEl found:`, !!cueEl, cueEl?.textContent?.trim());
           }
 
           if (!timeStr) timeStr = '0:00';
