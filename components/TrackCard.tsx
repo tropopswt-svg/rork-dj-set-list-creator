@@ -89,7 +89,7 @@ export default function TrackCard({
     const info = getSourceInfo();
     if (!info) return null;
 
-    const iconSize = 10;
+    const iconSize = 11;
     let IconComponent = null;
 
     switch (info.icon) {
@@ -113,8 +113,9 @@ export default function TrackCard({
     }
 
     return (
-      <View style={[styles.sourceIcon, { backgroundColor: `${info.color}15` }]}>
+      <View style={[styles.sourceTag, { backgroundColor: `${info.color}18` }]}>
         {IconComponent}
+        <Text style={[styles.sourceTagText, { color: info.color }]}>{info.label}</Text>
       </View>
     );
   };
@@ -347,12 +348,18 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     fontSize: 11,
   },
-  sourceIcon: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
+  sourceTag: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 3,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  sourceTagText: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    letterSpacing: 0.3,
   },
   sourceBadge: {
     paddingHorizontal: 6,
