@@ -128,57 +128,80 @@ async function fetchVideoInfo(videoId, apiKey) {
 }
 
 async function fetchVideoComments(videoId, apiKey, maxResults = 500) {
-  const comments = [];
-  let nextPageToken;
-  while (comments.length < maxResults) {
-    const pageSize = Math.min(100, maxResults - comments.length);
-    // Include replies to get answer comments like "It's Fisher - Losing It"
-    let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet,replies&videoId=${videoId}&maxResults=${pageSize}&order=relevance&key=${apiKey}`;
-    if (nextPageToken) url += `&pageToken=${nextPageToken}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      const error = await response.json();
-      if (error.error?.errors?.[0]?.reason === 'commentsDisabled') break;
-      throw new Error(`YouTube API error: ${error.error?.message || response.statusText}`);
-    }
-    const data = await response.json();
-    if (!data.items || data.items.length === 0) break;
-    for (const item of data.items) {
-      const c = item.snippet.topLevelComment.snippet;
-      const topComment = {
-        id: item.id,
-        authorName: c.authorDisplayName,
-        text: c.textOriginal || c.textDisplay,
-        likeCount: c.likeCount,
-        isReply: false,
-      };
-      comments.push(topComment);
+  const allComments = [];
+  const seenIds = new Set();
 
-      // Process replies - these often contain track IDs answering "what's this track?"
-      if (item.replies && item.replies.comments) {
-        // Extract any timestamp from the parent comment
-        const parentTimestamps = extractTimestamps(topComment.text);
-        const parentTimestamp = parentTimestamps.length > 0 ? parentTimestamps[0] : null;
+  // Helper to fetch comments with a specific order
+  async function fetchWithOrder(order, limit) {
+    const comments = [];
+    let nextPageToken;
+    while (comments.length < limit) {
+      const pageSize = Math.min(100, limit - comments.length);
+      let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet,replies&videoId=${videoId}&maxResults=${pageSize}&order=${order}&key=${apiKey}`;
+      if (nextPageToken) url += `&pageToken=${nextPageToken}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        const error = await response.json();
+        if (error.error?.errors?.[0]?.reason === 'commentsDisabled') break;
+        throw new Error(`YouTube API error: ${error.error?.message || response.statusText}`);
+      }
+      const data = await response.json();
+      if (!data.items || data.items.length === 0) break;
+      for (const item of data.items) {
+        // Skip if already seen
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
 
-        for (const reply of item.replies.comments) {
-          const r = reply.snippet;
-          comments.push({
-            id: reply.id,
-            authorName: r.authorDisplayName,
-            text: r.textOriginal || r.textDisplay,
-            likeCount: r.likeCount,
-            isReply: true,
-            parentId: item.id,
-            parentTimestamp: parentTimestamp, // Pass timestamp from parent "what's this track at X?"
-          });
+        const c = item.snippet.topLevelComment.snippet;
+        const topComment = {
+          id: item.id,
+          authorName: c.authorDisplayName,
+          text: c.textOriginal || c.textDisplay,
+          likeCount: c.likeCount,
+          isReply: false,
+        };
+        comments.push(topComment);
+
+        // Process replies - these often contain track IDs
+        if (item.replies && item.replies.comments) {
+          const parentTimestamps = extractTimestamps(topComment.text);
+          const parentTimestamp = parentTimestamps.length > 0 ? parentTimestamps[0] : null;
+
+          for (const reply of item.replies.comments) {
+            if (seenIds.has(reply.id)) continue;
+            seenIds.add(reply.id);
+
+            const r = reply.snippet;
+            comments.push({
+              id: reply.id,
+              authorName: r.authorDisplayName,
+              text: r.textOriginal || r.textDisplay,
+              likeCount: r.likeCount,
+              isReply: true,
+              parentId: item.id,
+              parentTimestamp: parentTimestamp,
+            });
+          }
         }
       }
+      nextPageToken = data.nextPageToken;
+      if (!nextPageToken) break;
     }
-    nextPageToken = data.nextPageToken;
-    if (!nextPageToken) break;
+    return comments;
   }
-  console.log(`Fetched ${comments.length} YouTube comments (including replies)`);
-  return comments;
+
+  // Fetch by relevance (most liked/engaged comments - often have good tracklists)
+  const relevanceComments = await fetchWithOrder('relevance', maxResults);
+  allComments.push(...relevanceComments);
+  console.log(`Fetched ${relevanceComments.length} comments by relevance`);
+
+  // Also fetch by time (recent comments - catch new comprehensive tracklists)
+  const timeComments = await fetchWithOrder('time', Math.floor(maxResults / 2));
+  allComments.push(...timeComments);
+  console.log(`Fetched ${timeComments.length} additional comments by time`);
+
+  console.log(`Total: ${allComments.length} YouTube comments (including replies)`);
+  return allComments;
 }
 
 function cleanText(text) {
