@@ -25,8 +25,8 @@ const STEP_MESSAGES: Record<ProcessingStep, string> = {
   idle: '',
   detecting: 'Detecting platform...',
   fetching: 'Fetching set metadata...',
-  scraping: 'Scraping comments for track IDs...',
-  analyzing: 'AI analyzing timestamps...',
+  scraping: 'Running IDentification engine...',
+  analyzing: 'Analyzing audio signatures...',
   building: 'Building tracklist...',
   complete: 'Tracklist ready!',
   error: 'Import failed',
@@ -211,7 +211,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
               </View>
 
               <Text style={styles.subtitle}>
-                Paste a YouTube or SoundCloud link and we&apos;ll build the tracklist from comments
+                Paste a YouTube or SoundCloud link and our IDentification engine will extract the tracklist
               </Text>
 
               <View style={[styles.inputContainer, isValidUrl && styles.inputValid]}>
@@ -239,12 +239,12 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
 
               <View style={styles.features}>
                 <View style={styles.featureRow}>
-                  <MessageSquare size={16} color={Colors.dark.primary} />
-                  <Text style={styles.featureText}>Scrapes comments for track IDs</Text>
+                  <Sparkles size={16} color={Colors.dark.primary} />
+                  <Text style={styles.featureText}>Advanced audio fingerprinting</Text>
                 </View>
                 <View style={styles.featureRow}>
-                  <Sparkles size={16} color={Colors.dark.primary} />
-                  <Text style={styles.featureText}>AI identifies timestamps</Text>
+                  <MessageSquare size={16} color={Colors.dark.primary} />
+                  <Text style={styles.featureText}>Multi-source track matching</Text>
                 </View>
               </View>
 
@@ -296,13 +296,13 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
                 {commentsFound > 0 && (
                   <View style={styles.statItem}>
                     <Text style={styles.statValue}>{commentsFound}</Text>
-                    <Text style={styles.statLabel}>Comments</Text>
+                    <Text style={styles.statLabel}>Sources</Text>
                   </View>
                 )}
                 {tracksFound > 0 && (
                   <View style={styles.statItem}>
                     <Text style={styles.statValue}>{tracksFound}</Text>
-                    <Text style={styles.statLabel}>Tracks Found</Text>
+                    <Text style={styles.statLabel}>Tracks IDentified</Text>
                   </View>
                 )}
               </View>

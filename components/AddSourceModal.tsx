@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,13 +6,244 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  ActivityIndicator,
   Animated,
+  Easing,
 } from 'react-native';
-import { X, Youtube, Music2, Sparkles, Check, AlertCircle, AlertTriangle } from 'lucide-react-native';
+import { X, Youtube, Music2, Check, AlertCircle, AlertTriangle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
+
+// Animated scanning waveform for ID logo
+const ScanningWaveform = ({
+  width = 60,
+  height = 32,
+  barCount = 14,
+  color = Colors.dark.primary,
+  isScanning = false,
+}: {
+  width?: number;
+  height?: number;
+  barCount?: number;
+  color?: string;
+  isScanning?: boolean;
+}) => {
+  const animations = useRef(
+    Array.from({ length: barCount }, () => new Animated.Value(0.3))
+  ).current;
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isScanning) {
+      // Animate each bar with staggered timing
+      const barAnimations = animations.map((anim, index) => {
+        return Animated.loop(
+          Animated.sequence([
+            Animated.delay(index * 50),
+            Animated.timing(anim, {
+              toValue: 0.3 + Math.random() * 0.7,
+              duration: 200 + Math.random() * 300,
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0.3,
+              duration: 200 + Math.random() * 300,
+              useNativeDriver: true,
+            }),
+          ])
+        );
+      });
+
+      // Scan line animation
+      const scanLine = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanLineAnim, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanLineAnim, {
+            toValue: 0,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+
+      barAnimations.forEach(anim => anim.start());
+      scanLine.start();
+
+      return () => {
+        barAnimations.forEach(anim => anim.stop());
+        scanLine.stop();
+      };
+    }
+  }, [isScanning]);
+
+  const barWidth = Math.max(2, (width - (barCount - 1) * 2) / barCount);
+
+  const scanLineTranslateX = scanLineAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, width + 10],
+  });
+
+  return (
+    <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', height, gap: 2 }}>
+        {animations.map((anim, idx) => (
+          <Animated.View
+            key={idx}
+            style={{
+              width: barWidth,
+              height: height * 0.8,
+              backgroundColor: color,
+              borderRadius: 2,
+              transform: [{ scaleY: anim }],
+              opacity: isScanning ? 1 : 0.4,
+            }}
+          />
+        ))}
+      </View>
+      {isScanning && (
+        <Animated.View
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            width: 3,
+            backgroundColor: '#fff',
+            opacity: 0.8,
+            borderRadius: 2,
+            transform: [{ translateX: scanLineTranslateX }],
+            shadowColor: '#fff',
+            shadowOffset: { width: 0, height: 0 },
+            shadowOpacity: 1,
+            shadowRadius: 8,
+          }}
+        />
+      )}
+    </View>
+  );
+};
+
+// Animated ID Logo for scanning states
+const ScanningIDLogo = ({ isScanning = false, isComplete = false }: { isScanning?: boolean; isComplete?: boolean }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const completeScaleAnim = useRef(new Animated.Value(1)).current;
+  const checkScaleAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isScanning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, { toValue: 0.8, duration: 800, useNativeDriver: true }),
+          Animated.timing(glowAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scaleAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
+          Animated.timing(scaleAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      glowAnim.setValue(0.5);
+      scaleAnim.setValue(1);
+    }
+  }, [isScanning]);
+
+  useEffect(() => {
+    if (isComplete) {
+      // Success burst animation
+      Animated.sequence([
+        Animated.timing(completeScaleAnim, { toValue: 1.3, duration: 200, useNativeDriver: true }),
+        Animated.timing(completeScaleAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+      ]).start();
+
+      Animated.spring(checkScaleAnim, {
+        toValue: 1,
+        tension: 200,
+        friction: 10,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      checkScaleAnim.setValue(0);
+      completeScaleAnim.setValue(1);
+    }
+  }, [isComplete]);
+
+  return (
+    <Animated.View style={{ transform: [{ scale: isComplete ? completeScaleAnim : scaleAnim }] }}>
+      <View style={logoStyles.container}>
+        <Animated.View style={[logoStyles.glowBg, { opacity: glowAnim }]} />
+        <View style={logoStyles.waveformContainer}>
+          <ScanningWaveform
+            width={56}
+            height={28}
+            barCount={12}
+            color={Colors.dark.primary}
+            isScanning={isScanning}
+          />
+        </View>
+        <Text style={logoStyles.idText}>ID</Text>
+        {isComplete && (
+          <Animated.View style={[logoStyles.checkOverlay, { transform: [{ scale: checkScaleAnim }] }]}>
+            <Check size={24} color="#fff" strokeWidth={3} />
+          </Animated.View>
+        )}
+      </View>
+    </Animated.View>
+  );
+};
+
+const logoStyles = StyleSheet.create({
+  container: {
+    width: 80,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  glowBg: {
+    position: 'absolute',
+    width: 74,
+    height: 44,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 10,
+  },
+  waveformContainer: {
+    position: 'absolute',
+    zIndex: 1,
+  },
+  idText: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    letterSpacing: -1,
+    zIndex: 2,
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  checkOverlay: {
+    position: 'absolute',
+    zIndex: 3,
+    backgroundColor: Colors.dark.success,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    bottom: -5,
+    right: -5,
+  },
+});
 
 interface AddSourceModalProps {
   visible: boolean;
@@ -38,7 +269,6 @@ export default function AddSourceModal({
   const [stats, setStats] = useState<any>(null);
   const [error, setError] = useState('');
   const [warningMessage, setWarningMessage] = useState('');
-  const [pulseAnim] = useState(new Animated.Value(1));
 
   // Auto-paste from clipboard when modal opens
   useEffect(() => {
@@ -63,20 +293,6 @@ export default function AddSourceModal({
       checkClipboard();
     }
   }, [visible, platform]);
-
-  // Pulse animation
-  useEffect(() => {
-    if (step === 'importing' || step === 'validating') {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.1, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    }
-  }, [step]);
 
   // Check if the video title/description contains set info
   const validateSourceMatch = (title: string): { matches: boolean; warning?: string } => {
@@ -262,7 +478,7 @@ export default function AddSourceModal({
             <>
               <Text style={styles.title}>Add {getPlatformName()} Link</Text>
               <Text style={styles.subtitle}>
-                Merge track identifications from {getPlatformName()} into &quot;{setName}&quot;
+                Link the {getPlatformName()} source{setArtist ? ` for ${setArtist}'s set` : ''} and we'll run IDentification automatically
               </Text>
 
               <TextInput
@@ -277,9 +493,11 @@ export default function AddSourceModal({
               />
 
               <View style={styles.infoBox}>
-                <Sparkles size={16} color={Colors.dark.primary} />
+                <View style={styles.miniIdBadge}>
+                  <Text style={styles.miniIdText}>ID</Text>
+                </View>
                 <Text style={styles.infoText}>
-                  We&apos;ll scan comments for additional track IDs and merge them with existing tracks.
+                  Our IDentification engine uses advanced audio fingerprinting and multi-source matching to identify tracks.
                   Earn +25 points for contributing!
                 </Text>
               </View>
@@ -296,14 +514,13 @@ export default function AddSourceModal({
 
           {step === 'validating' && (
             <View style={styles.centerContent}>
-              <Animated.View style={[styles.importingIcon, { transform: [{ scale: pulseAnim }] }]}>
-                <Sparkles size={40} color={Colors.dark.primary} />
-              </Animated.View>
-              <Text style={styles.importingTitle}>Verifying...</Text>
+              <View style={styles.scanningContainer}>
+                <ScanningIDLogo isScanning={true} />
+              </View>
+              <Text style={styles.importingTitle}>Verifying Source...</Text>
               <Text style={styles.importingSubtitle}>
                 Checking if this matches the set
               </Text>
-              <ActivityIndicator color={Colors.dark.primary} style={{ marginTop: 20 }} />
             </View>
           )}
 
@@ -328,24 +545,28 @@ export default function AddSourceModal({
 
           {step === 'importing' && (
             <View style={styles.centerContent}>
-              <Animated.View style={[styles.importingIcon, { transform: [{ scale: pulseAnim }] }]}>
-                <Sparkles size={40} color={Colors.dark.primary} />
-              </Animated.View>
-              <Text style={styles.importingTitle}>Scanning {getPlatformName()}...</Text>
+              <View style={styles.scanningContainer}>
+                <ScanningIDLogo isScanning={true} />
+              </View>
+              <Text style={styles.importingTitle}>Running IDentification...</Text>
               <Text style={styles.importingSubtitle}>
-                Fetching comments and matching tracks
+                Analyzing audio signatures and matching tracks
               </Text>
-              <ActivityIndicator color={Colors.dark.primary} style={{ marginTop: 20 }} />
+              <View style={styles.scanningDots}>
+                <View style={[styles.dot, styles.dotActive]} />
+                <View style={[styles.dot, styles.dotActive]} />
+                <View style={styles.dot} />
+              </View>
             </View>
           )}
 
           {step === 'success' && (
             <View style={styles.centerContent}>
-              <View style={styles.successIcon}>
-                <Check size={40} color={Colors.dark.success} />
+              <View style={styles.successContainer}>
+                <ScanningIDLogo isComplete={true} />
               </View>
-              <Text style={styles.successTitle}>Merge Complete!</Text>
-              
+              <Text style={styles.successTitle}>IDentification Complete!</Text>
+
               {stats && (
                 <View style={styles.statsContainer}>
                   <View style={styles.statRow}>
@@ -368,7 +589,9 @@ export default function AddSourceModal({
               )}
 
               <View style={styles.pointsEarned}>
-                <Sparkles size={16} color={Colors.dark.primary} />
+                <View style={styles.pointsIdBadge}>
+                  <Text style={styles.pointsIdText}>ID</Text>
+                </View>
                 <Text style={styles.pointsText}>+25 points earned!</Text>
               </View>
 
@@ -467,6 +690,19 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     gap: 10,
   },
+  miniIdBadge: {
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginTop: 2,
+  },
+  miniIdText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
   infoText: {
     flex: 1,
     fontSize: 13,
@@ -490,6 +726,26 @@ const styles = StyleSheet.create({
   centerContent: {
     alignItems: 'center',
     paddingVertical: 20,
+  },
+  scanningContainer: {
+    marginBottom: 24,
+  },
+  scanningDots: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 20,
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.dark.surfaceLight,
+  },
+  dotActive: {
+    backgroundColor: Colors.dark.primary,
+  },
+  successContainer: {
+    marginBottom: 20,
   },
   importingIcon: {
     width: 80,
@@ -555,6 +811,18 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     marginBottom: 20,
+  },
+  pointsIdBadge: {
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  pointsIdText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   pointsText: {
     fontSize: 14,

@@ -1,7 +1,7 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Disc3, Rss, Users, Plus, User } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing } from 'react-native';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useMemo } from 'react';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 
@@ -55,6 +55,28 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
 
 export default function TabLayout() {
   const router = useRouter();
+  const segments = useSegments();
+
+  // Only show FAB on main tab index pages
+  const showFAB = useMemo(() => {
+    // segments looks like: ['(tabs)', '(discover)'] for index
+    // or ['(tabs)', '(discover)', '[id]'] for detail pages
+    // We want to show FAB only when on the main index pages
+    const mainTabs = ['(discover)', '(feed)', '(social)', '(profile)'];
+
+    // Check if we're on a main tab and at the index level (no further segments)
+    if (segments.length === 2) {
+      const currentTab = segments[1];
+      return mainTabs.includes(currentTab);
+    }
+
+    // For (discover), check if it's index.tsx (no third segment or third segment is 'index')
+    if (segments.length === 3 && segments[2] === 'index') {
+      return mainTabs.includes(segments[1]);
+    }
+
+    return false;
+  }, [segments]);
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -115,7 +137,7 @@ export default function TabLayout() {
       />
     </Tabs>
 
-      <VinylFAB onPress={handleFABPress} />
+      {showFAB && <VinylFAB onPress={handleFABPress} />}
     </View>
   );
 }

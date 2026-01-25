@@ -26,12 +26,14 @@ import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import ArtistLink from '@/components/ArtistLink';
+import IDentifiedLogo from '@/components/IDentifiedLogo';
 import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
 import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import TrackDetailModal from '@/components/TrackDetailModal';
+import AudioPreviewModal from '@/components/AudioPreviewModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
@@ -64,6 +66,9 @@ export default function SetDetailScreen() {
   // Track Detail Modal state
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [pendingTimestamp, setPendingTimestamp] = useState<number | null>(null);
+
+  // Audio Preview Modal state (for identifying unknown tracks)
+  const [audioPreviewTrack, setAudioPreviewTrack] = useState<Track | null>(null);
 
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -152,13 +157,27 @@ export default function SetDetailScreen() {
     return getActiveConflicts(id);
   }, [id, getActiveConflicts]);
 
+  // Filter and sort tracks - only show tracks with actual timestamps (> 0)
+  // Tracks without timestamps are not useful - users need to know WHEN a track plays
   const sortedTracks = useMemo(() => {
-    return [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+    return [...tracks]
+      .filter(track => {
+        // Only show tracks with a real timestamp (> 0)
+        // Timestamp 0 means "unknown position" - not useful for the timeline
+        return track.timestamp && track.timestamp > 0;
+      })
+      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  }, [tracks]);
+
+  // Count tracks that were filtered out (tracks without timestamps)
+  const unplacedTrackCount = useMemo(() => {
+    return tracks.filter(track => !track.timestamp || track.timestamp === 0).length;
   }, [tracks]);
 
   // Create a combined list of tracks and inline conflicts, sorted by timestamp
   type TracklistItem =
     | { type: 'track'; data: Track }
+    | { type: 'gap'; timestamp: number; duration: number }
     | { type: 'conflict'; data: TrackConflict };
 
   const tracklistItems = useMemo<TracklistItem[]>(() => {
@@ -171,11 +190,33 @@ export default function SetDetailScreen() {
       return true;
     });
 
-    // Create track items
-    const trackItems: TracklistItem[] = tracksWithoutConflicts.map(track => ({
-      type: 'track' as const,
-      data: track,
-    }));
+    // Create track items and detect gaps
+    const items: TracklistItem[] = [];
+    const avgTrackDuration = 180; // Assume ~3 min average track length
+    const gapThreshold = 240; // 4+ minutes gap suggests missing track(s)
+
+    for (let i = 0; i < tracksWithoutConflicts.length; i++) {
+      const track = tracksWithoutConflicts[i];
+      const prevTrack = i > 0 ? tracksWithoutConflicts[i - 1] : null;
+
+      // Check for gap before this track
+      if (prevTrack) {
+        const gap = (track.timestamp || 0) - (prevTrack.timestamp || 0);
+        if (gap >= gapThreshold) {
+          // There's a significant gap - likely missing track(s)
+          items.push({
+            type: 'gap' as const,
+            timestamp: (prevTrack.timestamp || 0) + avgTrackDuration,
+            duration: gap - avgTrackDuration,
+          });
+        }
+      }
+
+      items.push({
+        type: 'track' as const,
+        data: track,
+      });
+    }
 
     // Create conflict items
     const conflictItems: TracklistItem[] = conflicts.map(conflict => ({
@@ -184,10 +225,12 @@ export default function SetDetailScreen() {
     }));
 
     // Combine and sort by timestamp
-    const combined = [...trackItems, ...conflictItems];
+    const combined = [...items, ...conflictItems];
     combined.sort((a, b) => {
-      const timestampA = a.type === 'track' ? (a.data.timestamp || 0) : a.data.timestamp;
-      const timestampB = b.type === 'track' ? (b.data.timestamp || 0) : b.data.timestamp;
+      const timestampA = a.type === 'track' ? (a.data.timestamp || 0) :
+                         a.type === 'gap' ? a.timestamp : a.data.timestamp;
+      const timestampB = b.type === 'track' ? (b.data.timestamp || 0) :
+                         b.type === 'gap' ? b.timestamp : b.data.timestamp;
       return timestampA - timestampB;
     });
 
@@ -231,16 +274,44 @@ export default function SetDetailScreen() {
     checkSavedStatus();
   }, [id]);
 
-  if (!setList) {
+  // Show loading state with ID badge while fetching
+  if (isLoadingSet || !setList) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Set not found</Text>
+      <View style={styles.loadingContainer}>
+        <IDentifiedLogo size="large" />
+        {!isLoadingSet && !setList && (
+          <Text style={styles.loadingText}>Set not found</Text>
+        )}
       </View>
     );
   }
 
   const verifiedCount = sortedTracks.filter(t => t.verified).length;
   const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
+
+  // Parse multiple artists from name (handles &, and, vs, b2b, b3b patterns)
+  const parseArtists = (artistString: string): string[] => {
+    const separatorPattern = /\s*(?:&|,|\s+and\s+|\s+vs\.?\s+|\s+[bB]2[bB]\s+|\s+[bB]3[bB]\s+)\s*/;
+    return artistString.split(separatorPattern).map(a => a.trim()).filter(a => a.length > 0);
+  };
+
+  // Extract artists - check if set name contains more artists than the artist field
+  const getArtists = (): string[] => {
+    if (!setList) return [];
+    // First check if the set name starts with multiple artists before " - " or " @ "
+    const nameMatch = setList.name.match(/^(.+?)\s*[-–@]\s*/);
+    if (nameMatch) {
+      const potentialArtists = parseArtists(nameMatch[1]);
+      // If set name has more artists than the artist field, use those
+      if (potentialArtists.length > 1) {
+        return potentialArtists;
+      }
+    }
+    // Otherwise parse the artist field
+    return parseArtists(setList.artist);
+  };
+
+  const artists = getArtists();
 
   const formatTotalDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -284,6 +355,82 @@ export default function SetDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
+  // Handle identification submission from audio preview modal
+  const handleIdentifyTrack = async (artist: string, title: string) => {
+    if (!audioPreviewTrack || !setList) return;
+
+    try {
+      // Update the track in the database
+      const response = await fetch(`${API_BASE_URL}/api/sets/identify-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          setId: setList.id,
+          trackId: audioPreviewTrack.id,
+          artist,
+          title,
+          contributedBy: 'Community', // Could use actual username
+        }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Refresh set data to show updated track
+        const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+        const refreshData = await refreshResponse.json();
+
+        if (refreshData.success && refreshData.set) {
+          const refreshedSet: SetList = {
+            id: refreshData.set.id,
+            name: refreshData.set.name,
+            artist: refreshData.set.artist,
+            venue: refreshData.set.venue,
+            date: new Date(refreshData.set.date),
+            totalDuration: refreshData.set.totalDuration || 0,
+            coverUrl: refreshData.set.coverUrl,
+            plays: refreshData.set.trackCount * 10,
+            sourceLinks: refreshData.set.sourceLinks || [],
+            tracks: refreshData.set.tracks?.map((t: any) => ({
+              id: t.id,
+              title: t.title,
+              artist: t.artist,
+              duration: 0,
+              coverUrl: '',
+              addedAt: new Date(t.addedAt || Date.now()),
+              source: t.source || 'database',
+              timestamp: t.timestamp || 0,
+              verified: t.verified || !t.isId,
+              isId: t.isId,
+            })) || [],
+          };
+          setDbSet(refreshedSet);
+        }
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        await addPoints('track_confirmed', setList.id);
+      }
+    } catch (error) {
+      console.error('Failed to identify track:', error);
+    }
+  };
+
+  // Get the source URL and platform for audio preview
+  const getAudioSource = (): { url: string; platform: 'youtube' | 'soundcloud' } | null => {
+    if (!setList?.sourceLinks) return null;
+
+    // Prefer YouTube, then SoundCloud
+    const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+    if (ytLink) return { url: ytLink.url, platform: 'youtube' };
+
+    const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+    if (scLink) return { url: scLink.url, platform: 'soundcloud' };
+
+    return null;
+  };
+
+  const audioSource = getAudioSource();
+
   const getPlatformIcon = (platform: string, size: number = 18) => {
     switch (platform) {
       case 'youtube':
@@ -316,9 +463,11 @@ export default function SetDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerImage}>
-          <Image 
+          <Image
+            key={setList.coverUrl || 'default-cover'}
             source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=600&fit=crop' }}
             style={styles.coverImage}
+            cachePolicy="none"
           />
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.7)', Colors.dark.background]}
@@ -343,12 +492,21 @@ export default function SetDetailScreen() {
           <View style={styles.titleSection}>
             <View style={styles.titleRow}>
               <View style={styles.titleInfo}>
-                <ArtistLink 
-                  name={setList.artist} 
-                  style={styles.artist}
-                  size="large"
-                  showBadge={true}
-                />
+                <View style={styles.artistsRow}>
+                  {artists.map((artist, index) => (
+                    <View key={index} style={styles.artistItem}>
+                      <ArtistLink
+                        name={artist}
+                        style={styles.artist}
+                        size="large"
+                        showBadge={true}
+                      />
+                      {index < artists.length - 1 && (
+                        <Text style={styles.artistSeparator}>|</Text>
+                      )}
+                    </View>
+                  ))}
+                </View>
                 <Text style={styles.title}>{setList.name}</Text>
               </View>
               <Pressable style={styles.saveButton} onPress={handleSave}>
@@ -431,7 +589,7 @@ export default function SetDetailScreen() {
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Source Needed for Analysis</Text>
                     <Text style={styles.needsSourceText}>
-                      Add a YouTube or SoundCloud link to enable comment analysis and track identification
+                      Add a YouTube or SoundCloud link to enable our IDentification engine
                     </Text>
                   </View>
                 </View>
@@ -448,7 +606,7 @@ export default function SetDetailScreen() {
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Ready for Analysis</Text>
                     <Text style={styles.needsSourceText}>
-                      Source links were auto-detected. Tap "Analyze" on a source to scrape comments for track timestamps.
+                      Source links detected. Tap "Analyze" to run our IDentification engine.
                     </Text>
                   </View>
                 </View>
@@ -499,7 +657,7 @@ export default function SetDetailScreen() {
                             const importResult = await importResponse.json();
 
                             if (importResult.success && importResult.setList?.tracks?.length > 0) {
-                              // Update tracks with timestamps
+                              // Update tracks with timestamps and coverUrl
                               await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -507,8 +665,14 @@ export default function SetDetailScreen() {
                                   setId: setList.id,
                                   tracks: importResult.setList.tracks,
                                   source: 'youtube',
+                                  coverUrl: importResult.setList.coverUrl,
                                 }),
                               });
+
+                              // Immediately update coverUrl for quick visual feedback
+                              if (importResult.setList?.coverUrl) {
+                                setDbSet(prev => prev ? { ...prev, coverUrl: importResult.setList.coverUrl } : prev);
+                              }
 
                               // Refresh set data
                               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
@@ -521,7 +685,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -544,9 +708,9 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `Analyzed ${importResult.setList.tracks.length} tracks from YouTube comments`);
+                              Alert.alert('Success', `IDentified ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
-                              Alert.alert('No Results', 'No track timestamps found in YouTube comments');
+                              Alert.alert('No Results', 'No tracks could be IDentified from this source');
                             }
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
@@ -625,8 +789,14 @@ export default function SetDetailScreen() {
                                   setId: setList.id,
                                   tracks: importResult.setList.tracks,
                                   source: 'soundcloud',
+                                  coverUrl: importResult.setList.coverUrl,
                                 }),
                               });
+
+                              // Immediately update coverUrl for quick visual feedback
+                              if (importResult.setList?.coverUrl) {
+                                setDbSet(prev => prev ? { ...prev, coverUrl: importResult.setList.coverUrl } : prev);
+                              }
 
                               // Refresh set data
                               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
@@ -639,7 +809,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -662,9 +832,9 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `Analyzed ${importResult.setList.tracks.length} tracks from SoundCloud comments`);
+                              Alert.alert('Success', `IDentified ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
-                              Alert.alert('No Results', 'No track timestamps found in SoundCloud comments');
+                              Alert.alert('No Results', 'No tracks could be IDentified from this source');
                             }
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
@@ -733,7 +903,7 @@ export default function SetDetailScreen() {
                 <MessageSquare size={14} color="#FB923C" />
               </View>
               <Text style={styles.statValue}>{setList.commentsScraped || 0}</Text>
-              <Text style={styles.statLabel}>Scraped</Text>
+              <Text style={styles.statLabel}>Sources</Text>
             </View>
           </View>
 
@@ -741,7 +911,7 @@ export default function SetDetailScreen() {
             <View style={styles.aiInfoBanner}>
               <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                IDentified • {setList.commentsScraped?.toLocaleString()} signals processed
+                IDentified • {setList.commentsScraped?.toLocaleString()} data points analyzed
               </Text>
             </View>
           )}
@@ -798,10 +968,20 @@ export default function SetDetailScreen() {
             </View>
           )}
 
+          {/* Unplaced tracks info - tracks detected without timestamps */}
+          {unplacedTrackCount > 0 && (
+            <View style={styles.unplacedIdsBanner}>
+              <AlertCircle size={14} color={Colors.dark.textMuted} />
+              <Text style={styles.unplacedIdsText}>
+                {unplacedTrackCount} track{unplacedTrackCount !== 1 ? 's' : ''} identified but missing timestamps
+              </Text>
+            </View>
+          )}
+
           <View style={styles.tracksSection}>
             <View style={styles.tracksSectionHeader}>
               <Text style={styles.sectionTitle}>Tracklist</Text>
-              <Pressable 
+              <Pressable
                 style={styles.addTrackButton}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -813,12 +993,12 @@ export default function SetDetailScreen() {
               </Pressable>
             </View>
 
-            {tracklistItems.map((item) => {
+            {tracklistItems.map((item, index) => {
               if (item.type === 'conflict') {
                 const conflict = item.data;
                 const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
                 const soundcloudLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
-                
+
                 return (
                   <InlineConflictOptions
                     key={conflict.id}
@@ -838,12 +1018,46 @@ export default function SetDetailScreen() {
                   />
                 );
               }
-              
+
+              // Gap indicator - missing track(s)
+              if (item.type === 'gap') {
+                const formatTime = (secs: number) => {
+                  const mins = Math.floor(secs / 60);
+                  const s = secs % 60;
+                  return `${mins}:${s.toString().padStart(2, '0')}`;
+                };
+                const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
+
+                return (
+                  <Pressable
+                    key={`gap-${item.timestamp}`}
+                    style={styles.gapIndicator}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setShowAddModal(true);
+                    }}
+                  >
+                    <View style={styles.gapTimestamp}>
+                      <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
+                    </View>
+                    <View style={styles.gapContent}>
+                      <View style={styles.gapLine} />
+                      <Text style={styles.gapText}>
+                        ~{estimatedTracks} track{estimatedTracks > 1 ? 's' : ''} missing
+                      </Text>
+                      <View style={styles.gapLine} />
+                    </View>
+                    <Plus size={16} color={Colors.dark.primary} />
+                  </Pressable>
+                );
+              }
+
               // Regular track
               const track = item.data;
+              const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
               return (
-                <TrackCard 
-                  key={track.id} 
+                <TrackCard
+                  key={track.id}
                   track={track}
                   showTimestamp
                   onPress={() => {
@@ -856,6 +1070,10 @@ export default function SetDetailScreen() {
                     }
                   }}
                   onContributorPress={(username) => setSelectedContributor(username)}
+                  onListen={isUnidentified && audioSource ? () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    setAudioPreviewTrack(track);
+                  } : undefined}
                 />
               );
             })}
@@ -942,6 +1160,7 @@ export default function SetDetailScreen() {
                     setId: setList.id,
                     tracks: scrapedTracks,
                     source: selectedPlatform,
+                    coverUrl: importResult.setList?.coverUrl,
                   }),
                 });
                 const updateResult = await updateResponse.json();
@@ -965,10 +1184,12 @@ export default function SetDetailScreen() {
                 console.log('Add source warning:', addSourceResult.error);
               }
 
-              // Update local state to reflect the new source
+              // Update local state to reflect the new source and coverUrl immediately
+              const newCoverUrl = importResult.setList?.coverUrl;
               setDbSet(prev => prev ? {
                 ...prev,
                 sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
+                ...(newCoverUrl && { coverUrl: newCoverUrl }),
               } : prev);
 
               // Refresh the set data to get updated tracks with timestamps
@@ -1058,6 +1279,22 @@ export default function SetDetailScreen() {
           setPendingTimestamp(null);
         }}
       />
+
+      <AudioPreviewModal
+        visible={audioPreviewTrack !== null}
+        onClose={() => setAudioPreviewTrack(null)}
+        onSubmitIdentification={handleIdentifyTrack}
+        sourceUrl={audioSource?.url || null}
+        sourcePlatform={audioSource?.platform || null}
+        timestamp={audioPreviewTrack?.timestamp || 0}
+        trackArtist={
+          audioPreviewTrack?.artist &&
+          audioPreviewTrack.artist.toLowerCase() !== 'id' &&
+          audioPreviewTrack.artist.toLowerCase() !== 'unknown'
+            ? audioPreviewTrack.artist
+            : undefined
+        }
+      />
     </View>
   );
 }
@@ -1115,11 +1352,27 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 16,
   },
+  artistsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  artistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   artist: {
     fontSize: 15,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
-    marginBottom: 4,
+  },
+  artistSeparator: {
+    fontSize: 15,
+    fontWeight: '400' as const,
+    color: Colors.dark.primary,
+    opacity: 0.4,
+    marginHorizontal: 8,
   },
   title: {
     fontSize: 24,
@@ -1407,6 +1660,58 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600' as const,
   },
+  gapIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 107, 53, 0.08)',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.2)',
+    borderStyle: 'dashed',
+  },
+  gapTimestamp: {
+    width: 45,
+    marginRight: 10,
+  },
+  gapTimestampText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+    fontVariant: ['tabular-nums'],
+  },
+  gapContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gapLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255, 107, 53, 0.3)',
+  },
+  gapText: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    fontWeight: '500' as const,
+  },
+  unplacedIdsBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  unplacedIdsText: {
+    flex: 1,
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+  },
   missingTrackCta: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1430,6 +1735,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.primary,
     fontWeight: '600' as const,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: Colors.dark.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    color: Colors.dark.textMuted,
+    fontSize: 14,
+    marginTop: 20,
   },
   errorText: {
     color: Colors.dark.text,

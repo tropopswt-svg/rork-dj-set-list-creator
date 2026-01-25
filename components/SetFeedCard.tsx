@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -9,6 +9,7 @@ import { SetList } from '@/types';
 interface SetFeedCardProps {
   setList: SetList;
   onPress?: () => void;
+  onArtistPress?: (artist: string) => void;
 }
 
 const coverImages = [
@@ -20,11 +21,40 @@ const coverImages = [
   'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
 ];
 
-export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeedCardProps) {
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.();
   };
+
+  const handleArtistPress = (artistName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onArtistPress?.(artistName);
+  };
+
+  // Parse multiple artists from name (handles &, and, vs, b2b, b3b patterns)
+  const parseArtists = (artistString: string): string[] => {
+    // Split on common separators: &, " and ", " vs ", " b2b ", " b3b ", " B2B ", " B3B "
+    const separatorPattern = /\s*(?:&|,|\s+and\s+|\s+vs\.?\s+|\s+[bB]2[bB]\s+|\s+[bB]3[bB]\s+)\s*/;
+    return artistString.split(separatorPattern).map(a => a.trim()).filter(a => a.length > 0);
+  };
+
+  // Extract artists - check if set name contains more artists than the artist field
+  const getArtists = (): string[] => {
+    // First check if the set name starts with multiple artists before " - " or " @ "
+    const nameMatch = setList.name.match(/^(.+?)\s*[-–@]\s*/);
+    if (nameMatch) {
+      const potentialArtists = parseArtists(nameMatch[1]);
+      // If set name has more artists than the artist field, use those
+      if (potentialArtists.length > 1) {
+        return potentialArtists;
+      }
+    }
+    // Otherwise parse the artist field
+    return parseArtists(setList.artist);
+  };
+
+  const artists = getArtists();
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -33,22 +63,12 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${mins}m`;
   };
 
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
-    if (days < 30) return `${Math.floor(days / 7)}w ago`;
-    if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-    return `${Math.floor(days / 365)}y ago`;
-  };
+  // Helper to escape regex special characters
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Parse set name to extract venue, location, and date
-  // Format: "Artist @ Venue/Event, Location YYYY-MM-DD" or "Event Name YYYY-MM-DD"
-  const parseSetName = (name: string) => {
+  // Remove artist name(s) if they appear at the start (since they're shown separately)
+  const parseSetName = (name: string, artistNames: string[]) => {
     let workingName = name;
     let eventDate: Date | null = null;
     let venue: string | null = null;
@@ -80,25 +100,46 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
       }
     }
 
-    // Now parse venue and location from the remaining name
-    // Pattern: "Artist @ Venue, City, Country" or "Venue, City, Country" or "Event - Venue"
+    // Try to remove artist name(s) from the beginning and extract the set/event name
+    // Pattern 1: "Artist @ Venue, Location" -> extract "Venue, Location"
     const atMatch = workingName.match(/@\s*(.+)$/);
     if (atMatch) {
       const afterAt = atMatch[1].trim();
-      // Split by comma to get venue and location parts
       const parts = afterAt.split(',').map(p => p.trim());
 
       if (parts.length >= 2) {
-        // First part is venue, rest is location
         venue = parts[0];
         location = parts.slice(1).join(', ');
       } else if (parts.length === 1) {
-        // Just venue, no separate location
         venue = parts[0];
       }
 
-      // Clean name is everything before @
-      workingName = workingName.replace(/@\s*.+$/, '').trim();
+      // Display the full venue/event string
+      workingName = afterAt;
+    } else {
+      // Pattern 2: "Artist1 & Artist2 & Artist3 - Set Name" -> extract "Set Name"
+      // Match everything before " - " or " – " and check if it contains our artists
+      const dashMatch = workingName.match(/^(.+?)\s*[-–]\s*(.+)$/);
+      if (dashMatch) {
+        const beforeDash = dashMatch[1].trim();
+        const afterDash = dashMatch[2].trim();
+
+        // Check if the part before dash contains any of our artists
+        const containsArtist = artistNames.some(artist =>
+          beforeDash.toLowerCase().includes(artist.toLowerCase())
+        );
+
+        if (containsArtist) {
+          workingName = afterDash;
+        }
+      } else {
+        // Pattern 3: Check if name starts with single artist and has colon/pipe separator
+        const artistName = artistNames[0] || '';
+        const colonMatch = workingName.match(new RegExp(`^${escapeRegex(artistName)}\\s*[:\\|]\\s*(.+)$`, 'i'));
+        if (colonMatch) {
+          workingName = colonMatch[1].trim();
+        }
+      }
     }
 
     return { cleanName: workingName, eventDate, venue, location };
@@ -110,7 +151,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   };
 
-  const { cleanName, eventDate, venue, location } = parseSetName(setList.name);
+  const { cleanName, eventDate, venue, location } = parseSetName(setList.name, artists);
 
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
@@ -172,6 +213,10 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     l => l.platform === 'youtube' || l.platform === 'soundcloud'
   );
 
+  // Check if set is fully IDentified (all tracks found, no gaps)
+  const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
+  const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
+
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
@@ -214,11 +259,27 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
               <Text style={styles.durationText}>{formatDuration(setList.totalDuration)}</Text>
             </View>
           )}
+          {isFullyIdentified && (
+            <View style={styles.completeBadge}>
+              <Star size={10} color="#FFD700" fill="#FFD700" />
+            </View>
+          )}
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.artist}>{setList.artist}</Text>
-          <Text style={styles.name} numberOfLines={1}>{cleanName || setList.name}</Text>
+          <View style={styles.artistRow}>
+            {artists.map((artist, index) => (
+              <View key={index} style={styles.artistItem}>
+                <Pressable onPress={() => handleArtistPress(artist)} hitSlop={4}>
+                  <Text style={styles.artist}>{artist}</Text>
+                </Pressable>
+                {index < artists.length - 1 && (
+                  <Text style={styles.artistSeparator}>|</Text>
+                )}
+              </View>
+            ))}
+          </View>
+          <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
 
           <View style={styles.footer}>
             <View style={styles.metaRow}>
@@ -243,7 +304,6 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
                   <Music size={10} color={Colors.dark.textMuted} />
                   <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
                 </View>
-                <Text style={styles.date}>{formatDate(setList.date)}</Text>
               </View>
             </View>
           </View>
@@ -256,7 +316,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginBottom: 8,
+    marginBottom: 10,
     backgroundColor: Colors.dark.surface,
     borderRadius: 12,
     overflow: 'hidden',
@@ -283,12 +343,12 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    padding: 8,
+    padding: 10,
   },
   coverContainer: {
     position: 'relative',
-    width: 64,
-    height: 64,
+    width: 70,
+    height: 70,
     borderRadius: 8,
     overflow: 'hidden',
   },
@@ -329,24 +389,50 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#fff',
   },
+  completeBadge: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 3,
+    borderRadius: 10,
+  },
   content: {
     flex: 1,
     marginLeft: 10,
     justifyContent: 'center',
   },
+  artistRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    marginBottom: 1,
+  },
+  artistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   artist: {
     fontSize: 11,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
-    marginBottom: 1,
+    textShadowColor: `${Colors.dark.primary}60`,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
+  },
+  artistSeparator: {
+    fontSize: 11,
+    fontWeight: '400' as const,
+    color: Colors.dark.primary,
+    opacity: 0.4,
+    marginHorizontal: 6,
   },
   name: {
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 16,
+    lineHeight: 17,
     marginBottom: 4,
-    paddingRight: 80,
   },
   footer: {
     marginTop: 'auto',
@@ -419,11 +505,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  date: {
-    fontSize: 9,
-    color: Colors.dark.textMuted,
-    fontWeight: '400' as const,
   },
   needsSourceBadge: {
     flexDirection: 'row',

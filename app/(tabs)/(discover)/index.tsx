@@ -54,6 +54,7 @@ export default function DiscoverScreen() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [expandedFilter, setExpandedFilter] = useState<'artists' | 'years' | 'countries' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
@@ -227,7 +228,16 @@ export default function DiscoverScreen() {
 
   const toggleFilterSection = (section: 'artists' | 'years' | 'countries') => {
     Haptics.selectionAsync();
+    setFilterSearch('');
     setExpandedFilter(expandedFilter === section ? null : section);
+  };
+
+  // Filter options based on search
+  const getFilteredOptions = (type: 'artists' | 'years' | 'countries') => {
+    const options = filterOptions[type];
+    if (!filterSearch || type === 'years') return options;
+    const search = filterSearch.toLowerCase();
+    return options.filter(opt => opt.toLowerCase().includes(search));
   };
 
   return (
@@ -338,33 +348,58 @@ export default function DiscoverScreen() {
 
             {/* Expanded filter options */}
             {expandedFilter && (
-              <ScrollView style={styles.filterOptionsList} horizontal={false} showsVerticalScrollIndicator={true}>
-                <View style={styles.filterOptionsWrap}>
-                  {filterOptions[expandedFilter].map(option => (
-                    <Pressable
-                      key={option}
-                      style={[
-                        styles.filterOptionChip,
-                        selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipSelected,
-                      ]}
-                      onPress={() => {
-                        Haptics.selectionAsync();
-                        toggleFilter(expandedFilter, option);
-                      }}
-                    >
-                      <Text
+              <View style={styles.expandedSection}>
+                {/* Search input for artists and countries */}
+                {(expandedFilter === 'artists' || expandedFilter === 'countries') && (
+                  <View style={styles.filterSearchContainer}>
+                    <Search size={14} color={Colors.dark.textMuted} />
+                    <TextInput
+                      style={styles.filterSearchInput}
+                      placeholder={`Search ${expandedFilter === 'artists' ? 'artists' : 'countries'}...`}
+                      placeholderTextColor={Colors.dark.textMuted}
+                      value={filterSearch}
+                      onChangeText={setFilterSearch}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                    {filterSearch.length > 0 && (
+                      <Pressable onPress={() => setFilterSearch('')}>
+                        <X size={14} color={Colors.dark.textMuted} />
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+                <ScrollView style={styles.filterOptionsList} showsVerticalScrollIndicator={true}>
+                  <View style={styles.filterOptionsWrap}>
+                    {getFilteredOptions(expandedFilter).map(option => (
+                      <Pressable
+                        key={option}
                         style={[
-                          styles.filterOptionChipText,
-                          selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipTextSelected,
+                          styles.filterOptionChip,
+                          selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipSelected,
                         ]}
-                        numberOfLines={1}
+                        onPress={() => {
+                          Haptics.selectionAsync();
+                          toggleFilter(expandedFilter, option);
+                        }}
                       >
-                        {option}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-              </ScrollView>
+                        <Text
+                          style={[
+                            styles.filterOptionChipText,
+                            selectedFilters[expandedFilter].includes(option) && styles.filterOptionChipTextSelected,
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {option}
+                        </Text>
+                      </Pressable>
+                    ))}
+                    {getFilteredOptions(expandedFilter).length === 0 && (
+                      <Text style={styles.noResultsText}>No {expandedFilter} found</Text>
+                    )}
+                  </View>
+                </ScrollView>
+              </View>
             )}
 
             {/* Clear filters */}
@@ -401,6 +436,10 @@ export default function DiscoverScreen() {
                   key={setList.id}
                   setList={setList}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
+                  onArtistPress={(artist) => {
+                    const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
+                    router.push(`/(tabs)/(discover)/artist/${slug}`);
+                  }}
                 />
               ))}
 
@@ -485,7 +524,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: Colors.dark.surface,
   },
@@ -547,7 +586,7 @@ const styles = StyleSheet.create({
     gap: 5,
     marginLeft: 'auto',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 10,
     borderRadius: 20,
     backgroundColor: Colors.dark.surface,
     borderWidth: 1,
@@ -584,7 +623,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    paddingVertical: 10,
+    paddingVertical: 12,
     paddingHorizontal: 8,
     borderRadius: 10,
     backgroundColor: Colors.dark.background,
@@ -600,9 +639,31 @@ const styles = StyleSheet.create({
   filterSectionBtnTextActive: {
     color: Colors.dark.background,
   },
-  filterOptionsList: {
-    maxHeight: 150,
+  expandedSection: {
     marginTop: 12,
+  },
+  filterSearchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.background,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    height: 36,
+  },
+  filterSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: Colors.dark.text,
+  },
+  filterOptionsList: {
+    maxHeight: 120,
+  },
+  noResultsText: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    fontStyle: 'italic',
   },
   filterOptionsWrap: {
     flexDirection: 'row',

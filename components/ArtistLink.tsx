@@ -84,6 +84,9 @@ const styles = StyleSheet.create({
   link: {
     color: Colors.dark.primary,
     fontWeight: '600',
+    textShadowColor: `${Colors.dark.primary}50`,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   badge: {
     opacity: 0.8,

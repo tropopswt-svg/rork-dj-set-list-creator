@@ -60,7 +60,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { setId, tracks, source } = req.body;
+    const { setId, tracks, source, coverUrl } = req.body;
 
     if (!setId) {
       return res.status(400).json({ error: 'setId is required' });
@@ -189,6 +189,12 @@ export default async function handler(req, res) {
 
     // Update the set with analysis info
     const setUpdateData = {};
+
+    // Update coverUrl if provided and valid
+    if (coverUrl && coverUrl.startsWith('http')) {
+      setUpdateData.cover_url = coverUrl;
+      console.log(`[Update Tracks] Updating cover URL to: ${coverUrl}`);
+    }
 
     // Update track count if we added new tracks
     if (newTracksAdded > 0) {
