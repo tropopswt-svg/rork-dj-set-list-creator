@@ -4,10 +4,27 @@
 (function() {
   'use strict';
   
+  // Wait for dynamic content to load (timestamps are loaded via JS)
+  async function waitForTimestamps(maxWait = 5000) {
+    const start = Date.now();
+    while (Date.now() - start < maxWait) {
+      // Check if any cue/time elements exist with actual values
+      const cueFields = document.querySelectorAll('.cueValueField, .cue, [class*="cue"], .time');
+      for (const field of cueFields) {
+        const text = field.textContent?.trim() || '';
+        if (text.match(/^\d{1,2}:\d{2}(:\d{2})?$/)) {
+          return true; // Found a timestamp
+        }
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+    return false; // Timed out
+  }
+
   function extractTracklist() {
     const tracks = [];
     const artists = new Map();
-    
+
     try {
       // Get set info
       const title = document.querySelector('#pageTitle')?.textContent?.trim() || 
@@ -146,12 +163,25 @@
         try {
           const artistEl = item.querySelector('.blueLinkColor, a[href*="/artist/"]');
           const trackEl = item.querySelector('.trackValue, span[itemprop="name"]');
-          const timeEl = item.querySelector('.cueValueField');
+          // Try multiple selectors for timestamps - 1001tracklists uses different classes
+          const timeEl = item.querySelector('.cueValueField, .cueVal, .cue, .time, [class*="cue"] span');
           const labelEl = item.querySelector('a[href*="/label/"]');
           
           let trackArtist = artistEl?.textContent?.trim() || '';
           let trackName = trackEl?.textContent?.trim() || '';
-          const timeStr = timeEl?.textContent?.trim() || '0:00';
+          let timeStr = timeEl?.textContent?.trim() || '';
+
+          // If no timestamp found with selectors, search for any timestamp pattern in the item
+          if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
+            const allText = item.textContent || '';
+            const tsMatch = allText.match(/\b(\d{1,2}:\d{2}(:\d{2})?)\b/);
+            if (tsMatch) {
+              timeStr = tsMatch[1];
+            } else {
+              timeStr = '0:00';
+            }
+          }
+
           const label = labelEl?.textContent?.trim();
 
           // If no separate artist found, try to parse from track name "Artist - Track" format
@@ -264,7 +294,10 @@
   }
   
   // Main extraction function
-  function extract() {
+  async function extract() {
+    // Wait for timestamps to load (they're loaded dynamically)
+    await waitForTimestamps(3000);
+
     const result = extractTracklist();
 
     // Only include sourceUrl if this is an actual tracklist page, not a DJ profile
@@ -290,15 +323,18 @@
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'SCRAPE') {
-      try {
-        const data = extract();
-        sendResponse({ success: true, data });
-      } catch (error) {
-        console.error('[1001TL Extractor] Error:', error);
-        sendResponse({ success: false, error: error.message });
-      }
+      // Handle async extraction
+      (async () => {
+        try {
+          const data = await extract();
+          sendResponse({ success: true, data });
+        } catch (error) {
+          console.error('[1001TL Extractor] Error:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      })();
     }
-    return true;
+    return true; // Keep channel open for async response
   });
   
   // Create floating button
@@ -313,9 +349,9 @@
     btn.addEventListener('click', async () => {
       btn.disabled = true;
       btn.innerHTML = '⏳ Scraping...';
-      
+
       try {
-        const data = extract();
+        const data = await extract();
         
         if (data.tracks.length === 0) {
           btn.innerHTML = '⚠️ No tracks found';
@@ -369,7 +405,7 @@
     console.log('[1001TL] Auto-scrape enabled, starting...');
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    const data = extract();
+    const data = await extract();
     if (data.tracks.length === 0) {
       console.log('[1001TL] Auto-scrape: No tracks found');
       showNotification('No tracks found', 'error');

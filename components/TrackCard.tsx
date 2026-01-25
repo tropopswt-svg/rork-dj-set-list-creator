@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, ListMusic, Database } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -61,28 +61,74 @@ export default function TrackCard({
     router.push(`/${setId}`);
   };
 
-  // Get platform-specific source icon and color
-  const getSourceInfo = () => {
-    // Check for specific platforms first
-    if (track.source === 'youtube' || track.contributedBy?.includes('youtube')) {
-      return { icon: 'youtube', color: '#FF0000', label: 'YT' };
-    }
-    if (track.source === 'soundcloud' || track.contributedBy?.includes('soundcloud')) {
-      return { icon: 'soundcloud', color: '#FF5500', label: 'SC' };
-    }
+  // Determine how many distinct platforms identified this track
+  const getVerificationLevel = () => {
+    let sources: string[] = [];
+
+    // Only count actual identification sources/platforms, not flags
     if (track.source === '1001tracklists' || track.source === 'database') {
-      return { icon: '1001', color: '#00D4AA', label: '1001' };
+      sources.push('1001');
+    }
+    if (track.source === 'youtube') {
+      sources.push('youtube');
+    }
+    if (track.source === 'soundcloud') {
+      sources.push('soundcloud');
     }
     if (track.source === 'manual' || track.source === 'user') {
-      return { icon: 'user', color: '#8B5CF6', label: 'User' };
+      sources.push('user');
     }
-    if (track.source === 'ai') {
-      return { icon: 'ai', color: Colors.dark.primary, label: 'AI' };
+
+    // Check if track was also confirmed by other platforms (stored in metadata)
+    if ((track as any).confirmedBy) {
+      const confirmedBy = (track as any).confirmedBy as string[];
+      confirmedBy.forEach((platform: string) => {
+        if (!sources.includes(platform)) {
+          sources.push(platform);
+        }
+      });
     }
+
+    return sources;
+  };
+
+  // Get platform-specific source icon and color
+  // Priority: Show the most specific/interesting source, not just "1001" for everything
+  const getSourceInfo = () => {
+    const sources = getVerificationLevel();
+
+    // If user manually added it, show that
+    if (track.source === 'manual' || track.source === 'user') {
+      return { icon: 'user', color: '#8B5CF6', label: 'Added' };
+    }
+
+    // If only from YouTube comments, show YT
+    if (track.source === 'youtube' && !sources.includes('1001')) {
+      return { icon: 'youtube', color: '#FF0000', label: 'YT' };
+    }
+
+    // If only from SoundCloud comments, show SC
+    if (track.source === 'soundcloud' && !sources.includes('1001')) {
+      return { icon: 'soundcloud', color: '#FF5500', label: 'SC' };
+    }
+
+    // If matched/verified by our system (1001 or database), show "ID" badge
+    if (track.source === '1001tracklists' || track.source === 'database' || track.source === 'ai') {
+      return { icon: 'id', color: '#00D4AA', label: 'ID' };
+    }
+
+    // Community/social contributions
     if (track.source === 'social') {
       return { icon: 'user', color: '#10B981', label: 'Comm' };
     }
-    return null;
+
+    // Fallback for ID tracks (unidentified)
+    if (track.isId) {
+      return { icon: 'unknown', color: Colors.dark.textMuted, label: '?' };
+    }
+
+    // Default: our system identified it
+    return { icon: 'id', color: '#00D4AA', label: 'ID' };
   };
 
   const renderSourceIcon = () => {
@@ -99,14 +145,15 @@ export default function TrackCard({
       case 'soundcloud':
         IconComponent = <Music2 size={iconSize} color={info.color} />;
         break;
-      case '1001':
-        IconComponent = <ListMusic size={iconSize} color={info.color} />;
+      case 'id':
+        // Our magical "IDentifier" badge with wand icon
+        IconComponent = <Wand2 size={iconSize} color={info.color} />;
         break;
       case 'user':
         IconComponent = <User size={iconSize} color={info.color} />;
         break;
-      case 'ai':
-        IconComponent = <Database size={iconSize} color={info.color} />;
+      case 'unknown':
+        IconComponent = <AlertCircle size={iconSize} color={info.color} />;
         break;
       default:
         return null;
@@ -116,6 +163,22 @@ export default function TrackCard({
       <View style={[styles.sourceTag, { backgroundColor: `${info.color}18` }]}>
         {IconComponent}
         <Text style={[styles.sourceTagText, { color: info.color }]}>{info.label}</Text>
+      </View>
+    );
+  };
+
+  // Render verification badge showing how many sources confirmed this track
+  const renderVerificationBadge = () => {
+    const sources = getVerificationLevel();
+
+    // Don't show if only 1 source or none
+    if (sources.length <= 1) return null;
+
+    // Multiple sources verified this track
+    return (
+      <View style={styles.verificationBadge}>
+        <ShieldCheck size={10} color="#22C55E" />
+        <Text style={styles.verificationText}>x{sources.length}</Text>
       </View>
     );
   };
@@ -176,6 +239,7 @@ export default function TrackCard({
           )}
           <View style={styles.meta}>
             {renderSourceIcon()}
+            {renderVerificationBadge()}
             {sourceBadge && (
               <View style={[styles.sourceBadge, { backgroundColor: `${sourceBadge.color}20` }]}>
                 <Text style={[styles.sourceBadgeText, { color: sourceBadge.color }]}>
@@ -360,6 +424,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700' as const,
     letterSpacing: 0.3,
+  },
+  verificationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+  },
+  verificationText: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    color: '#22C55E',
   },
   sourceBadge: {
     paddingHorizontal: 6,

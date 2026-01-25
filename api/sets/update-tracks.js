@@ -1,0 +1,188 @@
+// API endpoint to update set tracks with timestamps from YouTube/SoundCloud scraping
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseClient() {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return null;
+  return createClient(supabaseUrl, supabaseKey);
+}
+
+// Normalize strings for matching
+function normalize(str) {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Calculate similarity between two strings
+function similarity(s1, s2) {
+  const n1 = normalize(s1);
+  const n2 = normalize(s2);
+  if (n1 === n2) return 1;
+  if (!n1 || !n2) return 0;
+
+  // Check if one contains the other
+  if (n1.includes(n2) || n2.includes(n1)) return 0.8;
+
+  // Word overlap
+  const words1 = new Set(n1.split(' '));
+  const words2 = new Set(n2.split(' '));
+  const intersection = [...words1].filter(w => words2.has(w));
+  const union = new Set([...words1, ...words2]);
+  return intersection.length / union.size;
+}
+
+export default async function handler(req, res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+
+  try {
+    const { setId, tracks, source } = req.body;
+
+    if (!setId) {
+      return res.status(400).json({ error: 'setId is required' });
+    }
+
+    if (!tracks || !Array.isArray(tracks) || tracks.length === 0) {
+      return res.status(400).json({ error: 'tracks array is required' });
+    }
+
+    // Get existing set tracks
+    const { data: existingTracks, error: fetchError } = await supabase
+      .from('set_tracks')
+      .select('*')
+      .eq('set_id', setId)
+      .order('position', { ascending: true });
+
+    if (fetchError) {
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    if (!existingTracks || existingTracks.length === 0) {
+      return res.status(404).json({ error: 'No tracks found for this set' });
+    }
+
+    let updatedCount = 0;
+    let newTracksAdded = 0;
+    const matchThreshold = 0.6;
+
+    // For each scraped track, try to match with existing tracks
+    for (const scrapedTrack of tracks) {
+      // Handle both timestamp formats (seconds or object with timestamp property)
+      const timestamp = typeof scrapedTrack.timestamp === 'number'
+        ? scrapedTrack.timestamp
+        : (scrapedTrack.timestamp_seconds || 0);
+
+      if (!timestamp || timestamp <= 0) continue;
+
+      let bestMatch = null;
+      let bestScore = 0;
+
+      for (const existingTrack of existingTracks) {
+        // Calculate match score based on title and artist
+        const titleScore = similarity(scrapedTrack.title, existingTrack.track_title);
+        const artistScore = similarity(scrapedTrack.artist, existingTrack.artist_name);
+
+        // Weight title higher than artist
+        const score = titleScore * 0.7 + artistScore * 0.3;
+
+        if (score > bestScore && score >= matchThreshold) {
+          bestScore = score;
+          bestMatch = existingTrack;
+        }
+      }
+
+      if (bestMatch) {
+        // Update the existing track with the timestamp
+        const { error: updateError } = await supabase
+          .from('set_tracks')
+          .update({
+            timestamp_seconds: timestamp,
+            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
+            source: source || bestMatch.source,
+          })
+          .eq('id', bestMatch.id);
+
+        if (!updateError) {
+          updatedCount++;
+          console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" at ${timestamp}s`);
+        }
+      } else {
+        // No match found - this is a new track from comments
+        // Add it to the set
+        const position = existingTracks.length + newTracksAdded + 1;
+
+        const { error: insertError } = await supabase
+          .from('set_tracks')
+          .insert({
+            set_id: setId,
+            artist_name: scrapedTrack.artist || 'Unknown',
+            track_title: scrapedTrack.title || 'Unknown',
+            position: position,
+            timestamp_seconds: timestamp,
+            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
+            source: source || 'youtube',
+            is_id: false,
+          });
+
+        if (!insertError) {
+          newTracksAdded++;
+          console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp}s`);
+        }
+      }
+    }
+
+    // Update the set's track count if we added new tracks
+    if (newTracksAdded > 0) {
+      const { data: set } = await supabase
+        .from('sets')
+        .select('track_count')
+        .eq('id', setId)
+        .single();
+
+      if (set) {
+        await supabase
+          .from('sets')
+          .update({ track_count: (set.track_count || 0) + newTracksAdded })
+          .eq('id', setId);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Updated ${updatedCount} tracks, added ${newTracksAdded} new tracks`,
+      updatedCount,
+      newTracksAdded,
+    });
+
+  } catch (error) {
+    console.error('Update tracks error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+}
+
+function formatTimestamp(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}

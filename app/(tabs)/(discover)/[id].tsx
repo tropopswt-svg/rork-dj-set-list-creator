@@ -704,6 +704,7 @@ export default function SetDetailScreen() {
         visible={showSourceModal}
         platform={selectedPlatform}
         setName={setList?.name || 'this set'}
+        setArtist={setList?.artist}
         onClose={() => setShowSourceModal(false)}
         onImport={async (url) => {
           if (!setList) return { success: false, error: 'Set not found' };
@@ -723,7 +724,23 @@ export default function SetDetailScreen() {
                 return { success: false, error: importResult.error || 'Failed to scrape comments' };
               }
 
-              // Now save the source URL to the database
+              // Update set tracks with timestamps from the scraped data
+              const scrapedTracks = importResult.setList?.tracks || [];
+              if (scrapedTracks.length > 0) {
+                const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    setId: setList.id,
+                    tracks: scrapedTracks,
+                    source: selectedPlatform,
+                  }),
+                });
+                const updateResult = await updateResponse.json();
+                console.log('[AddSource] Updated tracks:', updateResult);
+              }
+
+              // Save the source URL to the database
               const addSourceResponse = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -746,6 +763,40 @@ export default function SetDetailScreen() {
                 sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
               } : prev);
 
+              // Refresh the set data to get updated tracks with timestamps
+              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+              const refreshData = await refreshResponse.json();
+              if (refreshData.success && refreshData.set) {
+                const refreshedSet: SetList = {
+                  id: refreshData.set.id,
+                  name: refreshData.set.name,
+                  artist: refreshData.set.artist,
+                  venue: refreshData.set.venue,
+                  date: new Date(refreshData.set.date),
+                  totalDuration: refreshData.set.totalDuration || 0,
+                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                  plays: refreshData.set.trackCount * 10,
+                  sourceLinks: refreshData.set.sourceLinks || [],
+                  tracks: refreshData.set.tracks?.map((t: any) => ({
+                    id: t.id,
+                    title: t.title,
+                    artist: t.artist,
+                    duration: 0,
+                    coverUrl: '',
+                    addedAt: new Date(t.addedAt || Date.now()),
+                    source: t.source || 'database',
+                    timestamp: t.timestamp || 0,
+                    timestampStr: t.timestampStr,
+                    verified: t.verified || !t.isId,
+                    confidence: t.isId ? 0 : 1,
+                    isId: t.isId,
+                  })) || [],
+                  hasGaps: refreshData.set.hasGaps,
+                  gapCount: refreshData.set.gapCount,
+                };
+                setDbSet(refreshedSet);
+              }
+
               await addPoints('source_added', setList.id);
 
               // Return stats from the import
@@ -753,7 +804,7 @@ export default function SetDetailScreen() {
                 success: true,
                 stats: {
                   matched: importResult.tracksCount || 0,
-                  newFromSecondary: importResult.setList?.tracks?.length || 0,
+                  newFromSecondary: scrapedTracks.length,
                   commentsScraped: importResult.commentsCount || 0,
                 },
               };

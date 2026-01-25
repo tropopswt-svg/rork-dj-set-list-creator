@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,24 +9,27 @@ import {
   ActivityIndicator,
   Animated,
 } from 'react-native';
-import { X, Youtube, Music2, Sparkles, Check, AlertCircle } from 'lucide-react-native';
+import { X, Youtube, Music2, Sparkles, Check, AlertCircle, AlertTriangle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
 
 interface AddSourceModalProps {
   visible: boolean;
   platform: 'youtube' | 'soundcloud';
   setName: string;
+  setArtist?: string;
   onClose: () => void;
   onImport: (url: string) => Promise<{ success: boolean; stats?: any; error?: string }>;
 }
 
-type ImportStep = 'input' | 'importing' | 'success' | 'error';
+type ImportStep = 'input' | 'validating' | 'warning' | 'importing' | 'success' | 'error';
 
 export default function AddSourceModal({
   visible,
   platform,
   setName,
+  setArtist,
   onClose,
   onImport,
 }: AddSourceModalProps) {
@@ -34,11 +37,36 @@ export default function AddSourceModal({
   const [step, setStep] = useState<ImportStep>('input');
   const [stats, setStats] = useState<any>(null);
   const [error, setError] = useState('');
+  const [warningMessage, setWarningMessage] = useState('');
   const [pulseAnim] = useState(new Animated.Value(1));
 
+  // Auto-paste from clipboard when modal opens
+  useEffect(() => {
+    if (visible && step === 'input') {
+      const checkClipboard = async () => {
+        try {
+          const clipboardContent = await Clipboard.getStringAsync();
+          if (clipboardContent) {
+            const content = clipboardContent.toLowerCase();
+            // Check if clipboard contains a URL matching the platform
+            if (platform === 'youtube' && (content.includes('youtube.com') || content.includes('youtu.be'))) {
+              setUrl(clipboardContent.trim());
+            } else if (platform === 'soundcloud' && content.includes('soundcloud.com')) {
+              setUrl(clipboardContent.trim());
+            }
+          }
+        } catch (err) {
+          // Clipboard access may be denied, just ignore
+          console.log('Clipboard access error:', err);
+        }
+      };
+      checkClipboard();
+    }
+  }, [visible, platform]);
+
   // Pulse animation
-  React.useEffect(() => {
-    if (step === 'importing') {
+  useEffect(() => {
+    if (step === 'importing' || step === 'validating') {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.1, duration: 800, useNativeDriver: true }),
@@ -50,9 +78,38 @@ export default function AddSourceModal({
     }
   }, [step]);
 
-  const handleImport = async () => {
+  // Check if the video title/description contains set info
+  const validateSourceMatch = (title: string): { matches: boolean; warning?: string } => {
+    if (!title) return { matches: true }; // Can't validate, assume ok
+
+    const titleLower = title.toLowerCase();
+    const setNameLower = setName.toLowerCase();
+    const artistLower = setArtist?.toLowerCase() || '';
+
+    // Extract words from set name and artist for flexible matching
+    const setNameWords = setNameLower.split(/[\s\-_@]+/).filter(w => w.length > 2);
+    const artistWords = artistLower.split(/[\s\-_@]+/).filter(w => w.length > 2);
+
+    // Check if any significant set name words appear in the title
+    const nameMatch = setNameWords.some(word => titleLower.includes(word));
+
+    // Check if any significant artist words appear in the title
+    const artistMatch = artistWords.some(word => titleLower.includes(word));
+
+    // If neither set name nor artist match, show warning
+    if (!nameMatch && !artistMatch && artistWords.length > 0) {
+      return {
+        matches: false,
+        warning: `This video title doesn't appear to match the set.\n\nVideo: "${title}"\n\nExpected: "${setArtist}" - "${setName}"\n\nAre you sure this is the correct video?`
+      };
+    }
+
+    return { matches: true };
+  };
+
+  const handleValidate = async () => {
     if (!url.trim()) return;
-    
+
     // Validate URL matches platform
     const urlLower = url.toLowerCase();
     if (platform === 'youtube' && !urlLower.includes('youtube.com') && !urlLower.includes('youtu.be')) {
@@ -68,12 +125,64 @@ export default function AddSourceModal({
       return;
     }
 
+    // Check for channel/profile URLs instead of video/track URLs
+    if (platform === 'youtube') {
+      if (urlLower.includes('/channel/') || urlLower.includes('/c/') || urlLower.includes('/@')) {
+        setError('Please enter a YouTube video URL, not a channel URL');
+        setStep('error');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+    }
+
+    setStep('validating');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    try {
+      // Try to get video title for validation
+      let title = '';
+
+      if (platform === 'youtube') {
+        // Try oEmbed to get video title
+        const videoUrl = encodeURIComponent(url.trim());
+        const oembedUrl = `https://www.youtube.com/oembed?url=${videoUrl}&format=json`;
+        try {
+          const response = await fetch(oembedUrl);
+          if (response.ok) {
+            const data = await response.json();
+            title = data.title || '';
+          }
+        } catch {
+          // oEmbed failed, skip validation
+        }
+      }
+
+      // If we got a title, validate it
+      if (title) {
+        const validation = validateSourceMatch(title);
+        if (!validation.matches) {
+          setWarningMessage(validation.warning || '');
+          setStep('warning');
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          return;
+        }
+      }
+
+      // Proceed with import
+      proceedWithImport();
+    } catch {
+      // Validation failed, proceed anyway
+      proceedWithImport();
+    }
+  };
+
+  const proceedWithImport = async () => {
     setStep('importing');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
       const result = await onImport(url.trim());
-      
+
       if (result.success) {
         setStats(result.stats);
         setStep('success');
@@ -95,6 +204,7 @@ export default function AddSourceModal({
     setStep('input');
     setStats(null);
     setError('');
+    setWarningMessage('');
     onClose();
   };
 
@@ -176,12 +286,44 @@ export default function AddSourceModal({
 
               <Pressable
                 style={[styles.importButton, !url.trim() && styles.importButtonDisabled]}
-                onPress={handleImport}
+                onPress={handleValidate}
                 disabled={!url.trim()}
               >
                 <Text style={styles.importButtonText}>Import & Merge</Text>
               </Pressable>
             </>
+          )}
+
+          {step === 'validating' && (
+            <View style={styles.centerContent}>
+              <Animated.View style={[styles.importingIcon, { transform: [{ scale: pulseAnim }] }]}>
+                <Sparkles size={40} color={Colors.dark.primary} />
+              </Animated.View>
+              <Text style={styles.importingTitle}>Verifying...</Text>
+              <Text style={styles.importingSubtitle}>
+                Checking if this matches the set
+              </Text>
+              <ActivityIndicator color={Colors.dark.primary} style={{ marginTop: 20 }} />
+            </View>
+          )}
+
+          {step === 'warning' && (
+            <View style={styles.centerContent}>
+              <View style={styles.warningIcon}>
+                <AlertTriangle size={40} color="#FB923C" />
+              </View>
+              <Text style={styles.warningTitle}>Possible Mismatch</Text>
+              <Text style={styles.warningMessage}>{warningMessage}</Text>
+
+              <View style={styles.warningButtons}>
+                <Pressable style={styles.proceedButton} onPress={proceedWithImport}>
+                  <Text style={styles.proceedButtonText}>Import Anyway</Text>
+                </Pressable>
+                <Pressable style={styles.cancelButton} onPress={() => setStep('input')}>
+                  <Text style={styles.cancelButtonText}>Go Back</Text>
+                </Pressable>
+              </View>
+            </View>
           )}
 
           {step === 'importing' && (
@@ -475,6 +617,45 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     color: Colors.dark.textSecondary,
     fontSize: 14,
+    fontWeight: '600',
+  },
+  warningIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  warningTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
+  warningMessage: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 18,
+    paddingHorizontal: 8,
+  },
+  warningButtons: {
+    flexDirection: 'column',
+    gap: 10,
+    width: '100%',
+  },
+  proceedButton: {
+    backgroundColor: '#FB923C',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  proceedButtonText: {
+    color: '#FFF',
+    fontSize: 15,
     fontWeight: '600',
   },
 });
