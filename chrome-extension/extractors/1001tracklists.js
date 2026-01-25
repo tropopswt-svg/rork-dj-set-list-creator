@@ -9,7 +9,8 @@
     const start = Date.now();
     while (Date.now() - start < maxWait) {
       // Check if any cue/time elements exist with actual values
-      const cueFields = document.querySelectorAll('.cueValueField, .cue, [class*="cue"], .time');
+      // 1001tracklists uses .cueVal for the timestamp text inside .cueI containers
+      const cueFields = document.querySelectorAll('.cueVal, .cueI, .cueValueField');
       for (const field of cueFields) {
         const text = field.textContent?.trim() || '';
         if (text.match(/^\d{1,2}:\d{2}(:\d{2})?$/)) {
@@ -158,22 +159,47 @@
         }
       }
 
-      // Extract tracks
-      document.querySelectorAll('.tlpItem, .tlpTog').forEach((item, index) => {
+      // Extract tracks - 1001tracklists uses .bItm for track items in the modern layout
+      // Also try legacy selectors .tlpItem and .tlpTog
+      const trackItems = document.querySelectorAll('.bItm:not(.bItmH):not(.con), .tlpItem, .tlpTog');
+      console.log('[1001TL] Found', trackItems.length, 'track items');
+
+      trackItems.forEach((item, index) => {
         try {
           const artistEl = item.querySelector('.blueLinkColor, a[href*="/artist/"]');
           const trackEl = item.querySelector('.trackValue, span[itemprop="name"]');
-          // Try multiple selectors for timestamps - 1001tracklists uses different classes
-          const timeEl = item.querySelector('.cueValueField, .cueVal, .cue, .time, [class*="cue"] span');
           const labelEl = item.querySelector('a[href*="/label/"]');
-          
-          let trackArtist = artistEl?.textContent?.trim() || '';
-          let trackName = trackEl?.textContent?.trim() || '';
-          let timeStr = timeEl?.textContent?.trim() || '';
 
-          // If no timestamp found with selectors, search for any timestamp pattern in the item
+          // Find timestamp - 1001tracklists puts it in .cueVal inside .cueI, below the artwork
+          // The timestamp shows when this track starts in the set (e.g., "06:07")
+          let timeStr = '';
+
+          // Primary selector: .cueVal contains the actual timestamp text
+          const cueVal = item.querySelector('.cueVal');
+          if (cueVal) {
+            timeStr = cueVal.textContent?.trim() || '';
+          }
+
+          // Fallback: .cueI container might have the timestamp directly
+          if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
+            const cueI = item.querySelector('.cueI');
+            if (cueI) {
+              timeStr = cueI.textContent?.trim() || '';
+            }
+          }
+
+          // Fallback: try older selectors
+          if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
+            const timeEl = item.querySelector('.cueValueField, .time');
+            if (timeEl) {
+              timeStr = timeEl.textContent?.trim() || '';
+            }
+          }
+
+          // Last resort: search for any timestamp pattern in the item text
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
             const allText = item.textContent || '';
+            // Look for timestamps but exclude track numbers (01, 02, etc.) and play counts
             const tsMatch = allText.match(/\b(\d{1,2}:\d{2}(:\d{2})?)\b/);
             if (tsMatch) {
               timeStr = tsMatch[1];
@@ -182,6 +208,8 @@
             }
           }
 
+          let trackArtist = artistEl?.textContent?.trim() || '';
+          let trackName = trackEl?.textContent?.trim() || '';
           const label = labelEl?.textContent?.trim();
 
           // If no separate artist found, try to parse from track name "Artist - Track" format
