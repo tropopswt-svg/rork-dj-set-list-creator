@@ -222,24 +222,6 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
     >
-      {/* Location badges in top right */}
-      {(venue || location) && (
-        <View style={styles.topBadges}>
-          {venue && (
-            <View style={styles.venueBadge}>
-              <Ticket size={8} color={Colors.dark.primary} />
-              <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
-            </View>
-          )}
-          {location && (
-            <View style={styles.locationBadge}>
-              <MapPin size={8} color="#6B7280" />
-              <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
-            </View>
-          )}
-        </View>
-      )}
-
       <View style={styles.row}>
         <View style={styles.coverContainer}>
           <Image
@@ -267,18 +249,43 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
         </View>
 
         <View style={styles.content}>
-          <View style={styles.artistRow}>
-            {artists.map((artist, index) => (
-              <View key={index} style={styles.artistItem}>
-                <Pressable onPress={() => handleArtistPress(artist)} hitSlop={4}>
-                  <Text style={styles.artist}>{artist}</Text>
-                </Pressable>
-                {index < artists.length - 1 && (
-                  <Text style={styles.artistSeparator}>|</Text>
+          {/* Top section: Artists on left, Location badges on right */}
+          <View style={styles.topRow}>
+            <View style={styles.artistSection}>
+              <View style={styles.artistRow}>
+                {artists.slice(0, 3).map((artist, index) => (
+                  <View key={index} style={styles.artistItem}>
+                    <Pressable onPress={() => handleArtistPress(artist)} hitSlop={4}>
+                      <Text style={styles.artist} numberOfLines={1}>{artist}</Text>
+                    </Pressable>
+                    {index < Math.min(artists.length, 3) - 1 && (
+                      <Text style={styles.artistSeparator}>|</Text>
+                    )}
+                  </View>
+                ))}
+                {artists.length > 3 && (
+                  <Text style={styles.artistMore}>+{artists.length - 3}</Text>
                 )}
               </View>
-            ))}
+            </View>
+            {(venue || location) && (
+              <View style={styles.badgeSection}>
+                {venue && (
+                  <View style={styles.venueBadge}>
+                    <Ticket size={8} color={Colors.dark.primary} />
+                    <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
+                  </View>
+                )}
+                {location && (
+                  <View style={styles.locationBadge}>
+                    <MapPin size={8} color="#6B7280" />
+                    <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
+                  </View>
+                )}
+              </View>
+            )}
           </View>
+
           <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
 
           <View style={styles.footer}>
@@ -333,13 +340,22 @@ const styles = StyleSheet.create({
     opacity: 0.95,
     transform: [{ scale: 0.99 }],
   },
-  topBadges: {
-    position: 'absolute',
-    top: 6,
-    right: 8,
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 2,
+  },
+  artistSection: {
+    flex: 1,
+    marginRight: 8,
+    maxWidth: '55%',
+  },
+  badgeSection: {
     flexDirection: 'row',
     gap: 4,
-    zIndex: 10,
+    flexShrink: 0,
+    maxWidth: '45%',
   },
   row: {
     flexDirection: 'row',
@@ -404,9 +420,10 @@ const styles = StyleSheet.create({
   },
   artistRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap',
     alignItems: 'center',
     marginBottom: 1,
+    overflow: 'hidden',
   },
   artistItem: {
     flexDirection: 'row',
@@ -426,6 +443,12 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
     opacity: 0.4,
     marginHorizontal: 6,
+  },
+  artistMore: {
+    fontSize: 10,
+    fontWeight: '500' as const,
+    color: Colors.dark.textMuted,
+    marginLeft: 4,
   },
   name: {
     fontSize: 13,
