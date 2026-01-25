@@ -183,8 +183,11 @@ function extractTimestamps(text) {
 
 function parseTrackInfo(text) {
   let cleaned = cleanText(text);
-  cleaned = cleaned.replace(/^[\s|:\-–—.]+/, '').trim();
-  cleaned = cleaned.replace(/[\s|:\-–—.]+$/, '').trim();
+  // Remove leading punctuation, brackets, whitespace
+  cleaned = cleaned.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
+  // Remove trailing punctuation
+  cleaned = cleaned.replace(/[\s|:\-–—.\[\]()]+$/, '').trim();
+  // Remove numbered list prefixes like "1." or "2)"
   cleaned = cleaned.replace(/^\d{1,2}[.)]\s*/, '').trim();
 
   // STRICT FILTERING - Reject obvious garbage
@@ -397,7 +400,7 @@ function parseComments(comments, djName = null) {
         if (lineTs.length === 0) continue;
         const ts = lineTs[0];
         let afterText = line.slice(ts.position + ts.formatted.length).trim();
-        afterText = afterText.replace(/^[\s|:\-–—.]+/, '').trim();
+        afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
         let info = parseTrackInfo(afterText);
 
         if (info) {
@@ -441,7 +444,7 @@ function parseDescription(description, djName = null) {
     if (timestamps.length > 0) {
       const ts = timestamps[0];
       let afterText = line.slice(ts.position + ts.formatted.length).trim();
-      afterText = afterText.replace(/^[\s|:\-–—.]+/, '').trim();
+      afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
       let info = parseTrackInfo(afterText);
 
       if (info) {
