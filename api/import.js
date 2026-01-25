@@ -563,6 +563,272 @@ function parseArtistFromTitle(title) {
   return { name: title, artist: 'Unknown Artist' };
 }
 
+/**
+ * Canonical venue database - maps variations to standard venue names with locations
+ */
+const VENUE_DATABASE = {
+  // Ibiza
+  'ushuaia': { name: 'Ushuaïa', location: 'Ibiza, Spain', aliases: ['ushuaïa', 'ushuaia ibiza'] },
+  'hi ibiza': { name: 'Hï Ibiza', location: 'Ibiza, Spain', aliases: ['hï ibiza', 'hi-ibiza'] },
+  'pacha': { name: 'Pacha', location: 'Ibiza, Spain', aliases: ['pacha ibiza'] },
+  'amnesia': { name: 'Amnesia', location: 'Ibiza, Spain', aliases: ['amnesia ibiza'] },
+  'dc10': { name: 'DC-10', location: 'Ibiza, Spain', aliases: ['dc-10', 'dc 10'] },
+  'privilege': { name: 'Privilege', location: 'Ibiza, Spain', aliases: ['privilege ibiza'] },
+
+  // Berlin
+  'berghain': { name: 'Berghain', location: 'Berlin, Germany', aliases: ['berghain berlin'] },
+  'tresor': { name: 'Tresor', location: 'Berlin, Germany', aliases: ['tresor berlin'] },
+  'watergate': { name: 'Watergate', location: 'Berlin, Germany', aliases: [] },
+
+  // London/UK
+  'fabric': { name: 'Fabric', location: 'London, UK', aliases: ['fabric london'] },
+  'printworks': { name: 'Printworks', location: 'London, UK', aliases: ['printworks london'] },
+  'warehouse project': { name: 'The Warehouse Project', location: 'Manchester, UK', aliases: ['twp', 'whp'] },
+  'depot': { name: 'Depot', location: 'UK', aliases: ['depot mayfield'] },
+  'motion': { name: 'Motion', location: 'Bristol, UK', aliases: [] },
+
+  // New York
+  'brooklyn mirage': { name: 'Brooklyn Mirage', location: 'New York, USA', aliases: ['the brooklyn mirage', 'mirage'] },
+  'avant gardner': { name: 'Avant Gardner', location: 'New York, USA', aliases: ['avant gardener'] },
+  'output': { name: 'Output', location: 'Brooklyn, USA', aliases: ['output brooklyn'] },
+  'nowadays': { name: 'Nowadays', location: 'New York, USA', aliases: [] },
+
+  // Miami
+  'space miami': { name: 'Club Space', location: 'Miami, USA', aliases: ['club space', 'space'] },
+  'e11even': { name: 'E11EVEN', location: 'Miami, USA', aliases: ['eleven', 'e11even miami'] },
+
+  // LA
+  'exchange la': { name: 'Exchange LA', location: 'Los Angeles, USA', aliases: ['exchange'] },
+  'sound nightclub': { name: 'Sound Nightclub', location: 'Los Angeles, USA', aliases: ['sound la'] },
+
+  // Amsterdam
+  'de school': { name: 'De School', location: 'Amsterdam, Netherlands', aliases: [] },
+  'shelter': { name: 'Shelter', location: 'Amsterdam, Netherlands', aliases: ['shelter amsterdam'] },
+
+  // Festivals
+  'tomorrowland': { name: 'Tomorrowland', location: 'Belgium', aliases: ['tomorrowland belgium'] },
+  'coachella': { name: 'Coachella', location: 'California, USA', aliases: ['coachella festival'] },
+  'awakenings': { name: 'Awakenings', location: 'Amsterdam, Netherlands', aliases: ['awakenings festival'] },
+  'time warp': { name: 'Time Warp', location: 'Germany', aliases: ['timewarp'] },
+  'movement': { name: 'Movement', location: 'Detroit, USA', aliases: ['movement detroit', 'demf'] },
+  'ultra': { name: 'Ultra Music Festival', location: 'Miami, USA', aliases: ['ultra miami', 'umf'] },
+  'edc': { name: 'EDC', location: 'Las Vegas, USA', aliases: ['electric daisy carnival', 'edc vegas', 'edc las vegas'] },
+  'creamfields': { name: 'Creamfields', location: 'UK', aliases: ['creamfields uk'] },
+  'mysteryland': { name: 'Mysteryland', location: 'Netherlands', aliases: [] },
+  'sonar': { name: 'Sónar', location: 'Barcelona, Spain', aliases: ['sonar barcelona', 'sonar festival'] },
+  'bpm festival': { name: 'BPM Festival', location: 'Various', aliases: ['bpm'] },
+
+  // Radio/Online
+  'bbc radio 1': { name: 'BBC Radio 1', location: 'UK', aliases: ['radio 1', 'bbc r1', 'radio one'] },
+  'essential mix': { name: 'Essential Mix', location: 'BBC Radio 1', aliases: [] },
+  'boiler room': { name: 'Boiler Room', location: 'Various', aliases: ['br'] },
+  'cercle': { name: 'Cercle', location: 'Various', aliases: [] },
+  'resident advisor': { name: 'Resident Advisor', location: 'Various', aliases: ['ra'] },
+
+  // Events/Brands
+  'circoloco': { name: 'Circoloco', location: 'Various', aliases: ['circo loco'] },
+  'defected': { name: 'Defected', location: 'Various', aliases: ['defected records'] },
+  'drumcode': { name: 'Drumcode', location: 'Various', aliases: ['drum code'] },
+  'afterlife': { name: 'Afterlife', location: 'Various', aliases: [] },
+  'ants': { name: 'ANTS', location: 'Ushuaïa Ibiza', aliases: ['ants ibiza'] },
+  'resistance': { name: 'Resistance', location: 'Various', aliases: ['ultra resistance'] },
+  'elrow': { name: 'elrow', location: 'Various', aliases: ['el row'] },
+};
+
+// Countries and states to strip from set names
+const COUNTRIES_AND_STATES = [
+  'usa', 'united states', 'uk', 'united kingdom', 'spain', 'germany', 'netherlands',
+  'belgium', 'france', 'italy', 'portugal', 'croatia', 'mexico', 'brazil', 'australia',
+  'japan', 'china', 'canada', 'argentina', 'colombia', 'chile', 'peru',
+  'california', 'new york', 'florida', 'texas', 'nevada', 'colorado', 'arizona',
+  'illinois', 'michigan', 'georgia', 'massachusetts', 'washington', 'oregon'
+];
+
+/**
+ * Normalize venue name to canonical form
+ */
+function normalizeVenue(venueName) {
+  if (!venueName) return null;
+
+  const lower = venueName.toLowerCase().trim();
+
+  // Check exact matches and aliases
+  for (const [key, data] of Object.entries(VENUE_DATABASE)) {
+    if (lower === key || lower.includes(key)) {
+      return { venue: data.name, location: data.location };
+    }
+    for (const alias of data.aliases) {
+      if (lower === alias || lower.includes(alias)) {
+        return { venue: data.name, location: data.location };
+      }
+    }
+  }
+
+  // Return original if no match, cleaned up
+  return { venue: venueName.trim(), location: null };
+}
+
+/**
+ * Enhanced parsing to extract artist, event name, venue, and location from title
+ * Handles formats like:
+ * - "John Summit @ BBC Radio 1 Presents ANTS Metalworks, Ushuaïa Ibiza"
+ * - "Chris Stussy @ Hudson River Boat Party, New York for Teksupport"
+ * - "Amelie Lens | Awakenings Festival 2024"
+ * - "Fisher - Live at Tomorrowland 2024"
+ */
+function parseSetInfo(title) {
+  const result = {
+    name: title,
+    artist: 'Unknown Artist',
+    venue: null,
+    location: null,
+  };
+
+  const lowerTitle = title.toLowerCase();
+
+  // Step 1: Extract artist (before @ | - or "at"/"live at")
+  const artistPatterns = [
+    /^(.+?)\s*[@]\s*(.+)$/i,
+    /^(.+?)\s*[|]\s*(.+)$/i,
+    /^(.+?)\s*[-–—]\s*(?:live\s+)?(?:at\s+)?(.+)$/i,
+    /^(.+?)\s+live\s+(?:at\s+)?(.+)$/i,
+    /^(.+?)\s+at\s+(.+)$/i,
+  ];
+
+  let artistPart = null;
+  let restPart = title;
+
+  for (const pattern of artistPatterns) {
+    const match = title.match(pattern);
+    if (match) {
+      artistPart = match[1].trim();
+      restPart = match[2].trim();
+      break;
+    }
+  }
+
+  if (artistPart) {
+    result.artist = artistPart;
+  }
+
+  // Step 2: Check for known venues in the VENUE_DATABASE
+  for (const [key, data] of Object.entries(VENUE_DATABASE)) {
+    const allTerms = [key, ...data.aliases];
+    for (const term of allTerms) {
+      if (lowerTitle.includes(term)) {
+        result.venue = data.name;
+        result.location = data.location;
+        break;
+      }
+    }
+    if (result.venue) break;
+  }
+
+  // Step 3: Check for "for [event organizer]" pattern (e.g., "for Teksupport")
+  const forMatch = restPart.match(/^(.+?)\s+for\s+(.+)$/i);
+  let eventOrganizer = null;
+  if (forMatch) {
+    restPart = forMatch[1].trim();
+    eventOrganizer = forMatch[2].trim();
+  }
+
+  // Step 4: Parse comma-separated parts for venue/location
+  const commaParts = restPart.split(/[,]/);
+
+  if (commaParts.length >= 2) {
+    const lastPart = commaParts[commaParts.length - 1].trim();
+    const lastPartLower = lastPart.toLowerCase();
+
+    // Check if last part is a country/state (should go to location, not name)
+    const isCountryOrState = COUNTRIES_AND_STATES.some(cs =>
+      lastPartLower === cs || lastPartLower.includes(cs)
+    );
+
+    if (isCountryOrState) {
+      // This should be the location
+      if (!result.location) {
+        result.location = lastPart;
+      }
+
+      // Check if second-to-last is the venue
+      if (commaParts.length > 2) {
+        const secondLastPart = commaParts[commaParts.length - 2].trim();
+        const normalized = normalizeVenue(secondLastPart);
+        if (!result.venue) {
+          result.venue = normalized.venue;
+        }
+        result.name = commaParts.slice(0, -2).join(', ').trim();
+      } else {
+        result.name = commaParts.slice(0, -1).join(', ').trim();
+      }
+    } else {
+      // Last part might be a city/venue
+      const normalized = normalizeVenue(lastPart);
+      if (!result.venue && normalized.venue) {
+        result.venue = normalized.venue;
+        if (normalized.location && !result.location) {
+          result.location = normalized.location;
+        }
+      }
+      result.name = commaParts.slice(0, -1).join(', ').trim();
+    }
+  }
+
+  // Step 5: If no name extracted yet, build from restPart
+  if (!result.name || result.name === title) {
+    if (artistPart && restPart) {
+      let eventName = restPart;
+
+      // Remove venue and location from name if they appear
+      if (result.venue) {
+        eventName = eventName.replace(new RegExp(result.venue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '');
+      }
+      if (result.location) {
+        eventName = eventName.replace(new RegExp(result.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '');
+      }
+
+      // Remove country/state names from the event name
+      for (const cs of COUNTRIES_AND_STATES) {
+        eventName = eventName.replace(new RegExp(`\\b${cs}\\b`, 'gi'), '');
+      }
+
+      // Clean up
+      eventName = eventName
+        .replace(/^[,\s@|\\-–—]+|[,\s@|\\-–—]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (eventName && eventName.length > 2) {
+        result.name = eventName;
+      } else if (result.venue) {
+        // Use venue as the name if nothing else
+        result.name = result.venue;
+      } else {
+        result.name = restPart;
+      }
+    }
+  }
+
+  // Step 6: If name still equals full title and we have artist, clean it up
+  if (result.name === title && result.artist !== 'Unknown Artist') {
+    result.name = title.replace(new RegExp(`^${result.artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[@|\\-–—]\\s*`, 'i'), '').trim();
+  }
+
+  // Step 7: Include event organizer in name if found
+  if (eventOrganizer && !result.name.toLowerCase().includes(eventOrganizer.toLowerCase())) {
+    result.name = `${result.name} for ${eventOrganizer}`;
+  }
+
+  // Step 8: Final cleanup - remove any trailing country/state from name
+  for (const cs of COUNTRIES_AND_STATES) {
+    result.name = result.name.replace(new RegExp(`[,\\s]+${cs}[,\\s]*$`, 'gi'), '').trim();
+  }
+
+  console.log(`[parseSetInfo] "${title}" -> artist: "${result.artist}", name: "${result.name}", venue: "${result.venue}", location: "${result.location}"`);
+
+  return result;
+}
+
 function parseDuration(isoDuration) {
   const match = isoDuration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
   if (!match) return 0;
@@ -1066,10 +1332,12 @@ async function importFromSoundCloud(url) {
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
   
-  // Parse artist/title 
-  const { name, artist } = parseArtistFromTitle(title);
-  const finalArtist = artist !== 'Unknown Artist' ? artist : artistFromPage;
-  const finalName = name || title;
+  // Parse artist/title/venue/location
+  const setInfo = parseSetInfo(title);
+  const finalArtist = setInfo.artist !== 'Unknown Artist' ? setInfo.artist : artistFromPage;
+  const finalName = setInfo.name || title;
+  const finalVenue = setInfo.venue || null;
+  const finalLocation = setInfo.location || null;
   const setId = `sc-${oembedInfo.id}-${Date.now()}`;
   
   // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
@@ -1084,6 +1352,8 @@ async function importFromSoundCloud(url) {
     id: setId,
     name: finalName,
     artist: finalArtist,
+    venue: finalVenue,
+    location: finalLocation,
     date: pageInfo?.createdAt || new Date().toISOString(),
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,
@@ -1411,8 +1681,9 @@ async function importFromYouTube(url, apiKey) {
     fetchVideoComments(videoId, apiKey, 500),
   ]);
 
-  // Extract DJ/artist name from video title FIRST so we can filter it from tracks
-  const { name, artist } = parseArtistFromTitle(video.title);
+  // Extract DJ/artist name, event name, venue, location from video title
+  const setInfo = parseSetInfo(video.title);
+  const { name, artist, venue, location } = setInfo;
   const djName = artist !== 'Unknown Artist' ? artist : video.channelTitle;
 
   const descTracks = parseDescription(video.description, djName);
@@ -1448,6 +1719,8 @@ async function importFromYouTube(url, apiKey) {
     id: setId,
     name,
     artist: djName,
+    venue: venue || null,
+    location: location || null,
     date: video.publishedAt,
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,
