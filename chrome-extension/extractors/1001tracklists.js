@@ -372,30 +372,383 @@
     }
   }
   
+  // Extract tracks from chart pages (weekly, monthly, etc.)
+  // These are track-only pages - no set creation
+  function extractChartTracks() {
+    const tracks = [];
+    const artists = new Map();
+
+    try {
+      // Get chart name from page title
+      let chartName = '';
+      const titleEl = document.querySelector('#pageTitle, h1');
+      if (titleEl) {
+        chartName = titleEl.textContent?.trim() || '';
+      }
+      if (!chartName) {
+        chartName = document.title.replace(/ \| 1001Tracklists$/i, '').trim();
+      }
+
+      console.log('[1001TL] Extracting chart tracks:', chartName);
+
+      // Chart pages have track items with format: "Artist - Track [Label]"
+      // Look for track links
+      const trackLinks = document.querySelectorAll('a[href*="/track/"]');
+      console.log('[1001TL] Found', trackLinks.length, 'track links');
+
+      const processedTracks = new Set();
+
+      trackLinks.forEach((link, index) => {
+        try {
+          const trackText = link.textContent?.trim() || '';
+          const trackUrl = link.href;
+
+          // Skip duplicates
+          if (processedTracks.has(trackUrl)) return;
+          processedTracks.add(trackUrl);
+
+          if (!trackText || trackText.length < 3) return;
+
+          // Parse "Artist - Track Name [LABEL]" format
+          let artist = '';
+          let title = '';
+          let label = '';
+
+          // Extract label from brackets at end
+          const labelMatch = trackText.match(/\[([^\]]+)\]$/);
+          if (labelMatch) {
+            label = labelMatch[1].trim();
+          }
+
+          // Remove label from text for parsing
+          const textWithoutLabel = trackText.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+
+          // Split by " - " to get artist and title
+          const dashIndex = textWithoutLabel.indexOf(' - ');
+          if (dashIndex > 0) {
+            artist = textWithoutLabel.substring(0, dashIndex).trim();
+            title = textWithoutLabel.substring(dashIndex + 3).trim();
+          } else {
+            title = textWithoutLabel;
+          }
+
+          // Get play count from parent container
+          let playCount = 0;
+          const parent = link.closest('.bItm, .chartItem, tr, li') || link.parentElement?.parentElement;
+          if (parent) {
+            // Look for play count (the circled number)
+            const playEl = parent.querySelector('.pCnt, [class*="play"], .chartPos');
+            if (playEl) {
+              const playMatch = playEl.textContent?.match(/(\d+)/);
+              if (playMatch) playCount = parseInt(playMatch[1]);
+            }
+          }
+
+          // Get position from the chart
+          let position = index + 1;
+          if (parent) {
+            const posEl = parent.querySelector('.chartPosition, .pos, td:first-child');
+            if (posEl) {
+              const posMatch = posEl.textContent?.match(/(\d+)/);
+              if (posMatch) position = parseInt(posMatch[1]);
+            }
+          }
+
+          if (title) {
+            tracks.push({
+              title,
+              artist: artist || 'Unknown',
+              label: label || null,
+              play_count: playCount,
+              position,
+              source_url: trackUrl,
+            });
+
+            // Add artist(s) to map
+            // Handle multiple artists (e.g., "Artist1 & Artist2" or "Artist1 vs. Artist2")
+            if (artist) {
+              const artistNames = artist.split(/\s*(?:&|vs\.?|feat\.?|ft\.?|,|x)\s*/i);
+              artistNames.forEach(name => {
+                const cleanName = name.trim();
+                if (cleanName && cleanName !== 'Unknown' && cleanName.length > 1 && !artists.has(cleanName)) {
+                  artists.set(cleanName, {
+                    name: cleanName,
+                  });
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.error('[1001TL] Track parse error:', e);
+        }
+      });
+
+      console.log('[1001TL] Extracted', tracks.length, 'tracks from chart page');
+      return {
+        chartName,
+        tracks,
+        artists: Array.from(artists.values()),
+      };
+    } catch (e) {
+      console.error('[1001TL] Chart extraction error:', e);
+      return { chartName: '', tracks: [], artists: [] };
+    }
+  }
+
+  // Extract top tracks from genre page sidebar
+  function extractGenreTopTracks() {
+    const tracks = [];
+    const artists = new Map();
+
+    try {
+      // Get genre name from page title or breadcrumb
+      let genreName = '';
+      const breadcrumb = document.querySelector('.breadcrumb a[href*="/genre/"]');
+      if (breadcrumb) {
+        genreName = breadcrumb.textContent?.trim() || '';
+      }
+      if (!genreName) {
+        const titleMatch = document.title.match(/^([^|]+)/);
+        if (titleMatch) genreName = titleMatch[1].trim();
+      }
+
+      console.log('[1001TL] Extracting genre top tracks for:', genreName);
+
+      // Find the top tracks container - it's usually in a sidebar or main content
+      // Look for track entries with the format: "Artist - Track [LABEL]"
+      // They have position numbers and play counts
+
+      // Method 1: Look for track items in the sidebar
+      const trackContainers = document.querySelectorAll('.sideTop100 .bItm, .topTracksWrap .bItm, .tWrap .bItm');
+      console.log('[1001TL] Found track containers (method 1):', trackContainers.length);
+
+      // Method 2: Look for any elements with track info pattern
+      if (trackContainers.length === 0) {
+        // Try finding by the structure shown in screenshot
+        // Position number followed by track link
+        const allLinks = document.querySelectorAll('a[href*="/track/"]');
+        console.log('[1001TL] Found track links:', allLinks.length);
+
+        allLinks.forEach((link, index) => {
+          try {
+            const trackText = link.textContent?.trim() || '';
+            if (!trackText || trackText.length < 3) return;
+
+            // Parse "Artist - Track Name [LABEL]" or "Artist1 & Artist2 - Track [LABEL]"
+            let artist = '';
+            let title = '';
+            let label = '';
+
+            // Extract label from brackets
+            const labelMatch = trackText.match(/\[([^\]]+)\]$/);
+            if (labelMatch) {
+              label = labelMatch[1].trim();
+            }
+
+            // Remove label from text for parsing
+            const textWithoutLabel = trackText.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+
+            // Split by " - " to get artist and title
+            const dashIndex = textWithoutLabel.indexOf(' - ');
+            if (dashIndex > 0) {
+              artist = textWithoutLabel.substring(0, dashIndex).trim();
+              title = textWithoutLabel.substring(dashIndex + 3).trim();
+            } else {
+              title = textWithoutLabel;
+            }
+
+            // Try to get play count from nearby element
+            let playCount = 0;
+            const parent = link.closest('.bItm') || link.parentElement;
+            if (parent) {
+              const playEl = parent.querySelector('.pCnt, .plays, [class*="play"]');
+              if (playEl) {
+                const playMatch = playEl.textContent?.match(/(\d+)/);
+                if (playMatch) playCount = parseInt(playMatch[1]);
+              }
+            }
+
+            // Get external links near this track
+            let soundcloud_url = null;
+            let youtube_url = null;
+            let spotify_url = null;
+            if (parent) {
+              parent.querySelectorAll('a[href]').forEach(extLink => {
+                const href = extLink.href;
+                if (href.includes('soundcloud.com') && !soundcloud_url) soundcloud_url = href;
+                if ((href.includes('youtube.com') || href.includes('youtu.be')) && !youtube_url) youtube_url = href;
+                if (href.includes('spotify.com') && !spotify_url) spotify_url = href;
+              });
+            }
+
+            if (title && artist) {
+              tracks.push({
+                title,
+                artist,
+                label,
+                play_count: playCount,
+                position: index + 1,
+                genre: genreName,
+                soundcloud_url,
+                youtube_url,
+                spotify_url,
+              });
+
+              // Add artist(s) to map
+              // Handle multiple artists (e.g., "Artist1 & Artist2" or "Artist1 vs. Artist2")
+              const artistNames = artist.split(/\s*(?:&|vs\.?|feat\.?|ft\.?|,)\s*/i);
+              artistNames.forEach(name => {
+                const cleanName = name.trim();
+                if (cleanName && cleanName !== 'Unknown' && !artists.has(cleanName)) {
+                  artists.set(cleanName, {
+                    name: cleanName,
+                    genres: genreName ? [genreName] : [],
+                  });
+                }
+              });
+            }
+          } catch (e) {
+            console.error('[1001TL] Track parse error:', e);
+          }
+        });
+      } else {
+        // Process containers found with method 1
+        trackContainers.forEach((item, index) => {
+          try {
+            const trackLink = item.querySelector('a[href*="/track/"]');
+            const trackText = trackLink?.textContent?.trim() || '';
+
+            if (!trackText) return;
+
+            let artist = '';
+            let title = '';
+            let label = '';
+
+            const labelMatch = trackText.match(/\[([^\]]+)\]$/);
+            if (labelMatch) label = labelMatch[1].trim();
+
+            const textWithoutLabel = trackText.replace(/\s*\[[^\]]+\]\s*$/, '').trim();
+            const dashIndex = textWithoutLabel.indexOf(' - ');
+            if (dashIndex > 0) {
+              artist = textWithoutLabel.substring(0, dashIndex).trim();
+              title = textWithoutLabel.substring(dashIndex + 3).trim();
+            } else {
+              title = textWithoutLabel;
+            }
+
+            // Get play count
+            let playCount = 0;
+            const playEl = item.querySelector('.pCnt, .plays');
+            if (playEl) {
+              const playMatch = playEl.textContent?.match(/(\d+)/);
+              if (playMatch) playCount = parseInt(playMatch[1]);
+            }
+
+            if (title && artist) {
+              tracks.push({
+                title,
+                artist,
+                label,
+                play_count: playCount,
+                position: index + 1,
+                genre: genreName,
+              });
+
+              const artistNames = artist.split(/\s*(?:&|vs\.?|feat\.?|ft\.?|,)\s*/i);
+              artistNames.forEach(name => {
+                const cleanName = name.trim();
+                if (cleanName && cleanName !== 'Unknown' && !artists.has(cleanName)) {
+                  artists.set(cleanName, {
+                    name: cleanName,
+                    genres: genreName ? [genreName] : [],
+                  });
+                }
+              });
+            }
+          } catch (e) {
+            console.error('[1001TL] Track container parse error:', e);
+          }
+        });
+      }
+
+      console.log('[1001TL] Extracted', tracks.length, 'tracks from genre page');
+      return {
+        genreName,
+        tracks,
+        artists: Array.from(artists.values()),
+      };
+    } catch (e) {
+      console.error('[1001TL] Genre extraction error:', e);
+      return { genreName: '', tracks: [], artists: [] };
+    }
+  }
+
   // Main extraction function
   async function extract() {
-    // Wait for timestamps to load (they're loaded dynamically)
-    await waitForTimestamps(3000);
-
-    const result = extractTracklist();
-
-    // Only include sourceUrl if this is an actual tracklist page, not a DJ profile
-    // Tracklist pages have URLs like: /tracklist/abc123/
-    // DJ profile pages have URLs like: /dj/artist-name/
     const currentUrl = window.location.href;
     const isTracklistPage = currentUrl.includes('/tracklist/');
     const isDjProfilePage = currentUrl.includes('/dj/') && !currentUrl.includes('/tracklist/');
+    const isGenrePage = currentUrl.includes('/genre/');
+    const isChartPage = currentUrl.includes('/charts/');
 
-    // Format for API
+    // For chart pages (weekly, monthly, etc.) - tracks only, NO sets
+    if (isChartPage) {
+      const chartResult = extractChartTracks();
+      return {
+        source: '1001tracklists',
+        sourceUrl: currentUrl,
+        pageType: 'chart', // Important: this tells the API not to create a set
+        scrapedAt: new Date().toISOString(),
+        chartName: chartResult.chartName,
+        tracks: chartResult.tracks,
+        artists: chartResult.artists,
+        // No setInfo - this ensures no set is created
+      };
+    }
+
+    // For genre pages, extract top tracks - tracks only, NO sets
+    if (isGenrePage) {
+      const genreResult = extractGenreTopTracks();
+      return {
+        source: '1001tracklists',
+        sourceUrl: currentUrl,
+        pageType: 'genre', // Important: this tells the API not to create a set
+        scrapedAt: new Date().toISOString(),
+        genreName: genreResult.genreName,
+        tracks: genreResult.tracks,
+        artists: genreResult.artists,
+        // No setInfo - this ensures no set is created
+      };
+    }
+
+    // For tracklist pages - CREATE a set with tracks
+    if (isTracklistPage) {
+      // Wait for timestamps to load (they're loaded dynamically)
+      await waitForTimestamps(3000);
+
+      const result = extractTracklist();
+
+      return {
+        source: '1001tracklists',
+        sourceUrl: currentUrl,
+        pageType: 'tracklist', // This tells the API to create a set
+        scrapedAt: new Date().toISOString(),
+        setInfo: result.setInfo, // setInfo triggers set creation
+        tracks: result.tracks,
+        artists: result.artists,
+      };
+    }
+
+    // For DJ profile pages or unknown - just extract any tracks visible
+    const result = extractTracklist();
     return {
       source: '1001tracklists',
-      // Only save the URL if it's an actual tracklist page
-      sourceUrl: isTracklistPage ? currentUrl : null,
-      pageType: isTracklistPage ? 'tracklist' : (isDjProfilePage ? 'dj_profile' : 'unknown'),
+      sourceUrl: null, // Don't save URL for profile pages
+      pageType: isDjProfilePage ? 'dj_profile' : 'unknown',
       scrapedAt: new Date().toISOString(),
-      setInfo: result.setInfo,
       tracks: result.tracks,
       artists: result.artists,
+      // No setInfo - no set creation
     };
   }
   
@@ -431,8 +784,8 @@
 
       try {
         const data = await extract();
-        
-        if (data.tracks.length === 0) {
+
+        if (data.tracks.length === 0 && data.artists?.length === 0) {
           btn.innerHTML = '⚠️ No tracks found';
           setTimeout(() => {
             btn.innerHTML = '✨ IDentified';
@@ -440,29 +793,39 @@
           }, 2000);
           return;
         }
-        
-        btn.innerHTML = `📤 Sending ${data.tracks.length}...`;
-        
+
+        btn.innerHTML = `📤 Sending ${data.tracks.length} tracks...`;
+
         // Auto-send to API
         const response = await chrome.runtime.sendMessage({
           type: 'SEND_TO_API',
           data: data
         });
-        
+
         if (response.success) {
           const r = response.result;
-          btn.innerHTML = `✅ +${r.artistsCreated || 0} artists, +${r.tracksCreated || 0} tracks`;
+          // Show different message based on page type
+          if (data.pageType === 'tracklist' && r.setsCreated > 0) {
+            btn.innerHTML = `✅ Set + ${r.tracksCreated || 0} tracks`;
+          } else {
+            // Chart/genre page - just tracks and artists
+            const parts = [];
+            if (r.artistsCreated > 0) parts.push(`+${r.artistsCreated} artists`);
+            if (r.tracksCreated > 0) parts.push(`+${r.tracksCreated} tracks`);
+            if (parts.length === 0) parts.push('All exist');
+            btn.innerHTML = `✅ ${parts.join(', ')}`;
+          }
           console.log('[1001TL] Sent to API:', response.result);
         } else {
           btn.innerHTML = '❌ ' + (response.error || 'Send failed');
           console.error('[1001TL] API error:', response.error);
         }
-        
+
         setTimeout(() => {
           btn.innerHTML = '✨ IDentified';
           btn.disabled = false;
         }, 4000);
-        
+
       } catch (e) {
         console.error('[1001TL] Button error:', e);
         btn.innerHTML = '❌ Error';

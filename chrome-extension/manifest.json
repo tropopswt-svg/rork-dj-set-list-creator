@@ -20,7 +20,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://www.1001tracklists.com/tracklist/*"],
+      "matches": [
+        "*://www.1001tracklists.com/tracklist/*",
+        "*://www.1001tracklists.com/genre/*",
+        "*://www.1001tracklists.com/charts/*",
+        "*://www.1001tracklists.com/dj/*"
+      ],
       "js": ["extractors/1001tracklists.js"],
       "css": ["styles.css"]
     },
@@ -35,7 +40,9 @@
     {
       "matches": [
         "*://soundcloud.com/*",
-        "*://www.soundcloud.com/*"
+        "*://www.soundcloud.com/*",
+        "*://soundcloud.com/charts/*",
+        "*://soundcloud.com/discover/*"
       ],
       "js": ["extractors/soundcloud.js"],
       "css": ["styles.css"]

@@ -8,7 +8,10 @@
   function getPageType() {
     const url = window.location.href;
     const path = window.location.pathname;
-    
+
+    if (path.includes('/charts/')) return 'charts';
+    if (path.includes('/discover/sets')) return 'discover_sets';
+    if (url.includes('/discover')) return 'discover';
     if (path.includes('/sets/')) return 'playlist';
     if (path.includes('/likes')) return 'likes';
     if (path.includes('/reposts')) return 'reposts';
@@ -16,9 +19,34 @@
     if (path.includes('/albums')) return 'albums';
     if (path.match(/^\/[^\/]+\/[^\/]+$/)) return 'track'; // /artist/track-name
     if (path.match(/^\/[^\/]+\/?$/)) return 'artist'; // /artist
-    if (url.includes('/discover')) return 'discover';
     if (url.includes('/search')) return 'search';
     return 'unknown';
+  }
+
+  // Extract genre from URL or page
+  function extractGenre() {
+    const path = window.location.pathname;
+
+    // Charts URL: /charts/top?genre=house
+    const urlParams = new URLSearchParams(window.location.search);
+    const genreParam = urlParams.get('genre');
+    if (genreParam) {
+      return genreParam.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // Discover URL: /discover/sets/charts-top:house
+    const genreMatch = path.match(/charts-[^:]+:([^\/]+)/);
+    if (genreMatch) {
+      return genreMatch[1].replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // Try to get from page title or breadcrumb
+    const breadcrumb = document.querySelector('.g-nav-item.active, [class*="genre"]');
+    if (breadcrumb) {
+      return breadcrumb.textContent?.trim() || '';
+    }
+
+    return '';
   }
   
   // Extract artist name from URL or page
@@ -313,10 +341,11 @@
   // Main extraction function
   function extract() {
     const pageType = getPageType();
-    console.log('[SoundCloud Extractor] Page type:', pageType);
-    
+    const genre = extractGenre();
+    console.log('[SoundCloud Extractor] Page type:', pageType, 'Genre:', genre);
+
     let result;
-    
+
     if (pageType === 'track') {
       result = extractSingleTrack();
     } else if (pageType === 'artist') {
@@ -324,13 +353,23 @@
     } else {
       result = extractTracks();
     }
-    
+
+    // Add genre to tracks and artists if detected
+    if (genre) {
+      result.genreName = genre;
+      result.tracks = result.tracks.map(t => ({ ...t, genre }));
+      result.artists = result.artists.map(a => ({
+        ...a,
+        genres: a.genres ? [...a.genres, genre] : [genre]
+      }));
+    }
+
     // Add metadata
     result.source = 'soundcloud';
     result.sourceUrl = window.location.href;
     result.pageType = pageType;
     result.scrapedAt = new Date().toISOString();
-    
+
     console.log('[SoundCloud Extractor] Result:', result);
     return result;
   }

@@ -15,6 +15,21 @@
     if (url.includes('/top-100')) return 'top100';
     return 'unknown';
   }
+
+  // Extract genre from URL
+  function extractGenreFromUrl() {
+    const path = window.location.pathname;
+    // URL pattern: /genre/tech-house/top-100
+    const genreMatch = path.match(/\/genre\/([^\/]+)/);
+    if (genreMatch) {
+      // Convert slug to readable name: tech-house -> Tech House
+      return genreMatch[1]
+        .split('-')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+    }
+    return null;
+  }
   
   function extractTracks() {
     const tracks = [];
@@ -143,15 +158,29 @@
   
   function extract() {
     const pageType = getPageType();
-    console.log('[Beatport] Page type:', pageType);
-    
+    const urlGenre = extractGenreFromUrl();
+    console.log('[Beatport] Page type:', pageType, '| URL Genre:', urlGenre);
+
     const result = extractTracks();
-    
+
+    // Add genre from URL to all tracks and artists if detected
+    if (urlGenre) {
+      result.genreName = urlGenre;
+      result.tracks = result.tracks.map(t => ({
+        ...t,
+        genre: t.genre || urlGenre
+      }));
+      result.artists = result.artists.map(a => ({
+        ...a,
+        genres: a.genres ? [...a.genres, urlGenre] : [urlGenre]
+      }));
+    }
+
     result.source = 'beatport';
     result.sourceUrl = window.location.href;
     result.pageType = pageType;
     result.scrapedAt = new Date().toISOString();
-    
+
     return result;
   }
   
