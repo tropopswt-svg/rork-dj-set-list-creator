@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -22,13 +22,26 @@ const coverImages = [
 ];
 
 export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeedCardProps) {
+  const [showArtistPicker, setShowArtistPicker] = useState(false);
+
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.();
   };
 
-  const handleArtistPress = (artistName: string) => {
+  const handleArtistPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // If multiple artists, show picker popup
+    if (artists.length > 1) {
+      setShowArtistPicker(true);
+    } else if (artists.length === 1) {
+      onArtistPress?.(artists[0]);
+    }
+  };
+
+  const handleSelectArtist = (artistName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowArtistPicker(false);
     onArtistPress?.(artistName);
   };
 
@@ -255,23 +268,23 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
         <View style={styles.content}>
           {/* Top section: Artists on left, Location badges on right */}
           <View style={styles.topRow}>
-            <View style={styles.artistSection}>
+            <Pressable style={styles.artistSection} onPress={handleArtistPress} hitSlop={4}>
               <View style={styles.artistRow}>
-                {artists.slice(0, 3).map((artist, index) => (
+                {artists.slice(0, 2).map((artist, index) => (
                   <View key={index} style={styles.artistItem}>
-                    <Pressable onPress={() => handleArtistPress(artist)} hitSlop={4}>
-                      <Text style={styles.artist} numberOfLines={1}>{artist}</Text>
-                    </Pressable>
-                    {index < Math.min(artists.length, 3) - 1 && (
+                    <Text style={styles.artist} numberOfLines={1}>{artist}</Text>
+                    {index < Math.min(artists.length, 2) - 1 && (
                       <Text style={styles.artistSeparator}>|</Text>
                     )}
                   </View>
                 ))}
-                {artists.length > 3 && (
-                  <Text style={styles.artistMore}>+{artists.length - 3}</Text>
+                {artists.length > 2 && (
+                  <View style={styles.artistMoreBadge}>
+                    <Text style={styles.artistMoreText}>+{artists.length - 2}</Text>
+                  </View>
                 )}
               </View>
-            </View>
+            </Pressable>
             {(venue || location) && (
               <View style={styles.badgeSection}>
                 {venue && (
@@ -320,6 +333,38 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
           </View>
         </View>
       </View>
+
+      {/* Artist Picker Modal */}
+      <Modal
+        visible={showArtistPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowArtistPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowArtistPicker(false)}
+        >
+          <View style={styles.artistPickerContainer}>
+            <View style={styles.artistPickerHeader}>
+              <Text style={styles.artistPickerTitle}>Select Artist</Text>
+              <Pressable onPress={() => setShowArtistPicker(false)} hitSlop={8}>
+                <X size={18} color={Colors.dark.textMuted} />
+              </Pressable>
+            </View>
+            {artists.map((artist, index) => (
+              <Pressable
+                key={index}
+                style={styles.artistPickerItem}
+                onPress={() => handleSelectArtist(artist)}
+              >
+                <User size={14} color={Colors.dark.primary} />
+                <Text style={styles.artistPickerItemText}>{artist}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </Pressable>
   );
 }
@@ -449,11 +494,17 @@ const styles = StyleSheet.create({
     opacity: 0.4,
     marginHorizontal: 6,
   },
-  artistMore: {
-    fontSize: 10,
-    fontWeight: '500' as const,
-    color: Colors.dark.textMuted,
+  artistMoreBadge: {
+    backgroundColor: `${Colors.dark.primary}25`,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
     marginLeft: 4,
+  },
+  artistMoreText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
   },
   name: {
     fontSize: 13,
@@ -549,5 +600,49 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: Colors.dark.primary,
     fontWeight: '600' as const,
+  },
+  // Artist Picker Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  artistPickerContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 220,
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  artistPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  artistPickerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  artistPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  artistPickerItemText: {
+    fontSize: 14,
+    color: Colors.dark.text,
+    fontWeight: '500' as const,
   },
 });
