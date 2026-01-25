@@ -118,7 +118,7 @@ export default async function handler(req, res) {
 
       if (bestMatch) {
         // Build update object - always update source, optionally update timestamp
-        const updateData: any = {
+        const updateData = {
           source: source || bestMatch.source,
         };
 
