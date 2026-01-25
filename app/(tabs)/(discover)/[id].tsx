@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -408,6 +408,9 @@ export default function SetDetailScreen() {
             const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
             const hasAnalyzableSource = ytLink || scLink;
 
+            // Check if tracks have timestamps (indicating analysis has been run)
+            const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+
             if (!hasAnalyzableSource) {
               return (
                 <View style={styles.needsSourceBanner}>
@@ -423,6 +426,23 @@ export default function SetDetailScreen() {
                 </View>
               );
             }
+
+            // Show "Needs Analysis" banner if sources exist but no timestamps
+            if (hasAnalyzableSource && !hasTimestamps) {
+              return (
+                <View style={[styles.needsSourceBanner, { backgroundColor: 'rgba(251, 146, 60, 0.1)', borderColor: 'rgba(251, 146, 60, 0.3)' }]}>
+                  <View style={[styles.needsSourceIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.2)' }]}>
+                    <Sparkles size={20} color="#FB923C" />
+                  </View>
+                  <View style={styles.needsSourceContent}>
+                    <Text style={styles.needsSourceTitle}>Ready for Analysis</Text>
+                    <Text style={styles.needsSourceText}>
+                      Source links were auto-detected. Tap "Analyze" on a source to scrape comments for track timestamps.
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
             return null;
           })()}
 
@@ -432,17 +452,99 @@ export default function SetDetailScreen() {
               {/* YouTube */}
               {(() => {
                 const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+                const needsAnalysis = ytLink && !hasTimestamps;
+
                 return ytLink ? (
-                  <Pressable
-                    style={[styles.linkCard, styles.linkCardFilled]}
-                    onPress={() => handleOpenSource(ytLink)}
-                  >
-                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
-                      <Youtube size={16} color="#FF0000" />
-                    </View>
-                    <Text style={styles.linkPlatform}>YouTube</Text>
-                    <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                  </Pressable>
+                  <View style={styles.linkCardWrapper}>
+                    <Pressable
+                      style={[styles.linkCard, styles.linkCardFilled]}
+                      onPress={() => handleOpenSource(ytLink)}
+                    >
+                      <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
+                        <Youtube size={16} color="#FF0000" />
+                      </View>
+                      <Text style={styles.linkPlatform}>YouTube</Text>
+                      <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                    </Pressable>
+                    {needsAnalysis && (
+                      <Pressable
+                        style={styles.analyzeButton}
+                        onPress={async () => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          setSelectedPlatform('youtube');
+                          // Trigger analysis directly without showing modal
+                          try {
+                            setLoading(true);
+                            const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url: ytLink.url }),
+                            });
+                            const importResult = await importResponse.json();
+
+                            if (importResult.success && importResult.setList?.tracks?.length > 0) {
+                              // Update tracks with timestamps
+                              await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  setId: setList.id,
+                                  tracks: importResult.setList.tracks,
+                                  source: 'youtube',
+                                }),
+                              });
+
+                              // Refresh set data
+                              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+                              const refreshData = await refreshResponse.json();
+                              if (refreshData.success && refreshData.set) {
+                                const refreshedSet: SetList = {
+                                  id: refreshData.set.id,
+                                  name: refreshData.set.name,
+                                  artist: refreshData.set.artist,
+                                  venue: refreshData.set.venue,
+                                  date: new Date(refreshData.set.date),
+                                  totalDuration: refreshData.set.totalDuration || 0,
+                                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  plays: refreshData.set.trackCount * 10,
+                                  sourceLinks: refreshData.set.sourceLinks || [],
+                                  tracks: refreshData.set.tracks?.map((t: any) => ({
+                                    id: t.id,
+                                    title: t.title,
+                                    artist: t.artist,
+                                    duration: 0,
+                                    coverUrl: '',
+                                    addedAt: new Date(t.addedAt || Date.now()),
+                                    source: t.source || 'database',
+                                    timestamp: t.timestamp || 0,
+                                    timestampStr: t.timestampStr,
+                                    verified: t.verified || !t.isId,
+                                    confidence: t.isId ? 0 : 1,
+                                    isId: t.isId,
+                                  })) || [],
+                                  hasGaps: refreshData.set.hasGaps,
+                                  gapCount: refreshData.set.gapCount,
+                                };
+                                setDbSet(refreshedSet);
+                              }
+
+                              Alert.alert('Success', `Analyzed ${importResult.setList.tracks.length} tracks from YouTube comments`);
+                            } else {
+                              Alert.alert('No Results', 'No track timestamps found in YouTube comments');
+                            }
+                          } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to analyze');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                      >
+                        <Sparkles size={12} color="#FFF" />
+                        <Text style={styles.analyzeButtonText}>Analyze</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 ) : (
                   <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
@@ -464,17 +566,97 @@ export default function SetDetailScreen() {
               {/* SoundCloud */}
               {(() => {
                 const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+                const needsAnalysis = scLink && !hasTimestamps;
+
                 return scLink ? (
-                  <Pressable
-                    style={[styles.linkCard, styles.linkCardFilled]}
-                    onPress={() => handleOpenSource(scLink)}
-                  >
-                    <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
-                      <Music2 size={16} color="#FF5500" />
-                    </View>
-                    <Text style={styles.linkPlatform}>SoundCloud</Text>
-                    <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                  </Pressable>
+                  <View style={styles.linkCardWrapper}>
+                    <Pressable
+                      style={[styles.linkCard, styles.linkCardFilled]}
+                      onPress={() => handleOpenSource(scLink)}
+                    >
+                      <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
+                        <Music2 size={16} color="#FF5500" />
+                      </View>
+                      <Text style={styles.linkPlatform}>SoundCloud</Text>
+                      <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                    </Pressable>
+                    {needsAnalysis && (
+                      <Pressable
+                        style={[styles.analyzeButton, { backgroundColor: '#FF5500' }]}
+                        onPress={async () => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          setSelectedPlatform('soundcloud');
+                          try {
+                            setLoading(true);
+                            const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ url: scLink.url }),
+                            });
+                            const importResult = await importResponse.json();
+
+                            if (importResult.success && importResult.setList?.tracks?.length > 0) {
+                              await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  setId: setList.id,
+                                  tracks: importResult.setList.tracks,
+                                  source: 'soundcloud',
+                                }),
+                              });
+
+                              // Refresh set data
+                              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+                              const refreshData = await refreshResponse.json();
+                              if (refreshData.success && refreshData.set) {
+                                const refreshedSet: SetList = {
+                                  id: refreshData.set.id,
+                                  name: refreshData.set.name,
+                                  artist: refreshData.set.artist,
+                                  venue: refreshData.set.venue,
+                                  date: new Date(refreshData.set.date),
+                                  totalDuration: refreshData.set.totalDuration || 0,
+                                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  plays: refreshData.set.trackCount * 10,
+                                  sourceLinks: refreshData.set.sourceLinks || [],
+                                  tracks: refreshData.set.tracks?.map((t: any) => ({
+                                    id: t.id,
+                                    title: t.title,
+                                    artist: t.artist,
+                                    duration: 0,
+                                    coverUrl: '',
+                                    addedAt: new Date(t.addedAt || Date.now()),
+                                    source: t.source || 'database',
+                                    timestamp: t.timestamp || 0,
+                                    timestampStr: t.timestampStr,
+                                    verified: t.verified || !t.isId,
+                                    confidence: t.isId ? 0 : 1,
+                                    isId: t.isId,
+                                  })) || [],
+                                  hasGaps: refreshData.set.hasGaps,
+                                  gapCount: refreshData.set.gapCount,
+                                };
+                                setDbSet(refreshedSet);
+                              }
+
+                              Alert.alert('Success', `Analyzed ${importResult.setList.tracks.length} tracks from SoundCloud comments`);
+                            } else {
+                              Alert.alert('No Results', 'No track timestamps found in SoundCloud comments');
+                            }
+                          } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to analyze');
+                          } finally {
+                            setLoading(false);
+                          }
+                        }}
+                      >
+                        <Sparkles size={12} color="#FFF" />
+                        <Text style={styles.analyzeButtonText}>Analyze</Text>
+                      </Pressable>
+                    )}
+                  </View>
                 ) : (
                   <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
@@ -1010,6 +1192,25 @@ const styles = StyleSheet.create({
   },
   linkExternal: {
     marginLeft: 'auto',
+  },
+  linkCardWrapper: {
+    flex: 1,
+  },
+  analyzeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: '#FF0000',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  analyzeButtonText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#FFF',
   },
   conflictHintBanner: {
     backgroundColor: 'rgba(206, 138, 75, 0.12)',
