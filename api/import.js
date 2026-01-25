@@ -2392,6 +2392,32 @@ async function handleChromeExtensionImport(req, res, data) {
       } else {
         console.log('[Chrome Import] Set already exists:', tracklistUrl || setSlug);
         results.setId = existingSet.id;
+
+        // Update existing tracks with new timestamp data if available
+        if (data.tracks && data.tracks.length > 0) {
+          let tracksUpdated = 0;
+          for (const track of data.tracks) {
+            if (track.timestamp_seconds && track.timestamp_seconds > 0) {
+              // Try to match by position and update timestamp
+              const { error: updateError } = await supabase
+                .from('set_tracks')
+                .update({
+                  timestamp_seconds: track.timestamp_seconds,
+                  timestamp_str: track.timestamp_str,
+                })
+                .eq('set_id', existingSet.id)
+                .eq('position', track.position);
+
+              if (!updateError) {
+                tracksUpdated++;
+              }
+            }
+          }
+          if (tracksUpdated > 0) {
+            console.log(`[Chrome Import] Updated ${tracksUpdated} tracks with timestamps`);
+            results.tracksUpdated = tracksUpdated;
+          }
+        }
       }
     } catch (setErr) {
       console.error('[Chrome Import] Set processing error:', setErr.message);
