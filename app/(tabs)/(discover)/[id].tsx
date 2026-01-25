@@ -157,22 +157,27 @@ export default function SetDetailScreen() {
     return getActiveConflicts(id);
   }, [id, getActiveConflicts]);
 
-  // Filter and sort tracks - only show tracks with actual timestamps (> 0)
-  // Tracks without timestamps are not useful - users need to know WHEN a track plays
-  const sortedTracks = useMemo(() => {
-    return [...tracks]
-      .filter(track => {
-        // Only show tracks with a real timestamp (> 0)
-        // Timestamp 0 means "unknown position" - not useful for the timeline
-        return track.timestamp && track.timestamp > 0;
-      })
-      .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+  // Separate tracks into those with timestamps (timeline) and those without (unplaced)
+  const { timedTracks, unplacedTracks } = useMemo(() => {
+    const timed: Track[] = [];
+    const unplaced: Track[] = [];
+
+    for (const track of tracks) {
+      if (track.timestamp && track.timestamp > 0) {
+        timed.push(track);
+      } else {
+        unplaced.push(track);
+      }
+    }
+
+    // Sort timed tracks by timestamp
+    timed.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    return { timedTracks: timed, unplacedTracks: unplaced };
   }, [tracks]);
 
-  // Count tracks that were filtered out (tracks without timestamps)
-  const unplacedTrackCount = useMemo(() => {
-    return tracks.filter(track => !track.timestamp || track.timestamp === 0).length;
-  }, [tracks]);
+  // For backward compatibility
+  const sortedTracks = timedTracks;
 
   // Create a combined list of tracks and inline conflicts, sorted by timestamp
   type TracklistItem =
@@ -968,16 +973,6 @@ export default function SetDetailScreen() {
             </View>
           )}
 
-          {/* Unplaced tracks info - tracks detected without timestamps */}
-          {unplacedTrackCount > 0 && (
-            <View style={styles.unplacedIdsBanner}>
-              <AlertCircle size={14} color={Colors.dark.textMuted} />
-              <Text style={styles.unplacedIdsText}>
-                {unplacedTrackCount} track{unplacedTrackCount !== 1 ? 's' : ''} identified but missing timestamps
-              </Text>
-            </View>
-          )}
-
           <View style={styles.tracksSection}>
             <View style={styles.tracksSectionHeader}>
               <Text style={styles.sectionTitle}>Tracklist</Text>
@@ -1078,14 +1073,14 @@ export default function SetDetailScreen() {
               );
             })}
             
-            {tracklistItems.length === 0 && (
+            {tracklistItems.length === 0 && unplacedTracks.length === 0 && (
               <View style={styles.emptyTracks}>
                 <Sparkles size={32} color={Colors.dark.textMuted} />
                 <Text style={styles.emptyText}>No tracks identified yet</Text>
                 <Text style={styles.emptySubtext}>
                   Be the first to contribute! Add a track you recognize.
                 </Text>
-                <Pressable 
+                <Pressable
                   style={styles.emptyAddButton}
                   onPress={() => setShowAddModal(true)}
                 >
@@ -1095,10 +1090,41 @@ export default function SetDetailScreen() {
               </View>
             )}
 
-            {tracklistItems.length > 0 && (
+            {/* Unplaced Tracks Section - tracks from 1001tracklists without timestamps */}
+            {unplacedTracks.length > 0 && (
+              <View style={styles.unplacedSection}>
+                <View style={styles.unplacedHeader}>
+                  <View style={styles.unplacedTitleRow}>
+                    <ListMusic size={16} color={Colors.dark.textSecondary} />
+                    <Text style={styles.unplacedTitle}>
+                      {tracklistItems.length > 0 ? 'Unplaced Tracks' : 'Track List'}
+                    </Text>
+                  </View>
+                  <Text style={styles.unplacedSubtitle}>
+                    {tracklistItems.length > 0
+                      ? 'Add a YouTube or SoundCloud source to place these in the timeline'
+                      : 'From 1001Tracklists - add a source to get timestamps'}
+                  </Text>
+                </View>
+                {unplacedTracks.map((track, index) => (
+                  <TrackCard
+                    key={track.id}
+                    track={track}
+                    showIndex={index + 1}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSelectedTrack(track);
+                    }}
+                    onContributorPress={(username) => setSelectedContributor(username)}
+                  />
+                ))}
+              </View>
+            )}
+
+            {(tracklistItems.length > 0 || unplacedTracks.length > 0) && (
               <View style={styles.missingTrackCta}>
                 <Text style={styles.missingTrackText}>Know a track we missed?</Text>
-                <Pressable 
+                <Pressable
                   style={styles.contributeButton}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1709,6 +1735,30 @@ const styles = StyleSheet.create({
   },
   unplacedIdsText: {
     flex: 1,
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+  },
+  unplacedSection: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
+  },
+  unplacedHeader: {
+    marginBottom: 12,
+  },
+  unplacedTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  unplacedTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.dark.textSecondary,
+  },
+  unplacedSubtitle: {
     fontSize: 12,
     color: Colors.dark.textMuted,
   },
