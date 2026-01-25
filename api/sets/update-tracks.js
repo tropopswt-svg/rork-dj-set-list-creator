@@ -1,9 +1,11 @@
 // API endpoint to update set tracks with timestamps from YouTube/SoundCloud scraping
 import { createClient } from '@supabase/supabase-js';
 
+// Use service role key for server-side write operations (bypasses RLS)
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  // Prefer service role key for write operations, fall back to anon key
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseKey) return null;
   return createClient(supabaseUrl, supabaseKey);
 }
