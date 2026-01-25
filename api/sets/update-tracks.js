@@ -5,7 +5,12 @@ import { createClient } from '@supabase/supabase-js';
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   // Prefer service role key for write operations, fall back to anon key
-  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseKey = serviceKey || anonKey;
+
+  console.log('[Supabase] Using service role key:', !!serviceKey);
+
   if (!supabaseUrl || !supabaseKey) return null;
   return createClient(supabaseUrl, supabaseKey);
 }
@@ -229,6 +234,7 @@ export default async function handler(req, res) {
       newTracksAdded,
       debug: {
         sampleTracks: verifyTracks,
+        usingServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
       },
     });
 
