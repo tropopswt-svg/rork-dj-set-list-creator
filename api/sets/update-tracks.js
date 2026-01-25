@@ -235,6 +235,8 @@ export default async function handler(req, res) {
       debug: {
         sampleTracks: verifyTracks,
         usingServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        serviceKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20) || 'NOT_SET',
+        envKeys: Object.keys(process.env).filter(k => k.includes('SUPA')),
       },
     });
 
