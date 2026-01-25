@@ -707,6 +707,38 @@ export default function SetDetailScreen() {
         onClose={() => setShowSourceModal(false)}
         onImport={async (url) => {
           if (!setList) return { success: false, error: 'Set not found' };
+
+          // For database sets, use the direct API
+          if (dbSet) {
+            try {
+              const response = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  setId: setList.id,
+                  url,
+                  platform: selectedPlatform,
+                }),
+              });
+              const result = await response.json();
+
+              if (result.success) {
+                // Update local state to reflect the new source
+                setDbSet(prev => prev ? {
+                  ...prev,
+                  sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
+                } : prev);
+                await addPoints('source_added', setList.id);
+                return { success: true, stats: { matched: 0, newFromSecondary: 0 } };
+              } else {
+                return { success: false, error: result.error || 'Failed to add source' };
+              }
+            } catch (error: any) {
+              return { success: false, error: error.message || 'Network error' };
+            }
+          }
+
+          // For local sets, use the context
           const result = await addSourceToSet(setList.id, url, selectedPlatform);
           if (result.success) {
             await addPoints('source_added', setList.id);
