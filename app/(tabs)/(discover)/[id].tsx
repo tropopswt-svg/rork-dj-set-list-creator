@@ -70,6 +70,9 @@ export default function SetDetailScreen() {
   // Audio Preview Modal state (for identifying unknown tracks)
   const [audioPreviewTrack, setAudioPreviewTrack] = useState<Track | null>(null);
 
+  // Track votes on timestamp conflicts (conflictTimestamp -> selected track)
+  const [timestampVotes, setTimestampVotes] = useState<Record<number, Track>>({});
+
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerMinimized, setPlayerMinimized] = useState(false);
@@ -182,48 +185,250 @@ export default function SetDetailScreen() {
   // Create a combined list of tracks and inline conflicts, sorted by timestamp
   type TracklistItem =
     | { type: 'track'; data: Track }
-    | { type: 'gap'; timestamp: number; duration: number }
-    | { type: 'conflict'; data: TrackConflict };
+    | { type: 'gap'; timestamp: number; duration: number; gapId: string }
+    | { type: 'conflict'; data: TrackConflict }
+    | { type: 'timestamp-conflict'; tracks: Track[]; timestamp: number };
 
-  const tracklistItems = useMemo<TracklistItem[]>(() => {
-    // Filter out tracks that have active conflicts (they'll be shown as conflict options instead)
+  // Smart timestamp conflict detection and tracklist building
+  const { tracklistItems, estimatedMissingTracks } = useMemo<{
+    tracklistItems: TracklistItem[];
+    estimatedMissingTracks: number;
+  }>(() => {
+    // Get max valid timestamp from set duration (use totalDuration or fallback to 2 hours)
+    const maxValidTimestamp = (setList?.totalDuration && setList.totalDuration > 0)
+      ? setList.totalDuration + 60 // Add 1 min buffer for tracks that might start near the end
+      : 7200; // Default 2 hour max if no duration
+
+    // Filter out tracks that have active conflicts OR have invalid timestamps
     const tracksWithoutConflicts = sortedTracks.filter(track => {
-      // If this track has a conflict, don't show it separately
+      // Skip tracks with conflicts
       if (track.hasConflict && track.conflictId) {
-        return !conflicts.some(c => c.id === track.conflictId);
+        if (conflicts.some(c => c.id === track.conflictId)) {
+          return false;
+        }
+      }
+      // Skip tracks with timestamps beyond set duration (invalid data from comments)
+      const timestamp = track.timestamp || 0;
+      if (timestamp > maxValidTimestamp) {
+        console.log('[TrackFilter] Skipping track with invalid timestamp:', track.title, 'at', timestamp, '(max:', maxValidTimestamp, ')');
+        return false;
       }
       return true;
     });
 
-    // Create track items and detect gaps
     const items: TracklistItem[] = [];
-    const avgTrackDuration = 180; // Assume ~3 min average track length
-    const gapThreshold = 240; // 4+ minutes gap suggests missing track(s)
+    const avgTrackDuration = 210; // ~3.5 min average track length in DJ sets
+    const minTrackGap = 75; // Tracks < 1.25 min apart are suspicious (likely same track or conflict)
+    const gapThreshold = 270; // 4.5+ min gap suggests missing track(s)
+    let missingCount = 0;
+    let gapCounter = 0;
 
-    for (let i = 0; i < tracksWithoutConflicts.length; i++) {
+    // Helper: normalize string for comparison (remove special chars, lowercase)
+    const normalizeStr = (s: string | undefined): string => {
+      if (!s) return '';
+      return s.toLowerCase()
+        .replace(/[^a-z0-9]/g, '') // Remove non-alphanumeric
+        .replace(/feat|ft|featuring/g, '') // Remove featuring indicators
+        .trim();
+    };
+
+    // Helper: check if two tracks are essentially the same song
+    const isSameTrack = (a: Track, b: Track): boolean => {
+      const titleA = normalizeStr(a.title);
+      const titleB = normalizeStr(b.title);
+      const artistA = normalizeStr(a.artist);
+      const artistB = normalizeStr(b.artist);
+
+      // Exact match
+      if (titleA === titleB && artistA === artistB) return true;
+
+      // Title contains the other (e.g., "The One" vs "You are the one")
+      const titleMatch = titleA.includes(titleB) || titleB.includes(titleA);
+      // Artist contains the other (e.g., "Chloe Caillet" vs "Unreleased Chloe Caillet")
+      const artistMatch = artistA.includes(artistB) || artistB.includes(artistA);
+
+      // If both title and artist partially match, likely same track
+      if (titleMatch && artistMatch) return true;
+
+      // Check for very similar titles with same artist base
+      if (artistMatch && (
+        titleA.length > 3 && titleB.length > 3 &&
+        (titleA.includes(titleB.slice(0, 4)) || titleB.includes(titleA.slice(0, 4)))
+      )) {
+        return true;
+      }
+
+      // Check for swapped title/artist (common parsing error)
+      // e.g., "What Are You Waiting For (Sunrise Mix)" by "Chris Stussy"
+      // vs "Sunrise Mix" by "What Are You Waiting For"
+      const titleInOtherArtist = titleA.length > 3 && artistB.includes(titleA.slice(0, Math.min(8, titleA.length)));
+      const artistInOtherTitle = artistA.length > 3 && titleB.includes(artistA.slice(0, Math.min(8, artistA.length)));
+      const otherTitleInArtist = titleB.length > 3 && artistA.includes(titleB.slice(0, Math.min(8, titleB.length)));
+      const otherArtistInTitle = artistB.length > 3 && titleA.includes(artistB.slice(0, Math.min(8, artistB.length)));
+
+      // If one track's title appears in the other's artist (or vice versa), likely swapped
+      if ((titleInOtherArtist || otherArtistInTitle) && (artistInOtherTitle || otherTitleInArtist)) {
+        return true;
+      }
+
+      // Check if title contains mix/remix info that matches
+      // e.g., "What Are You Waiting For (Sunrise Mix)" contains "Sunrise Mix"
+      if (titleA.length > titleB.length && titleA.includes(titleB) && titleB.length > 5) {
+        return true;
+      }
+      if (titleB.length > titleA.length && titleB.includes(titleA) && titleA.length > 5) {
+        return true;
+      }
+
+      // Check if one title appears in the other's combined title+artist
+      const combinedA = titleA + artistA;
+      const combinedB = titleB + artistB;
+      if (titleA.length > 6 && combinedB.includes(titleA)) return true;
+      if (titleB.length > 6 && combinedA.includes(titleB)) return true;
+
+      return false;
+    };
+
+    // Helper: check if title has metadata noise (release dates, brackets with dates, etc.)
+    const hasMetadataNoise = (title: string | undefined): boolean => {
+      if (!title) return false;
+      return /\[.*\d{4}.*\]|\(.*\d{4}.*\)|release|unreleased|out soon|coming soon/i.test(title);
+    };
+
+    // Helper: pick the "best" track from duplicates (prefer verified, database source, clean titles)
+    const pickBestTrack = (tracks: Track[]): Track => {
+      return tracks.reduce((best, current) => {
+        // Prefer verified tracks
+        if (current.verified && !best.verified) return current;
+        if (best.verified && !current.verified) return best;
+        // Prefer database/1001tracklists source
+        if (current.source === 'database' || current.source === '1001tracklists') return current;
+        if (best.source === 'database' || best.source === '1001tracklists') return best;
+        // Prefer tracks without metadata noise in title
+        const currentHasNoise = hasMetadataNoise(current.title);
+        const bestHasNoise = hasMetadataNoise(best.title);
+        if (!currentHasNoise && bestHasNoise) return current;
+        if (currentHasNoise && !bestHasNoise) return best;
+        // Prefer tracks with proper artist (not "Unknown" or containing release info)
+        const currentArtistClean = !hasMetadataNoise(current.artist) && current.artist?.toLowerCase() !== 'unknown';
+        const bestArtistClean = !hasMetadataNoise(best.artist) && best.artist?.toLowerCase() !== 'unknown';
+        if (currentArtistClean && !bestArtistClean) return current;
+        if (bestArtistClean && !currentArtistClean) return best;
+        // Prefer tracks with more complete titles (not truncated)
+        if ((current.title?.length || 0) > (best.title?.length || 0)) return current;
+        return best;
+      });
+    };
+
+    // Group tracks that are too close together (timestamp conflicts)
+    let i = 0;
+    while (i < tracksWithoutConflicts.length) {
       const track = tracksWithoutConflicts[i];
-      const prevTrack = i > 0 ? tracksWithoutConflicts[i - 1] : null;
+      const trackTimestamp = track.timestamp || 0;
 
-      // Check for gap before this track
-      if (prevTrack) {
-        const gap = (track.timestamp || 0) - (prevTrack.timestamp || 0);
-        if (gap >= gapThreshold) {
-          // There's a significant gap - likely missing track(s)
+      // Look ahead to find all tracks within minTrackGap of this one
+      const closeGroup: Track[] = [track];
+      let j = i + 1;
+      while (j < tracksWithoutConflicts.length) {
+        const nextTrack = tracksWithoutConflicts[j];
+        const nextTimestamp = nextTrack.timestamp || 0;
+        // Check if this track is within minTrackGap of ANY track in the group
+        const isClose = closeGroup.some(t =>
+          Math.abs(nextTimestamp - (t.timestamp || 0)) < minTrackGap
+        );
+        if (isClose) {
+          closeGroup.push(nextTrack);
+          j++;
+        } else {
+          break;
+        }
+      }
+
+      // Check for gap before this track/group (only if within valid duration)
+      if (items.length > 0 && trackTimestamp <= maxValidTimestamp) {
+        const lastItem = items[items.length - 1];
+        let lastTimestamp = 0;
+        if (lastItem.type === 'track') {
+          lastTimestamp = lastItem.data.timestamp || 0;
+        } else if (lastItem.type === 'timestamp-conflict') {
+          // Use the latest timestamp from the conflict group
+          lastTimestamp = Math.max(...lastItem.tracks.map(t => t.timestamp || 0));
+        } else if (lastItem.type === 'gap') {
+          lastTimestamp = lastItem.timestamp + lastItem.duration;
+        }
+
+        const gap = trackTimestamp - lastTimestamp;
+        // Only add gap if it's within valid duration bounds
+        if (gap >= gapThreshold && (lastTimestamp + avgTrackDuration) <= maxValidTimestamp) {
+          const estimatedMissing = Math.max(1, Math.round((gap - avgTrackDuration) / avgTrackDuration));
+          missingCount += estimatedMissing;
+          gapCounter++;
           items.push({
             type: 'gap' as const,
-            timestamp: (prevTrack.timestamp || 0) + avgTrackDuration,
+            timestamp: lastTimestamp + avgTrackDuration,
             duration: gap - avgTrackDuration,
+            gapId: `gap-${gapCounter}`,
           });
         }
       }
 
-      items.push({
-        type: 'track' as const,
-        data: track,
-      });
+      // Helper: check if a track is an unidentified "ID"
+      const isIdTrack = (t: Track): boolean => {
+        const title = normalizeStr(t.title);
+        const artist = normalizeStr(t.artist);
+        return (title === 'id' || title === '') && (artist === 'id' || artist === '' || artist === 'unknown' || artist === 'unknownartist');
+      };
+
+      // If multiple tracks are grouped together, check if they're actually different
+      if (closeGroup.length > 1) {
+        // Group truly unique tracks (not same song with different metadata)
+        const uniqueGroups: Track[][] = [];
+        for (const t of closeGroup) {
+          const existingGroup = uniqueGroups.find(group =>
+            group.some(existing => isSameTrack(existing, t))
+          );
+          if (existingGroup) {
+            existingGroup.push(t);
+          } else {
+            uniqueGroups.push([t]);
+          }
+        }
+
+        // Pick best track from each group of duplicates
+        let uniqueTracks = uniqueGroups.map(group => pickBestTrack(group));
+
+        // Filter out ID/ID tracks if there are real identified tracks
+        const realTracks = uniqueTracks.filter(t => !isIdTrack(t));
+        if (realTracks.length > 0) {
+          // We have real tracks - use only those (ignore ID placeholders)
+          uniqueTracks = realTracks;
+        }
+
+        if (uniqueTracks.length > 1) {
+          // Different tracks too close together - show as conflict
+          items.push({
+            type: 'timestamp-conflict' as const,
+            tracks: uniqueTracks,
+            timestamp: Math.min(...uniqueTracks.map(t => t.timestamp || 0)),
+          });
+        } else {
+          // Same track identified multiple times OR only one real track - just show the best one
+          items.push({
+            type: 'track' as const,
+            data: uniqueTracks[0],
+          });
+        }
+      } else {
+        items.push({
+          type: 'track' as const,
+          data: track,
+        });
+      }
+
+      i = j; // Skip past all grouped tracks
     }
 
-    // Create conflict items
+    // Add existing conflicts
     const conflictItems: TracklistItem[] = conflicts.map(conflict => ({
       type: 'conflict' as const,
       data: conflict,
@@ -232,14 +437,16 @@ export default function SetDetailScreen() {
     // Combine and sort by timestamp
     const combined = [...items, ...conflictItems];
     combined.sort((a, b) => {
-      const timestampA = a.type === 'track' ? (a.data.timestamp || 0) :
-                         a.type === 'gap' ? a.timestamp : a.data.timestamp;
-      const timestampB = b.type === 'track' ? (b.data.timestamp || 0) :
-                         b.type === 'gap' ? b.timestamp : b.data.timestamp;
-      return timestampA - timestampB;
+      const getTimestamp = (item: TracklistItem) => {
+        if (item.type === 'track') return item.data.timestamp || 0;
+        if (item.type === 'gap') return item.timestamp;
+        if (item.type === 'timestamp-conflict') return item.timestamp;
+        return item.data.timestamp;
+      };
+      return getTimestamp(a) - getTimestamp(b);
     });
 
-    return combined;
+    return { tracklistItems: combined, estimatedMissingTracks: missingCount };
   }, [sortedTracks, conflicts]);
 
   const handleSave = useCallback(async () => {
@@ -528,12 +735,6 @@ export default function SetDetailScreen() {
             )}
 
             <View style={styles.quickStats}>
-              {setList.plays ? (
-                <>
-                  <Text style={styles.quickStatText}>{formatPlays(setList.plays)} plays</Text>
-                  <Text style={styles.quickStatDot}>•</Text>
-                </>
-              ) : null}
               {(setList.totalDuration || 0) > 0 ? (
                 <>
                   <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration)}</Text>
@@ -728,9 +929,11 @@ export default function SetDetailScreen() {
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
                     ) : hasTimestamps ? (
-                      <View style={styles.analyzedBadge}>
-                        <CheckCircle size={10} color="#22C55E" />
-                        <Text style={styles.analyzedBadgeText}>Analyzed</Text>
+                      <View style={styles.identifiedBadge}>
+                        <View style={styles.identifiedBadgeIdContainer}>
+                          <Text style={styles.identifiedBadgeId}>ID</Text>
+                        </View>
+                        <Text style={styles.identifiedBadgeText}>entified</Text>
                       </View>
                     ) : null}
                   </View>
@@ -852,9 +1055,11 @@ export default function SetDetailScreen() {
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
                     ) : hasTimestamps ? (
-                      <View style={[styles.analyzedBadge, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
-                        <CheckCircle size={10} color="#FF5500" />
-                        <Text style={[styles.analyzedBadgeText, { color: '#FF5500' }]}>Analyzed</Text>
+                      <View style={styles.identifiedBadge}>
+                        <View style={styles.identifiedBadgeIdContainer}>
+                          <Text style={styles.identifiedBadgeId}>ID</Text>
+                        </View>
+                        <Text style={styles.identifiedBadgeText}>entified</Text>
                       </View>
                     ) : null}
                   </View>
@@ -886,7 +1091,7 @@ export default function SetDetailScreen() {
               <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
               <Text style={styles.statLabel}>ID&apos;d</Text>
             </View>
-            
+
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
                 <CheckCircle size={14} color={Colors.dark.success} />
@@ -894,7 +1099,7 @@ export default function SetDetailScreen() {
               <Text style={styles.statValue}>{verifiedCount}</Text>
               <Text style={styles.statLabel}>Verified</Text>
             </View>
-            
+
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
                 <Users size={14} color="#8B5CF6" />
@@ -902,15 +1107,70 @@ export default function SetDetailScreen() {
               <Text style={styles.statValue}>{communityCount}</Text>
               <Text style={styles.statLabel}>Comm.</Text>
             </View>
-            
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.15)' }]}>
-                <MessageSquare size={14} color="#FB923C" />
-              </View>
-              <Text style={styles.statValue}>{setList.commentsScraped || 0}</Text>
-              <Text style={styles.statLabel}>Sources</Text>
-            </View>
+
+            {/* Released / ID Status Card */}
+            {(() => {
+              const releasedTracks = tracks.filter(t =>
+                t.verified && !t.isId && t.title?.toLowerCase() !== 'id'
+              );
+              const unreleasedTracks = tracks.filter(t =>
+                t.isId || t.title?.toLowerCase() === 'id' || !t.verified
+              );
+              const releasedCount = releasedTracks.length;
+              const unreleasedCount = unreleasedTracks.length;
+
+              return (
+                <View style={styles.statCardWide}>
+                  <View style={styles.releaseStatusRow}>
+                    <View style={styles.releaseStatusItem}>
+                      <CheckCircle size={10} color="#22C55E" />
+                      <Text style={styles.releaseStatusValue}>{releasedCount}</Text>
+                      <Text style={styles.releaseStatusLabel}>Rel</Text>
+                    </View>
+                    <View style={styles.releaseStatusDivider} />
+                    <View style={styles.releaseStatusItem}>
+                      <Sparkles size={10} color={Colors.dark.primary} />
+                      <Text style={styles.releaseStatusValue}>{unreleasedCount}</Text>
+                      <Text style={styles.releaseStatusLabel}>ID</Text>
+                    </View>
+                  </View>
+                  <View style={styles.releaseStatusBarContainer}>
+                    <View
+                      style={[
+                        styles.releaseStatusBar,
+                        styles.releaseStatusBarReleased,
+                        { flex: releasedCount || 0.1 }
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.releaseStatusBar,
+                        styles.releaseStatusBarUnreleased,
+                        { flex: unreleasedCount || 0.1 }
+                      ]}
+                    />
+                  </View>
+                </View>
+              );
+            })()}
           </View>
+
+          {/* Estimated Missing Tracks Banner */}
+          {estimatedMissingTracks > 0 && (
+            <View style={styles.missingTracksBanner}>
+              <View style={styles.missingTracksIcon}>
+                <AlertCircle size={14} color="#FB923C" />
+              </View>
+              <Text style={styles.missingTracksText}>
+                ~{estimatedMissingTracks} track{estimatedMissingTracks !== 1 ? 's' : ''} estimated missing
+              </Text>
+              {unplacedTracks.length > 0 && (
+                <Text style={styles.missingTracksHint}>
+                  Drag from unplaced to fill
+                </Text>
+              )}
+            </View>
+          )}
 
           {setList.aiProcessed && (setList.commentsScraped || 0) > 0 && (
             <View style={styles.aiInfoBanner}>
@@ -1025,7 +1285,7 @@ export default function SetDetailScreen() {
 
                 return (
                   <Pressable
-                    key={`gap-${item.timestamp}`}
+                    key={item.gapId}
                     style={styles.gapIndicator}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1047,30 +1307,120 @@ export default function SetDetailScreen() {
                 );
               }
 
+              // Timestamp conflict - multiple tracks at similar timestamps
+              if (item.type === 'timestamp-conflict') {
+                const formatTime = (secs: number) => {
+                  const mins = Math.floor(secs / 60);
+                  const s = secs % 60;
+                  return `${mins}:${s.toString().padStart(2, '0')}`;
+                };
+
+                // Check if user has already voted on this conflict
+                const votedTrack = timestampVotes[item.timestamp];
+                if (votedTrack) {
+                  // Show the voted track with pending indicator
+                  const isUnidentified = votedTrack.isId || votedTrack.title?.toLowerCase() === 'id';
+                  return (
+                    <View key={`ts-voted-${item.timestamp}`} style={styles.votedTrackContainer}>
+                      <TrackCard
+                        track={votedTrack}
+                        showTimestamp
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedTrack(votedTrack);
+                          if (votedTrack.timestamp !== undefined) {
+                            setPendingTimestamp(votedTrack.timestamp);
+                          }
+                        }}
+                        onContributorPress={(username) => setSelectedContributor(username)}
+                        onListen={isUnidentified && audioSource ? () => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          setAudioPreviewTrack(votedTrack);
+                        } : undefined}
+                      />
+                      <View style={styles.votedTrackBadge}>
+                        <CheckCircle size={10} color={Colors.dark.primary} />
+                        <Text style={styles.votedTrackBadgeText}>Your vote • Pending</Text>
+                      </View>
+                    </View>
+                  );
+                }
+
+                return (
+                  <View key={`ts-conflict-${item.timestamp}`} style={styles.timestampConflict}>
+                    <View style={styles.timestampConflictHeader}>
+                      <View style={styles.timestampConflictBadge}>
+                        <AlertCircle size={12} color="#FB923C" />
+                        <Text style={styles.timestampConflictBadgeText}>Vote: Which track plays here?</Text>
+                      </View>
+                      <Text style={styles.timestampConflictTime}>~{formatTime(item.timestamp)}</Text>
+                    </View>
+                    <Text style={styles.timestampConflictSubtext}>
+                      These tracks were identified at similar timestamps. Help us determine the correct order.
+                    </Text>
+                    {item.tracks.map((track, trackIndex) => {
+                      return (
+                        <Pressable
+                          key={track.id}
+                          style={styles.timestampConflictOption}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            // Record the vote and collapse the conflict
+                            setTimestampVotes(prev => ({
+                              ...prev,
+                              [item.timestamp]: track,
+                            }));
+                          }}
+                        >
+                          <View style={styles.timestampConflictVoteBtn}>
+                            <Text style={styles.timestampConflictVoteBtnText}>{trackIndex + 1}</Text>
+                          </View>
+                          <View style={styles.timestampConflictTrackInfo}>
+                            <Text style={styles.timestampConflictTrackTitle} numberOfLines={1}>
+                              {track.title || 'Unknown'}
+                            </Text>
+                            <Text style={styles.timestampConflictTrackArtist} numberOfLines={1}>
+                              {track.artist || 'Unknown Artist'}
+                            </Text>
+                          </View>
+                          <Text style={styles.timestampConflictTrackTime}>
+                            {formatTime(track.timestamp || 0)}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                );
+              }
+
               // Regular track
-              const track = item.data;
-              const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
-              return (
-                <TrackCard
-                  key={track.id}
-                  track={track}
-                  showTimestamp
-                  onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    // Show track detail modal
-                    setSelectedTrack(track);
-                    // Store the timestamp for when user clicks play
-                    if (track.timestamp !== undefined) {
-                      setPendingTimestamp(track.timestamp);
-                    }
-                  }}
-                  onContributorPress={(username) => setSelectedContributor(username)}
-                  onListen={isUnidentified && audioSource ? () => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                    setAudioPreviewTrack(track);
-                  } : undefined}
-                />
-              );
+              if (item.type === 'track') {
+                const track = item.data;
+                const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
+                return (
+                  <TrackCard
+                    key={track.id}
+                    track={track}
+                    showTimestamp
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      // Show track detail modal
+                      setSelectedTrack(track);
+                      // Store the timestamp for when user clicks play
+                      if (track.timestamp !== undefined) {
+                        setPendingTimestamp(track.timestamp);
+                      }
+                    }}
+                    onContributorPress={(username) => setSelectedContributor(username)}
+                    onListen={isUnidentified && audioSource ? () => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setAudioPreviewTrack(track);
+                    } : undefined}
+                  />
+                );
+              }
+
+              return null;
             })}
             
             {tracklistItems.length === 0 && unplacedTracks.length === 0 && (
@@ -1533,6 +1883,35 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#22C55E',
   },
+  identifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 6,
+    paddingVertical: 5,
+    paddingRight: 8,
+    paddingLeft: 4,
+    marginTop: 6,
+  },
+  identifiedBadgeIdContainer: {
+    backgroundColor: '#22C55E',
+    borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    marginRight: 1,
+  },
+  identifiedBadgeId: {
+    fontSize: 10,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
+    letterSpacing: -0.3,
+  },
+  identifiedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#22C55E',
+  },
   conflictHintBanner: {
     backgroundColor: 'rgba(206, 138, 75, 0.12)',
     borderRadius: 10,
@@ -1579,6 +1958,193 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.2,
+  },
+  statCardWide: {
+    flex: 1,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+    padding: 8,
+  },
+  releaseStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  releaseStatusItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  releaseStatusDivider: {
+    width: 1,
+    height: 12,
+    backgroundColor: Colors.dark.border,
+    marginHorizontal: 8,
+  },
+  releaseStatusValue: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.dark.text,
+  },
+  releaseStatusLabel: {
+    fontSize: 8,
+    color: Colors.dark.textMuted,
+    textTransform: 'uppercase',
+  },
+  releaseStatusBarContainer: {
+    flexDirection: 'row',
+    height: 3,
+    borderRadius: 1.5,
+    overflow: 'hidden',
+    gap: 1,
+  },
+  releaseStatusBar: {
+    height: '100%',
+    borderRadius: 1.5,
+  },
+  releaseStatusBarReleased: {
+    backgroundColor: '#22C55E',
+  },
+  releaseStatusBarUnreleased: {
+    backgroundColor: Colors.dark.primary,
+  },
+  // Missing tracks banner
+  missingTracksBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+    gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 146, 60, 0.2)',
+  },
+  missingTracksIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  missingTracksText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#FB923C',
+  },
+  missingTracksHint: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+  },
+  // Timestamp conflict styles
+  timestampConflict: {
+    backgroundColor: 'rgba(251, 146, 60, 0.08)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(251, 146, 60, 0.2)',
+  },
+  timestampConflictHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+  timestampConflictBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  timestampConflictBadgeText: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: '#FB923C',
+  },
+  timestampConflictTime: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  timestampConflictSubtext: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    marginBottom: 12,
+    lineHeight: 16,
+  },
+  timestampConflictOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    gap: 10,
+  },
+  timestampConflictVoteBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(251, 146, 60, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 146, 60, 0.3)',
+  },
+  timestampConflictVoteBtnText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FB923C',
+  },
+  timestampConflictTrackInfo: {
+    flex: 1,
+  },
+  timestampConflictTrackTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  timestampConflictTrackArtist: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 1,
+  },
+  timestampConflictTrackTime: {
+    fontSize: 11,
+    fontWeight: '500' as const,
+    color: Colors.dark.textMuted,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  // Voted track with pending indicator
+  votedTrackContainer: {
+    position: 'relative',
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(0, 212, 170, 0.3)',
+    backgroundColor: 'rgba(0, 212, 170, 0.05)',
+  },
+  votedTrackBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 212, 170, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  votedTrackBadgeText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
   },
   aiInfoBanner: {
     flexDirection: 'row',
@@ -1689,20 +2255,23 @@ const styles = StyleSheet.create({
   gapIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 107, 53, 0.08)',
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 8,
+    backgroundColor: 'rgba(255, 107, 53, 0.06)',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 4,
+    marginTop: -2,
     borderWidth: 1,
-    borderColor: 'rgba(255, 107, 53, 0.2)',
+    borderColor: 'rgba(255, 107, 53, 0.15)',
     borderStyle: 'dashed',
+    minHeight: 32,
   },
   gapTimestamp: {
-    width: 45,
-    marginRight: 10,
+    width: 38,
+    marginRight: 8,
   },
   gapTimestampText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
     fontVariant: ['tabular-nums'],
@@ -1711,15 +2280,15 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   gapLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255, 107, 53, 0.3)',
+    backgroundColor: 'rgba(255, 107, 53, 0.25)',
   },
   gapText: {
-    fontSize: 12,
+    fontSize: 10,
     color: Colors.dark.primary,
     fontWeight: '500' as const,
   },
