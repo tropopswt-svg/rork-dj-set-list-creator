@@ -131,13 +131,17 @@ export default async function handler(req, res) {
           confirmedCount++;
         }
 
-        const { error: updateError } = await supabase
+        console.log(`[Update Tracks] Updating track ${bestMatch.id} with:`, JSON.stringify(updateData));
+
+        const { data: updateResult, error: updateError } = await supabase
           .from('set_tracks')
           .update(updateData)
-          .eq('id', bestMatch.id);
+          .eq('id', bestMatch.id)
+          .select();
 
         if (!updateError) {
           console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, ts: ${timestamp}s)`);
+          console.log(`[Update Tracks] Update result:`, JSON.stringify(updateResult));
         } else {
           console.log(`[Update Tracks] Update error:`, updateError);
         }
@@ -187,12 +191,22 @@ export default async function handler(req, res) {
 
     console.log(`[Update Tracks] Complete: ${updatedCount} updated with timestamps, ${confirmedCount} confirmed, ${newTracksAdded} new`);
 
+    // Re-fetch tracks to verify updates actually persisted
+    const { data: verifyTracks } = await supabase
+      .from('set_tracks')
+      .select('id, track_title, source, timestamp_seconds')
+      .eq('set_id', setId)
+      .limit(5);
+
     return res.status(200).json({
       success: true,
       message: `Updated ${updatedCount} tracks with timestamps, confirmed ${confirmedCount} tracks, added ${newTracksAdded} new tracks`,
       updatedCount,
       confirmedCount,
       newTracksAdded,
+      debug: {
+        sampleTracks: verifyTracks,
+      },
     });
 
   } catch (error) {
