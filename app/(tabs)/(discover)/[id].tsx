@@ -26,6 +26,7 @@ import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
 import DraggableTrackCard from '@/components/DraggableTrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
+import FillGapModal from '@/components/FillGapModal';
 import ArtistLink from '@/components/ArtistLink';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
 import ContributorModal from '@/components/ContributorModal';
@@ -51,6 +52,8 @@ export default function SetDetailScreen() {
   const { userId, addPoints } = useUser();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showFillGapModal, setShowFillGapModal] = useState(false);
+  const [fillGapTimestamp, setFillGapTimestamp] = useState(0);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -207,8 +210,21 @@ export default function SetDetailScreen() {
       ? setList.totalDuration + 60 // Add 1 min buffer for tracks that might start near the end
       : 7200; // Default 2 hour max if no duration
 
-    // Filter out tracks that have active conflicts OR have invalid timestamps
+    // Helper: check if a track is a pure ID placeholder (no real info)
+    const isPureIdTrack = (track: Track): boolean => {
+      const title = (track.title || '').toLowerCase().trim();
+      const artist = (track.artist || '').toLowerCase().trim();
+      const isIdTitle = title === 'id' || title === '' || title === 'unknown' || title === 'unknown track';
+      const isIdArtist = artist === 'id' || artist === '' || artist === 'unknown' || artist === 'unknown artist';
+      return isIdTitle && isIdArtist;
+    };
+
+    // Filter out tracks that have active conflicts, invalid timestamps, or are pure ID placeholders
     const tracksWithoutConflicts = sortedTracks.filter(track => {
+      // Skip pure ID/ID tracks - they have no useful info
+      if (isPureIdTrack(track)) {
+        return false;
+      }
       // Skip tracks with conflicts
       if (track.hasConflict && track.conflictId) {
         if (conflicts.some(c => c.id === track.conflictId)) {
@@ -327,6 +343,23 @@ export default function SetDetailScreen() {
         return best;
       });
     };
+
+    // Check for gap at the START of the set (before first track)
+    if (tracksWithoutConflicts.length > 0) {
+      const firstTrackTimestamp = tracksWithoutConflicts[0].timestamp || 0;
+      // If first track starts after gapThreshold (4.5 min), there's likely missing tracks at the start
+      if (firstTrackTimestamp >= gapThreshold) {
+        const estimatedMissing = Math.max(1, Math.round(firstTrackTimestamp / avgTrackDuration));
+        missingCount += estimatedMissing;
+        gapCounter++;
+        items.push({
+          type: 'gap' as const,
+          timestamp: 0,
+          duration: firstTrackTimestamp,
+          gapId: `gap-${gapCounter}`,
+        });
+      }
+    }
 
     // Group tracks that are too close together (timestamp conflicts)
     let i = 0;
@@ -572,6 +605,22 @@ export default function SetDetailScreen() {
     
     // Add track to set via context (persists to storage)
     addTracksToSet(setList.id, [newTrack]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  };
+
+  // Handle selecting a track from FillGapModal
+  const handleFillGapSelectTrack = (track: Track, timestamp: number) => {
+    if (!setList) return;
+
+    // Update the track's timestamp to place it in the gap
+    const updatedTrack: Track = {
+      ...track,
+      timestamp,
+      addedAt: new Date(),
+    };
+
+    // Add track to set via context
+    addTracksToSet(setList.id, [updatedTrack]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
@@ -1378,7 +1427,8 @@ export default function SetDetailScreen() {
                     onLayout={handleGapLayout(item.gapId, item.timestamp)}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setShowAddModal(true);
+                      setFillGapTimestamp(item.timestamp);
+                      setShowFillGapModal(true);
                     }}
                   >
                     <View style={styles.gapTimestamp}>
@@ -1600,6 +1650,15 @@ export default function SetDetailScreen() {
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddTrack}
         totalDuration={setList.totalDuration}
+      />
+
+      <FillGapModal
+        visible={showFillGapModal}
+        timestamp={fillGapTimestamp}
+        unplacedTracks={unplacedTracks}
+        onClose={() => setShowFillGapModal(false)}
+        onSelectTrack={handleFillGapSelectTrack}
+        onAddNew={() => setShowAddModal(true)}
       />
 
       <ContributorModal
@@ -2066,35 +2125,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   statCardWide: {
-    flex: 1,
+    flex: 1.2,
+    minWidth: 85,
     backgroundColor: Colors.dark.surface,
     borderRadius: 10,
     padding: 8,
+    overflow: 'hidden',
   },
   releaseStatusRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 6,
+    flexWrap: 'nowrap',
   },
   releaseStatusItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
   },
   releaseStatusDivider: {
     width: 1,
-    height: 12,
+    height: 10,
     backgroundColor: Colors.dark.border,
-    marginHorizontal: 8,
+    marginHorizontal: 4,
   },
   releaseStatusValue: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.dark.text,
   },
   releaseStatusLabel: {
-    fontSize: 8,
+    fontSize: 7,
     color: Colors.dark.textMuted,
     textTransform: 'uppercase',
   },
