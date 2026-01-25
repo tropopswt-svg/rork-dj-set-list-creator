@@ -80,7 +80,15 @@ export default async function handler(req, res) {
 
     let updatedCount = 0;
     let newTracksAdded = 0;
+    let confirmedCount = 0;
     const matchThreshold = 0.6;
+
+    console.log(`[Update Tracks] Processing ${tracks.length} scraped tracks for set ${setId}`);
+    console.log(`[Update Tracks] First 3 scraped tracks:`, tracks.slice(0, 3).map(t => ({
+      title: t.title,
+      artist: t.artist,
+      timestamp: t.timestamp,
+    })));
 
     // For each scraped track, try to match with existing tracks
     for (const scrapedTrack of tracks) {
@@ -89,7 +97,7 @@ export default async function handler(req, res) {
         ? scrapedTrack.timestamp
         : (scrapedTrack.timestamp_seconds || 0);
 
-      if (!timestamp || timestamp <= 0) continue;
+      console.log(`[Update Tracks] Processing: "${scrapedTrack.title}" by "${scrapedTrack.artist}" at ${timestamp}s`);
 
       let bestMatch = null;
       let bestScore = 0;
@@ -109,41 +117,54 @@ export default async function handler(req, res) {
       }
 
       if (bestMatch) {
-        // Update the existing track with the timestamp
+        // Build update object - always update source, optionally update timestamp
+        const updateData: any = {
+          source: source || bestMatch.source,
+        };
+
+        // Only update timestamp if we have a valid one
+        if (timestamp > 0) {
+          updateData.timestamp_seconds = timestamp;
+          updateData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
+          updatedCount++;
+        } else {
+          confirmedCount++;
+        }
+
         const { error: updateError } = await supabase
           .from('set_tracks')
-          .update({
-            timestamp_seconds: timestamp,
-            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
-            source: source || bestMatch.source,
-          })
+          .update(updateData)
           .eq('id', bestMatch.id);
 
         if (!updateError) {
-          updatedCount++;
-          console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" at ${timestamp}s`);
+          console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, ts: ${timestamp}s)`);
+        } else {
+          console.log(`[Update Tracks] Update error:`, updateError);
         }
       } else {
-        // No match found - this is a new track from comments
-        // Add it to the set
-        const position = existingTracks.length + newTracksAdded + 1;
+        // No match found - only add as new track if we have a timestamp
+        if (timestamp > 0) {
+          const position = existingTracks.length + newTracksAdded + 1;
 
-        const { error: insertError } = await supabase
-          .from('set_tracks')
-          .insert({
-            set_id: setId,
-            artist_name: scrapedTrack.artist || 'Unknown',
-            track_title: scrapedTrack.title || 'Unknown',
-            position: position,
-            timestamp_seconds: timestamp,
-            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
-            source: source || 'youtube',
-            is_id: false,
-          });
+          const { error: insertError } = await supabase
+            .from('set_tracks')
+            .insert({
+              set_id: setId,
+              artist_name: scrapedTrack.artist || 'Unknown',
+              track_title: scrapedTrack.title || 'Unknown',
+              position: position,
+              timestamp_seconds: timestamp,
+              timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
+              source: source || 'youtube',
+              is_id: false,
+            });
 
-        if (!insertError) {
-          newTracksAdded++;
-          console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp}s`);
+          if (!insertError) {
+            newTracksAdded++;
+            console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp}s`);
+          }
+        } else {
+          console.log(`[Update Tracks] No match for "${scrapedTrack.title}" and no timestamp, skipping`);
         }
       }
     }
@@ -164,10 +185,13 @@ export default async function handler(req, res) {
       }
     }
 
+    console.log(`[Update Tracks] Complete: ${updatedCount} updated with timestamps, ${confirmedCount} confirmed, ${newTracksAdded} new`);
+
     return res.status(200).json({
       success: true,
-      message: `Updated ${updatedCount} tracks, added ${newTracksAdded} new tracks`,
+      message: `Updated ${updatedCount} tracks with timestamps, confirmed ${confirmedCount} tracks, added ${newTracksAdded} new tracks`,
       updatedCount,
+      confirmedCount,
       newTracksAdded,
     });
 

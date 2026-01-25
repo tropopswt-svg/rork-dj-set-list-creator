@@ -324,9 +324,16 @@ export default function SetDetailScreen() {
             colors={['transparent', 'rgba(0,0,0,0.7)', Colors.dark.background]}
             style={styles.headerGradient}
           />
-          <Pressable 
+          <Pressable
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={() => {
+              // Try router.back() first, fallback to discover tab if no history
+              if (router.canGoBack()) {
+                router.back();
+              } else {
+                router.replace('/(tabs)/(discover)');
+              }
+            }}
           >
             <ArrowLeft size={24} color={Colors.dark.text} />
           </Pressable>
