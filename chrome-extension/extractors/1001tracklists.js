@@ -75,15 +75,50 @@
         apple_music_url: null,
       };
 
-      // Find all external links on the page
+      // Helper to check if YouTube URL is a valid video (not channel/profile)
+      function isValidYoutubeVideo(url) {
+        // Valid video patterns
+        if (url.includes('youtube.com/watch?v=')) return true;
+        if (url.includes('youtu.be/')) return true;
+        // Invalid patterns (channels, profiles)
+        if (url.includes('/channel/')) return false;
+        if (url.includes('/c/')) return false;
+        if (url.includes('/user/')) return false;
+        if (url.includes('/@')) return false;
+        return false;
+      }
+
+      // Helper to check if SoundCloud URL is a valid track/set (not profile)
+      function isValidSoundcloudTrack(url) {
+        // Profile URLs only have 1 path segment: soundcloud.com/artist
+        // Track/set URLs have 2+: soundcloud.com/artist/track
+        const path = url.replace(/https?:\/\/(www\.)?soundcloud\.com\/?/, '');
+        const segments = path.split('/').filter(s => s.length > 0);
+        return segments.length >= 2;
+      }
+
+      // Helper to check if Mixcloud URL is a valid show (not profile)
+      function isValidMixcloudShow(url) {
+        const path = url.replace(/https?:\/\/(www\.)?mixcloud\.com\/?/, '');
+        const segments = path.split('/').filter(s => s.length > 0);
+        return segments.length >= 2;
+      }
+
+      // Find all external links on the page - only capture valid content URLs
       document.querySelectorAll('a[href]').forEach(link => {
         const href = link.href;
         if (href.includes('soundcloud.com') && !externalLinks.soundcloud_url) {
-          externalLinks.soundcloud_url = href;
+          if (isValidSoundcloudTrack(href)) {
+            externalLinks.soundcloud_url = href;
+          }
         } else if ((href.includes('youtube.com') || href.includes('youtu.be')) && !externalLinks.youtube_url) {
-          externalLinks.youtube_url = href;
+          if (isValidYoutubeVideo(href)) {
+            externalLinks.youtube_url = href;
+          }
         } else if (href.includes('mixcloud.com') && !externalLinks.mixcloud_url) {
-          externalLinks.mixcloud_url = href;
+          if (isValidMixcloudShow(href)) {
+            externalLinks.mixcloud_url = href;
+          }
         } else if (href.includes('spotify.com') && !externalLinks.spotify_url) {
           externalLinks.spotify_url = href;
         } else if (href.includes('music.apple.com') && !externalLinks.apple_music_url) {

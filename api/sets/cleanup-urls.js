@@ -9,16 +9,9 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey);
 }
 
-// Check if a URL is an invalid DJ profile URL (not a tracklist)
-function isInvalidUrl(url) {
+// Check if a URL is invalid (artist profile instead of actual content)
+function isInvalidTracklistUrl(url) {
   if (!url) return false;
-
-  // DJ profile URLs that aren't useful for playback/analysis
-  const invalidPatterns = [
-    /1001tracklists\.com\/dj\//,  // DJ profile pages
-    /1001tracklists\.com\/artist\//,  // Artist pages
-    /1001tracklists\.com\/label\//,  // Label pages
-  ];
 
   // Valid tracklist URL pattern
   const validTracklistPattern = /1001tracklists\.com\/tracklist\//;
@@ -29,6 +22,52 @@ function isInvalidUrl(url) {
   }
 
   return false;
+}
+
+// Check if YouTube URL is invalid (channel/profile instead of video)
+function isInvalidYoutubeUrl(url) {
+  if (!url) return false;
+
+  // Invalid YouTube URLs (channels, profiles, playlists without specific video)
+  const invalidPatterns = [
+    /youtube\.com\/channel\//,  // Channel pages
+    /youtube\.com\/c\//,        // Custom channel URLs
+    /youtube\.com\/user\//,     // User pages
+    /youtube\.com\/@/,          // Handle-based profiles
+  ];
+
+  // Valid YouTube video URL patterns
+  const validPatterns = [
+    /youtube\.com\/watch\?v=/,  // Standard video
+    /youtu\.be\//,              // Short URL
+  ];
+
+  if (url.includes('youtube.com') || url.includes('youtu.be')) {
+    // Check if it matches any valid pattern
+    for (const pattern of validPatterns) {
+      if (pattern.test(url)) return false;
+    }
+    // If no valid pattern matched, it's invalid
+    return true;
+  }
+
+  return false;
+}
+
+// Check if SoundCloud URL is invalid (profile instead of track/set)
+function isInvalidSoundcloudUrl(url) {
+  if (!url) return false;
+
+  if (!url.includes('soundcloud.com')) return false;
+
+  // Valid SoundCloud URLs have at least 2 path segments: /artist/track
+  // Profile URLs only have 1: /artist
+  const path = url.replace(/https?:\/\/(www\.)?soundcloud\.com\/?/, '');
+  const segments = path.split('/').filter(s => s.length > 0);
+
+  // If only 1 segment, it's a profile page (invalid)
+  // If 2+ segments, it's likely a track/set page (valid)
+  return segments.length < 2;
 }
 
 export default async function handler(req, res) {
@@ -49,31 +88,44 @@ export default async function handler(req, res) {
       const { data: sets, error } = await supabase
         .from('sets')
         .select('id, title, dj_name, tracklist_url, youtube_url, soundcloud_url')
-        .not('tracklist_url', 'is', null)
         .order('created_at', { ascending: false });
 
       if (error) {
         return res.status(500).json({ error: error.message });
       }
 
-      const invalidSets = sets.filter(s => isInvalidUrl(s.tracklist_url));
-      const validSets = sets.filter(s => !isInvalidUrl(s.tracklist_url));
+      // Check each set for invalid URLs
+      const setsWithIssues = sets.map(s => ({
+        ...s,
+        invalid_tracklist: isInvalidTracklistUrl(s.tracklist_url),
+        invalid_youtube: isInvalidYoutubeUrl(s.youtube_url),
+        invalid_soundcloud: isInvalidSoundcloudUrl(s.soundcloud_url),
+      })).filter(s => s.invalid_tracklist || s.invalid_youtube || s.invalid_soundcloud);
+
+      const summary = {
+        totalSets: sets.length,
+        setsWithInvalidUrls: setsWithIssues.length,
+        invalidTracklistUrls: sets.filter(s => isInvalidTracklistUrl(s.tracklist_url)).length,
+        invalidYoutubeUrls: sets.filter(s => isInvalidYoutubeUrl(s.youtube_url)).length,
+        invalidSoundcloudUrls: sets.filter(s => isInvalidSoundcloudUrl(s.soundcloud_url)).length,
+      };
 
       return res.status(200).json({
         success: true,
         preview: true,
-        summary: {
-          totalSets: sets.length,
-          invalidUrls: invalidSets.length,
-          validUrls: validSets.length,
-        },
-        invalidSets: invalidSets.map(s => ({
+        summary,
+        setsWithIssues: setsWithIssues.map(s => ({
           id: s.id,
           title: s.title,
           dj_name: s.dj_name,
-          tracklist_url: s.tracklist_url,
-          has_youtube: !!s.youtube_url,
-          has_soundcloud: !!s.soundcloud_url,
+          tracklist_url: s.invalid_tracklist ? s.tracklist_url : null,
+          youtube_url: s.invalid_youtube ? s.youtube_url : null,
+          soundcloud_url: s.invalid_soundcloud ? s.soundcloud_url : null,
+          will_clear: {
+            tracklist: s.invalid_tracklist,
+            youtube: s.invalid_youtube,
+            soundcloud: s.invalid_soundcloud,
+          },
         })),
         message: 'POST to this endpoint to clean up invalid URLs',
       });
@@ -85,39 +137,60 @@ export default async function handler(req, res) {
   // POST: Actually clean up the invalid URLs
   if (req.method === 'POST') {
     try {
-      // Get all sets with tracklist_url
+      // Get all sets
       const { data: sets, error } = await supabase
         .from('sets')
-        .select('id, tracklist_url')
-        .not('tracklist_url', 'is', null);
+        .select('id, tracklist_url, youtube_url, soundcloud_url');
 
       if (error) {
         return res.status(500).json({ error: error.message });
       }
 
-      const invalidSets = sets.filter(s => isInvalidUrl(s.tracklist_url));
-      let cleaned = 0;
-      const errors = [];
+      const results = {
+        tracklist_cleaned: 0,
+        youtube_cleaned: 0,
+        soundcloud_cleaned: 0,
+        errors: [],
+      };
 
-      for (const set of invalidSets) {
-        const { error: updateError } = await supabase
-          .from('sets')
-          .update({ tracklist_url: null })
-          .eq('id', set.id);
+      for (const set of sets) {
+        const updates = {};
 
-        if (updateError) {
-          errors.push({ id: set.id, error: updateError.message });
-        } else {
-          cleaned++;
+        if (isInvalidTracklistUrl(set.tracklist_url)) {
+          updates.tracklist_url = null;
+          results.tracklist_cleaned++;
+        }
+
+        if (isInvalidYoutubeUrl(set.youtube_url)) {
+          updates.youtube_url = null;
+          results.youtube_cleaned++;
+        }
+
+        if (isInvalidSoundcloudUrl(set.soundcloud_url)) {
+          updates.soundcloud_url = null;
+          results.soundcloud_cleaned++;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          const { error: updateError } = await supabase
+            .from('sets')
+            .update(updates)
+            .eq('id', set.id);
+
+          if (updateError) {
+            results.errors.push({ id: set.id, error: updateError.message });
+          }
         }
       }
 
+      const totalCleaned = results.tracklist_cleaned + results.youtube_cleaned + results.soundcloud_cleaned;
+
       return res.status(200).json({
         success: true,
-        cleaned,
-        total: invalidSets.length,
-        errors: errors.length > 0 ? errors : undefined,
-        message: `Cleaned ${cleaned} invalid URLs from sets`,
+        results,
+        totalCleaned,
+        errors: results.errors.length > 0 ? results.errors : undefined,
+        message: `Cleaned ${totalCleaned} invalid URLs (${results.tracklist_cleaned} tracklist, ${results.youtube_cleaned} YouTube, ${results.soundcloud_cleaned} SoundCloud)`,
       });
     } catch (error) {
       return res.status(500).json({ error: error.message });
