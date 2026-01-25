@@ -152,7 +152,7 @@ export default function AddSourceModal({
             <>
               <Text style={styles.title}>Add {getPlatformName()} Link</Text>
               <Text style={styles.subtitle}>
-                Merge track identifications from {getPlatformName()} into "{setName}"
+                Merge track identifications from {getPlatformName()} into &quot;{setName}&quot;
               </Text>
 
               <TextInput
@@ -169,7 +169,7 @@ export default function AddSourceModal({
               <View style={styles.infoBox}>
                 <Sparkles size={16} color={Colors.dark.primary} />
                 <Text style={styles.infoText}>
-                  We'll scan comments for additional track IDs and merge them with existing tracks. 
+                  We&apos;ll scan comments for additional track IDs and merge them with existing tracks.
                   Earn +25 points for contributing!
                 </Text>
               </View>

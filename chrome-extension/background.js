@@ -1,7 +1,8 @@
 // IDentified - Background Service Worker
 // Handles communication between content scripts and the API
 
-const DEFAULT_API_URL = 'https://rork-dj-set-list-creator-3um4.vercel.app';
+// Update this to your Vercel deployment URL
+const DEFAULT_API_URL = 'https://rork-dj-set-list-creator.vercel.app';
 
 // Cache the API URL
 let cachedApiUrl = null;
@@ -18,15 +19,20 @@ async function getApiUrl() {
 // Send scraped data to the API
 async function sendToApi(data) {
   const apiUrl = await getApiUrl();
-  
+
   console.log('[IDentified] Sending to API:', apiUrl);
-  
+  console.log('[IDentified] Payload:', {
+    source: data.source,
+    tracksCount: data.tracks?.length,
+    artistsCount: data.artists?.length,
+  });
+
   // Add chrome extension flag
   const payload = {
     ...data,
     chromeExtension: true,
   };
-  
+
   try {
     const response = await fetch(`${apiUrl}/api/import`, {
       method: 'POST',
@@ -35,25 +41,42 @@ async function sendToApi(data) {
       },
       body: JSON.stringify(payload),
     });
-    
+
+    // Get response body regardless of status
+    let responseBody;
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      responseBody = await response.json();
+    } else {
+      responseBody = { error: await response.text() };
+    }
+
+    console.log('[IDentified] API Response Status:', response.status);
+    console.log('[IDentified] API Response Body:', responseBody);
+
     if (!response.ok) {
-      let errorMessage = `${response.status} ${response.statusText}`;
-      try {
-        const errorData = await response.json();
-        console.error('[IDentified] API Error Response:', errorData);
-        errorMessage = errorData.error || errorData.message || errorMessage;
-      } catch (e) {
-        const errorText = await response.text();
-        console.error('[IDentified] API Error Text:', errorText);
+      const errorMessage = responseBody.error || responseBody.message || `${response.status} ${response.statusText}`;
+
+      // Provide helpful error messages
+      if (response.status === 500 && errorMessage.includes('Database not configured')) {
+        throw new Error('Database not configured on server. Please add Supabase credentials to Vercel.');
       }
+      if (response.status === 500 && errorMessage.includes('Supabase')) {
+        throw new Error('Supabase connection error. Check your environment variables on Vercel.');
+      }
+
       throw new Error(errorMessage);
     }
-    
-    const result = await response.json();
-    console.log('[IDentified] API Response:', result);
-    return result;
+
+    return responseBody;
   } catch (error) {
     console.error('[IDentified] API Error:', error);
+
+    // Enhance network errors
+    if (error.message === 'Failed to fetch') {
+      throw new Error('Could not connect to API. Check if your Vercel deployment is live.');
+    }
+
     throw error;
   }
 }
@@ -93,8 +116,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Context menu for quick scraping (optional)
+// Clear cache and set correct URL on install/update
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[IDentified] Extension installed');
+  console.log('[IDentified] Extension installed/updated');
   console.log('[IDentified] Default API URL:', DEFAULT_API_URL);
+
+  // Clear any cached old URL and force use of DEFAULT_API_URL
+  cachedApiUrl = null;
+  chrome.storage.sync.set({ apiUrl: DEFAULT_API_URL });
+  console.log('[IDentified] Reset API URL to:', DEFAULT_API_URL);
 });

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IDentified - 1001Tracklists Set Scraper</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #121212;
+      color: #fff;
+      padding: 40px;
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+    h1 { color: #FF6B35; margin-bottom: 10px; }
+    h2 { color: #FF8C42; margin-top: 30px; font-size: 18px; }
+    p { color: #888; margin-bottom: 20px; }
+
+    .instructions {
+      background: rgba(255, 107, 53, 0.1);
+      border: 1px solid #FF6B35;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .instructions h3 { margin-top: 0; color: #FF6B35; }
+    .instructions ol { margin: 0; padding-left: 20px; }
+    .instructions li { margin: 8px 0; color: #ccc; }
+    .instructions code {
+      background: #2a2a2a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: #FF8C42;
+    }
+
+    .dj-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+      margin-bottom: 30px;
+    }
+
+    .dj-card {
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 16px;
+      transition: all 0.2s;
+    }
+    .dj-card:hover {
+      background: #2a2a2a;
+      transform: translateY(-2px);
+    }
+
+    .dj-name {
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .dj-links {
+      display: flex;
+      gap: 8px;
+    }
+
+    .dj-link {
+      display: inline-block;
+      padding: 6px 12px;
+      background: #333;
+      color: #FF8C42;
+      text-decoration: none;
+      border-radius: 6px;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .dj-link:hover {
+      background: #FF6B35;
+      color: #fff;
+    }
+    .dj-link.primary {
+      background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+      color: #fff;
+    }
+
+    .workflow {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .workflow h3 { color: #FF6B35; margin-bottom: 15px; }
+    .workflow-step {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      align-items: flex-start;
+    }
+    .step-num {
+      background: #FF6B35;
+      color: #fff;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .step-text {
+      color: #ccc;
+      line-height: 1.5;
+    }
+    .step-text strong { color: #fff; }
+
+    .quick-open {
+      background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    .quick-open:hover { opacity: 0.9; }
+
+    .stats {
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 30px;
+    }
+    .stat-item {
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 24px;
+      font-weight: 700;
+      color: #FF6B35;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>IDentified - 1001Tracklists Set Scraper</h1>
+  <p>Scrape DJ sets from 1001Tracklists to build your tracklist database</p>
+
+  <div class="stats" id="stats">
+    <div class="stat-item">
+      <div class="stat-num" id="setCount">-</div>
+      <div class="stat-label">Sets Saved</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="trackCount">-</div>
+      <div class="stat-label">Tracks</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num" id="artistCount">-</div>
+      <div class="stat-label">Artists</div>
+    </div>
+  </div>
+
+  <div class="workflow">
+    <h3>How to Bulk Scrape Sets</h3>
+    <div class="workflow-step">
+      <div class="step-num">1</div>
+      <div class="step-text"><strong>Click a DJ's "Sets" button</strong> to open their 1001Tracklists page</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-num">2</div>
+      <div class="step-text"><strong>Cmd+Click (Mac) or Ctrl+Click (Win)</strong> on individual set links to open them in new tabs</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-num">3</div>
+      <div class="step-text"><strong>Wait for the notification</strong> on each tab (3-5 seconds), then close it</div>
+    </div>
+    <div class="workflow-step">
+      <div class="step-num">4</div>
+      <div class="step-text"><strong>Repeat!</strong> Each set you scrape adds to your database with full tracklist + timestamps</div>
+    </div>
+  </div>
+
+  <h2>Tech House / House DJs</h2>
+  <div class="dj-grid">
+    <div class="dj-card">
+      <div class="dj-name">Chris Stussy</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/chris-stussy/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Traumer</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/traumer/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">East End Dubs</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/east-end-dubs/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">ANOTR</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/anotr/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Josh Baker</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/josh-baker/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Max Dean</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/max-dean/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Rossi.</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/rossi/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Michael Bibi</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/michael-bibi/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">PAWSA</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/pawsa/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Dennis Cruz</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/dennis-cruz/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Ben Sterling</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/ben-sterling/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Archie Hamilton</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/archie-hamilton/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">DJOKO</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/djoko/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Toman</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/toman/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Kolter</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/kolter/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Obskür</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/obskur/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+  </div>
+
+  <h2>More Popular DJs</h2>
+  <div class="dj-grid">
+    <div class="dj-card">
+      <div class="dj-name">Fisher</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/fisher/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Adam Beyer</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/adam-beyer/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Carl Cox</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/carl-cox/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Charlotte de Witte</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/charlotte-de-witte/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Amelie Lens</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/amelie-lens/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Tale Of Us</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/tale-of-us/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Patrick Mason</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/patrick-mason/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Loco Dice</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/loco-dice/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Marco Carola</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/marco-carola/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Jamie Jones</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/jamie-jones/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Seth Troxler</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/seth-troxler/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+    <div class="dj-card">
+      <div class="dj-name">Hot Since 82</div>
+      <div class="dj-links">
+        <a href="https://www.1001tracklists.com/dj/hot-since-82/index.html" target="_blank" class="dj-link primary">Sets</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Fetch stats from API
+    async function loadStats() {
+      try {
+        const response = await fetch('https://rork-dj-set-list-creator.vercel.app/api/stats');
+        const data = await response.json();
+        if (data.success) {
+          document.getElementById('setCount').textContent = (data.stats.totalSets || 0).toLocaleString();
+          document.getElementById('trackCount').textContent = data.stats.totalTracks.toLocaleString();
+          document.getElementById('artistCount').textContent = data.stats.totalArtists.toLocaleString();
+        }
+      } catch (e) {
+        console.error('Failed to load stats:', e);
+      }
+    }
+
+    // Load stats on page load
+    loadStats();
+    // Refresh every 30 seconds
+    setInterval(loadStats, 30000);
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, MessageSquare } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, MessageSquare, AlertCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -91,7 +91,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
   const getPlatformIcons = () => {
     const platforms = setList.sourceLinks.map(l => l.platform);
     const unique = [...new Set(platforms)];
-    
+
     return unique.slice(0, 3).map((platform, index) => {
       const iconProps = { size: 12 };
       switch (platform) {
@@ -106,6 +106,11 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
       }
     });
   };
+
+  // Check if set needs analyzable sources (YouTube or SoundCloud)
+  const needsSource = !setList.sourceLinks.some(
+    l => l.platform === 'youtube' || l.platform === 'soundcloud'
+  );
 
   return (
     <Pressable 
@@ -148,7 +153,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
               )}
               <View style={styles.tracksStat}>
                 <Music size={11} color={Colors.dark.textMuted} />
-                <Text style={styles.statText}>{setList.tracksIdentified || setList.tracks.length}</Text>
+                <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
               </View>
               {setList.commentsScraped && setList.commentsScraped > 0 && (
                 <View style={styles.tracksStat}>
@@ -159,7 +164,14 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
             </View>
             <View style={styles.metaRow}>
               <View style={styles.platforms}>
-                {getPlatformIcons()}
+                {needsSource ? (
+                  <View style={styles.needsSourceBadge}>
+                    <AlertCircle size={10} color={Colors.dark.primary} />
+                    <Text style={styles.needsSourceText}>Add source</Text>
+                  </View>
+                ) : (
+                  getPlatformIcons()
+                )}
               </View>
               <Text style={styles.date}>{formatDate(setList.date)}</Text>
             </View>
@@ -293,5 +305,19 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: Colors.dark.textMuted,
     fontWeight: '500' as const,
+  },
+  needsSourceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  needsSourceText: {
+    fontSize: 9,
+    color: Colors.dark.primary,
+    fontWeight: '600' as const,
   },
 });

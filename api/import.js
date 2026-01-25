@@ -336,7 +336,44 @@ function isValidTrackPart(str) {
   return true;
 }
 
-function parseComments(comments) {
+/**
+ * Check if two names are similar (for DJ name filtering)
+ * Returns true if names are similar enough to be considered the same person
+ */
+function areNamesSimilar(name1, name2) {
+  if (!name1 || !name2) return false;
+
+  // Normalize both names
+  const normalize = (n) => n.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const n1 = normalize(name1);
+  const n2 = normalize(name2);
+
+  // Exact match
+  if (n1 === n2) return true;
+
+  // One contains the other
+  if (n1.includes(n2) || n2.includes(n1)) return true;
+
+  // Check if first/last word matches (e.g., "Franky Rizardo" vs "Franky" or "Rizardo")
+  const words1 = n1.split(' ');
+  const words2 = n2.split(' ');
+
+  for (const w1 of words1) {
+    if (w1.length >= 4) { // Only check words with 4+ chars
+      for (const w2 of words2) {
+        if (w2.length >= 4 && w1 === w2) return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function parseComments(comments, djName = null) {
   const tracks = [];
   const seen = new Set();
 
@@ -361,8 +398,24 @@ function parseComments(comments) {
         const ts = lineTs[0];
         let afterText = line.slice(ts.position + ts.formatted.length).trim();
         afterText = afterText.replace(/^[\s|:\-–—.]+/, '').trim();
-        const info = parseTrackInfo(afterText);
+        let info = parseTrackInfo(afterText);
+
         if (info) {
+          // If the parsed "artist" is actually the DJ name, it's likely the track title
+          // In DJ set tracklists, people often write "DJ Name - Track Title" meaning the DJ played it
+          if (djName && areNamesSimilar(info.artist, djName)) {
+            // The "title" field likely contains the real track info
+            // Try to re-parse the title to extract actual artist - track
+            const reparsed = parseTrackInfo(info.title);
+            if (reparsed) {
+              // Found nested artist - title in what we thought was just title
+              info = reparsed;
+            } else {
+              // Just the track title, artist unknown
+              info = { title: info.title, artist: 'Unknown Artist' };
+            }
+          }
+
           const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
           if (!seen.has(key)) {
             seen.add(key);
@@ -379,7 +432,7 @@ function parseComments(comments) {
   return tracks.sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function parseDescription(description) {
+function parseDescription(description, djName = null) {
   const lines = cleanText(description).split(/[\n\r]+/);
   const tracks = [];
   const seen = new Set();
@@ -389,8 +442,19 @@ function parseDescription(description) {
       const ts = timestamps[0];
       let afterText = line.slice(ts.position + ts.formatted.length).trim();
       afterText = afterText.replace(/^[\s|:\-–—.]+/, '').trim();
-      const info = parseTrackInfo(afterText);
+      let info = parseTrackInfo(afterText);
+
       if (info) {
+        // If the parsed "artist" is actually the DJ name, fix it
+        if (djName && areNamesSimilar(info.artist, djName)) {
+          const reparsed = parseTrackInfo(info.title);
+          if (reparsed) {
+            info = reparsed;
+          } else {
+            info = { title: info.title, artist: 'Unknown Artist' };
+          }
+        }
+
         const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -1259,13 +1323,15 @@ async function importFromYouTube(url, apiKey) {
     fetchVideoComments(videoId, apiKey, 500),
   ]);
 
-  const descTracks = parseDescription(video.description);
-  const commentTracks = parseComments(comments);
+  // Extract DJ/artist name from video title FIRST so we can filter it from tracks
+  const { name, artist } = parseArtistFromTitle(video.title);
+  const djName = artist !== 'Unknown Artist' ? artist : video.channelTitle;
+
+  const descTracks = parseDescription(video.description, djName);
+  const commentTracks = parseComments(comments, djName);
 
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
-  
-  const { name, artist } = parseArtistFromTitle(video.title);
   const setId = `yt-${video.id}-${Date.now()}`;
   
   // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
@@ -1279,7 +1345,7 @@ async function importFromYouTube(url, apiKey) {
   const setList = {
     id: setId,
     name,
-    artist: artist !== 'Unknown Artist' ? artist : video.channelTitle,
+    artist: djName,
     date: video.publishedAt,
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,
@@ -2120,6 +2186,8 @@ async function handleChromeExtensionImport(req, res, data) {
     artistsSkipped: 0,
     tracksCreated: 0,
     tracksSkipped: 0,
+    setCreated: false,
+    setId: null,
   };
   
   // Process artists
@@ -2193,8 +2261,142 @@ async function handleChromeExtensionImport(req, res, data) {
     }
   }
   
+  // Process set info for 1001tracklists
+  if (data.source === '1001tracklists' && data.setInfo) {
+    try {
+      const setInfo = data.setInfo;
+      const setSlug = generateSlug(`${setInfo.djName}-${setInfo.title}`.substring(0, 100));
+
+      // Only save tracklist_url if it's an actual tracklist page URL (not DJ profile)
+      // Valid: https://www.1001tracklists.com/tracklist/abc123/
+      // Invalid: https://www.1001tracklists.com/dj/chris-stussy/
+      const isValidTracklistUrl = data.sourceUrl &&
+        data.sourceUrl.includes('/tracklist/') &&
+        !data.sourceUrl.includes('/dj/');
+
+      const tracklistUrl = isValidTracklistUrl ? data.sourceUrl : null;
+
+      // Check if set already exists (by tracklist_url if we have one, or by slug)
+      let existingSet = null;
+      if (tracklistUrl) {
+        const { data: setByUrl } = await supabase
+          .from('sets')
+          .select('id')
+          .eq('tracklist_url', tracklistUrl)
+          .single();
+        existingSet = setByUrl;
+      }
+
+      // Also check by slug if no URL match
+      if (!existingSet) {
+        const { data: setBySlug } = await supabase
+          .from('sets')
+          .select('id')
+          .eq('slug', setSlug)
+          .single();
+        existingSet = setBySlug;
+      }
+
+      if (!existingSet) {
+        // Find DJ's artist ID
+        let djId = null;
+        if (setInfo.djName && setInfo.djName !== 'Unknown Artist') {
+          const { data: djData } = await supabase
+            .from('artists')
+            .select('id')
+            .eq('slug', generateSlug(setInfo.djName))
+            .single();
+          if (djData) djId = djData.id;
+        }
+
+        // Parse date
+        let eventDate = null;
+        if (setInfo.date) {
+          // Try to parse various date formats
+          const dateStr = setInfo.date;
+          const dateMatch = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/) ||
+                           dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+          if (dateMatch) {
+            if (dateMatch[0].includes('-')) {
+              eventDate = dateMatch[0];
+            } else {
+              eventDate = `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}`;
+            }
+          }
+        }
+
+        // Create the set
+        const { data: newSet, error: setError } = await supabase
+          .from('sets')
+          .insert({
+            title: setInfo.title,
+            slug: setSlug,
+            dj_name: setInfo.djName,
+            dj_id: djId,
+            venue: setInfo.venue || null,
+            event_name: setInfo.eventName || null,
+            event_date: eventDate,
+            duration_seconds: setInfo.durationSeconds || null,
+            track_count: data.tracks?.length || 0,
+            tracklist_url: tracklistUrl,
+            soundcloud_url: setInfo.soundcloud_url || null,
+            youtube_url: setInfo.youtube_url || null,
+            mixcloud_url: setInfo.mixcloud_url || null,
+            spotify_url: setInfo.spotify_url || null,
+            apple_music_url: setInfo.apple_music_url || null,
+            source: '1001tracklists',
+          })
+          .select('id')
+          .single();
+
+        if (setError) {
+          console.error('[Chrome Import] Set creation error:', setError.message);
+        } else if (newSet) {
+          results.setCreated = true;
+          results.setId = newSet.id;
+
+          // Create set_tracks entries
+          for (const track of data.tracks || []) {
+            // Find track ID if it exists
+            let trackId = null;
+            const titleNormalized = normalizeText(track.title);
+            const artistName = track.artist || 'Unknown';
+
+            const { data: trackData } = await supabase
+              .from('tracks')
+              .select('id')
+              .eq('title_normalized', titleNormalized)
+              .eq('artist_name', artistName)
+              .single();
+
+            if (trackData) trackId = trackData.id;
+
+            // Insert set_track
+            await supabase.from('set_tracks').insert({
+              set_id: newSet.id,
+              track_id: trackId,
+              artist_name: artistName,
+              track_title: track.title,
+              position: track.position || 0,
+              timestamp_seconds: track.timestamp_seconds || null,
+              timestamp_str: track.timestamp_str || null,
+              is_id: track.is_unreleased || track.title?.toLowerCase() === 'id',
+            });
+          }
+
+          console.log(`[Chrome Import] Created set "${setInfo.title}" with ${data.tracks?.length || 0} tracks`);
+        }
+      } else {
+        console.log('[Chrome Import] Set already exists:', tracklistUrl || setSlug);
+        results.setId = existingSet.id;
+      }
+    } catch (setErr) {
+      console.error('[Chrome Import] Set processing error:', setErr.message);
+    }
+  }
+
   console.log('[Chrome Import] Results:', results);
-  
+
   return res.status(200).json({
     success: true,
     source: data.source,

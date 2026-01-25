@@ -194,7 +194,7 @@ export default function ArtistAutocomplete({
             >
               <Plus size={14} color={Colors.dark.textMuted} />
               <Text style={styles.addNewText}>
-                Use "{value}" as new artist
+                Use &quot;{value}&quot; as new artist
               </Text>
             </Pressable>
           )}

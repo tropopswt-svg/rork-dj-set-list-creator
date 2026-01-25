@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>IDentified - Bulk Scrape URLs</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #121212;
+      color: #fff;
+      padding: 40px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    h1 { color: #FF6B35; margin-bottom: 10px; }
+    h2 { color: #FF8C42; margin-top: 30px; font-size: 18px; }
+    p { color: #888; margin-bottom: 20px; }
+    .url-group { margin-bottom: 30px; }
+    .url-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    a {
+      display: inline-block;
+      padding: 10px 16px;
+      background: #1e1e1e;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 8px;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    a:hover {
+      background: #FF6B35;
+      transform: translateY(-2px);
+    }
+    .instructions {
+      background: rgba(255, 107, 53, 0.1);
+      border: 1px solid #FF6B35;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 30px;
+    }
+    .instructions h3 { margin-top: 0; color: #FF6B35; }
+    .instructions ol { margin: 0; padding-left: 20px; }
+    .instructions li { margin: 8px 0; color: #ccc; }
+    .open-all {
+      background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    .open-all:hover { opacity: 0.9; }
+    .btn-group { margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>IDentified - Bulk Scrape URLs</h1>
+  <p>Click links to open pages, or use "Open All" buttons. With auto-scrape enabled, tracks will be added automatically!</p>
+
+  <div class="instructions">
+    <h3>Instructions</h3>
+    <ol>
+      <li>Enable <strong>Auto-scrape mode</strong> in the extension popup</li>
+      <li>Click "Open All" for a category (opens ~10 tabs)</li>
+      <li>Wait for each page to auto-scrape (you'll see notifications)</li>
+      <li>Close the tabs and move to the next category</li>
+    </ol>
+  </div>
+
+  <div class="url-group">
+    <h2>Beatport - Top 100 Charts (Most Popular)</h2>
+    <div class="btn-group">
+      <button class="open-all" onclick="openAll('top100')">Open All Top 100s</button>
+    </div>
+    <div class="url-list" id="top100">
+      <a href="https://www.beatport.com/top-100" target="_blank">Overall Top 100</a>
+      <a href="https://www.beatport.com/genre/tech-house/11/top-100" target="_blank">Tech House</a>
+      <a href="https://www.beatport.com/genre/house/5/top-100" target="_blank">House</a>
+      <a href="https://www.beatport.com/genre/techno-peak-time-driving/6/top-100" target="_blank">Techno Peak Time</a>
+      <a href="https://www.beatport.com/genre/melodic-house-techno/90/top-100" target="_blank">Melodic House & Techno</a>
+      <a href="https://www.beatport.com/genre/minimal-deep-tech/14/top-100" target="_blank">Minimal / Deep Tech</a>
+      <a href="https://www.beatport.com/genre/afro-house/89/top-100" target="_blank">Afro House</a>
+      <a href="https://www.beatport.com/genre/progressive-house/15/top-100" target="_blank">Progressive House</a>
+      <a href="https://www.beatport.com/genre/deep-house/12/top-100" target="_blank">Deep House</a>
+      <a href="https://www.beatport.com/genre/organic-house-downtempo/93/top-100" target="_blank">Organic House</a>
+    </div>
+  </div>
+
+  <div class="url-group">
+    <h2>Beatport - Hype Charts (Emerging Tracks)</h2>
+    <div class="btn-group">
+      <button class="open-all" onclick="openAll('hype')">Open All Hype Charts</button>
+    </div>
+    <div class="url-list" id="hype">
+      <a href="https://www.beatport.com/genre/tech-house/11/hype-100" target="_blank">Tech House Hype</a>
+      <a href="https://www.beatport.com/genre/house/5/hype-100" target="_blank">House Hype</a>
+      <a href="https://www.beatport.com/genre/techno-peak-time-driving/6/hype-100" target="_blank">Techno Hype</a>
+      <a href="https://www.beatport.com/genre/melodic-house-techno/90/hype-100" target="_blank">Melodic Hype</a>
+      <a href="https://www.beatport.com/genre/minimal-deep-tech/14/hype-100" target="_blank">Minimal Hype</a>
+      <a href="https://www.beatport.com/genre/afro-house/89/hype-100" target="_blank">Afro House Hype</a>
+    </div>
+  </div>
+
+  <div class="url-group">
+    <h2>Beatport - Popular Labels</h2>
+    <div class="btn-group">
+      <button class="open-all" onclick="openAll('labels')">Open All Labels</button>
+    </div>
+    <div class="url-list" id="labels">
+      <a href="https://www.beatport.com/label/drumcode/1/tracks" target="_blank">Drumcode</a>
+      <a href="https://www.beatport.com/label/defected-records/27/tracks" target="_blank">Defected</a>
+      <a href="https://www.beatport.com/label/toolroom/65/tracks" target="_blank">Toolroom</a>
+      <a href="https://www.beatport.com/label/anjunadeep/3323/tracks" target="_blank">Anjunadeep</a>
+      <a href="https://www.beatport.com/label/dirtybird/1618/tracks" target="_blank">Dirtybird</a>
+      <a href="https://www.beatport.com/label/afterlife/62498/tracks" target="_blank">Afterlife</a>
+      <a href="https://www.beatport.com/label/truesoul/3098/tracks" target="_blank">Truesoul</a>
+      <a href="https://www.beatport.com/label/hot-creations/17tried678/tracks" target="_blank">Hot Creations</a>
+      <a href="https://www.beatport.com/label/kompakt/163/tracks" target="_blank">Kompakt</a>
+      <a href="https://www.beatport.com/label/innervisions/5846/tracks" target="_blank">Innervisions</a>
+    </div>
+  </div>
+
+  <div class="url-group">
+    <h2>1001Tracklists - Top DJs</h2>
+    <div class="btn-group">
+      <button class="open-all" onclick="openAll('1001djs')">Open All DJ Pages</button>
+    </div>
+    <div class="url-list" id="1001djs">
+      <a href="https://www.1001tracklists.com/dj/fisher/index.html" target="_blank">FISHER</a>
+      <a href="https://www.1001tracklists.com/dj/adam-beyer/index.html" target="_blank">Adam Beyer</a>
+      <a href="https://www.1001tracklists.com/dj/carl-cox/index.html" target="_blank">Carl Cox</a>
+      <a href="https://www.1001tracklists.com/dj/charlotte-de-witte/index.html" target="_blank">Charlotte de Witte</a>
+      <a href="https://www.1001tracklists.com/dj/boris-brejcha/index.html" target="_blank">Boris Brejcha</a>
+      <a href="https://www.1001tracklists.com/dj/amelie-lens/index.html" target="_blank">Amelie Lens</a>
+      <a href="https://www.1001tracklists.com/dj/tale-of-us/index.html" target="_blank">Tale Of Us</a>
+      <a href="https://www.1001tracklists.com/dj/chris-stussy/index.html" target="_blank">Chris Stussy</a>
+    </div>
+  </div>
+
+  <script>
+    function openAll(groupId) {
+      const links = document.querySelectorAll(`#${groupId} a`);
+      if (confirm(`Open ${links.length} tabs? Make sure auto-scrape is enabled!`)) {
+        links.forEach((link, i) => {
+          setTimeout(() => window.open(link.href, '_blank'), i * 500);
+        });
+      }
+    }
+  </script>
+</body>
+</html>

@@ -229,16 +229,81 @@
     document.body.appendChild(btn);
   }
   
+  // Auto-scrape function
+  async function autoScrape() {
+    // Check if auto-scrape is enabled
+    const result = await chrome.storage.sync.get(['autoScrape']);
+    if (!result.autoScrape) return;
+
+    const pageType = getPageType();
+    // Only auto-scrape on pages with multiple tracks
+    if (!['chart', 'genre', 'top100', 'label'].includes(pageType)) return;
+
+    console.log('[Beatport] Auto-scrape enabled, starting...');
+
+    // Wait for page to fully load
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    const data = extract();
+    if (data.tracks.length === 0) {
+      console.log('[Beatport] Auto-scrape: No tracks found');
+      showNotification('No tracks found', 'error');
+      return;
+    }
+
+    showNotification(`Auto-scraping ${data.tracks.length} tracks...`, 'info');
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'SEND_TO_API',
+        data: data
+      });
+
+      if (response.success) {
+        const r = response.result;
+        const totalFound = (r.tracksCreated || 0) + (r.tracksSkipped || 0);
+        const msg = totalFound > 0
+          ? `✅ Found ${totalFound} tracks: +${r.tracksCreated || 0} new, ${r.tracksSkipped || 0} already in DB`
+          : `✅ Processed (no tracks found on page)`;
+        showNotification(msg, 'success');
+        console.log('[Beatport] Auto-scrape success:', response.result);
+      } else {
+        showNotification('❌ ' + (response.error || 'Failed'), 'error');
+        console.error('[Beatport] Auto-scrape error:', response.error);
+      }
+    } catch (e) {
+      console.error('[Beatport] Auto-scrape error:', e);
+      showNotification('❌ Error: ' + e.message, 'error');
+    }
+  }
+
+  // Show notification toast
+  function showNotification(message, type = 'info') {
+    // Remove existing notification
+    const existing = document.getElementById('identified-notification');
+    if (existing) existing.remove();
+
+    const notif = document.createElement('div');
+    notif.id = 'identified-notification';
+    notif.className = `identified-notification ${type}`;
+    notif.textContent = message;
+    document.body.appendChild(notif);
+
+    setTimeout(() => notif.remove(), 4000);
+  }
+
   // Wait for page to load
   function init() {
     setTimeout(createButton, 1000);
+    // Trigger auto-scrape after a delay
+    setTimeout(autoScrape, 3000);
   }
-  
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {
     init();
   }
-  
+
   console.log('[Beatport] Extractor loaded');
 })();

@@ -165,11 +165,11 @@ export default function TrackDetailModal({
             </View>
 
             {/* Listen Links */}
-            {track.trackLinks && track.trackLinks.length > 0 && (
-              <View style={styles.linksSection}>
-                <Text style={styles.sectionLabel}>Listen On</Text>
-                <View style={styles.linksGrid}>
-                  {track.trackLinks.map((link, index) => {
+            <View style={styles.linksSection}>
+              <Text style={styles.sectionLabel}>Listen On</Text>
+              <View style={styles.linksGrid}>
+                {track.trackLinks && track.trackLinks.length > 0 ? (
+                  track.trackLinks.map((link, index) => {
                     const config = PLATFORM_CONFIG[link.platform] || PLATFORM_CONFIG.other;
                     return (
                       <Pressable
@@ -186,10 +186,27 @@ export default function TrackDetailModal({
                         <ExternalLink size={12} color={config.color} />
                       </Pressable>
                     );
-                  })}
-                </View>
+                  })
+                ) : (
+                  <Pressable
+                    style={[styles.linkCard, styles.spotifySearchCard]}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      const query = encodeURIComponent(`${track.artist} ${track.title}`);
+                      Linking.openURL(`https://open.spotify.com/search/${query}`);
+                    }}
+                  >
+                    <View style={[styles.linkIcon, { backgroundColor: 'rgba(29, 185, 84, 0.2)' }]}>
+                      <Music size={16} color="#1DB954" />
+                    </View>
+                    <Text style={[styles.linkText, { color: '#1DB954' }]}>
+                      Search on Spotify
+                    </Text>
+                    <ExternalLink size={12} color="#1DB954" />
+                  </Pressable>
+                )}
               </View>
-            )}
+            </View>
 
             {/* Artist Section */}
             <View style={styles.artistSection}>
@@ -205,6 +222,15 @@ export default function TrackDetailModal({
                 <ChevronRight size={20} color={Colors.dark.textMuted} />
               </Pressable>
             </View>
+
+            {/* Contributor Credit */}
+            {track.contributedBy && (
+              <View style={styles.contributorSection}>
+                <Text style={styles.contributorText}>
+                  Track ID contributed by <Text style={styles.contributorName}>@{track.contributedBy}</Text>
+                </Text>
+              </View>
+            )}
 
             {/* Featured In Sets */}
             {track.featuredIn && track.featuredIn.length > 0 && (
@@ -414,6 +440,10 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  spotifySearchCard: {
+    borderColor: 'rgba(29, 185, 84, 0.4)',
+    flex: 1,
+  },
   artistSection: {
     marginBottom: 20,
   },
@@ -445,6 +475,21 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
     marginTop: 2,
+  },
+  contributorSection: {
+    backgroundColor: Colors.dark.background,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 20,
+    alignItems: 'center',
+  },
+  contributorText: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+  },
+  contributorName: {
+    color: Colors.dark.primary,
+    fontWeight: '600',
   },
   featuredSection: {
     marginBottom: 20,

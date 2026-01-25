@@ -3,7 +3,8 @@
 let currentPlatform = null;
 let scrapedData = null;
 
-const DEFAULT_API_URL = 'https://rork-dj-set-list-creator-3um4.vercel.app';
+// Update this to your Vercel deployment URL
+const DEFAULT_API_URL = 'https://rork-dj-set-list-creator.vercel.app';
 
 // Detect which platform we're on
 function detectPlatform(url) {
@@ -164,8 +165,9 @@ async function sendToApi() {
 async function init() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    currentPlatform = detectPlatform(tab.url);
-    updateUI(currentPlatform, tab.url);
+    const tabUrl = tab?.url || '';
+    currentPlatform = detectPlatform(tabUrl);
+    updateUI(currentPlatform, tabUrl);
     
     // Check for existing scraped data
     chrome.storage.local.get(['lastScrape'], (result) => {
@@ -231,6 +233,18 @@ async function testConnection() {
   }
 }
 
+// Auto-scrape toggle
+async function loadAutoScrapeState() {
+  const result = await chrome.storage.sync.get(['autoScrape']);
+  document.getElementById('autoScrapeToggle').checked = result.autoScrape || false;
+}
+
+async function toggleAutoScrape() {
+  const enabled = document.getElementById('autoScrapeToggle').checked;
+  await chrome.storage.sync.set({ autoScrape: enabled });
+  showMessage(enabled ? 'Auto-scrape enabled! Pages will scrape automatically.' : 'Auto-scrape disabled.', 'success');
+}
+
 // Event listeners
 document.getElementById('scrapeBtn').addEventListener('click', scrape);
 document.getElementById('sendBtn').addEventListener('click', sendToApi);
@@ -238,6 +252,50 @@ document.getElementById('toggleSettings').addEventListener('click', toggleSettin
 document.getElementById('closeSettings').addEventListener('click', toggleSettings);
 document.getElementById('saveSettings').addEventListener('click', saveSettings);
 document.getElementById('testConnection').addEventListener('click', testConnection);
+document.getElementById('autoScrapeToggle').addEventListener('change', toggleAutoScrape);
+document.getElementById('refreshStats').addEventListener('click', loadStats);
+
+// Fetch and display database stats
+async function loadStats() {
+  const refreshBtn = document.getElementById('refreshStats');
+  refreshBtn.classList.add('spinning');
+
+  try {
+    const apiUrl = await getApiUrl();
+    const response = await fetch(`${apiUrl}/api/stats`);
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch stats');
+    }
+
+    const data = await response.json();
+
+    if (data.success) {
+      // Update counts
+      document.getElementById('totalTracks').textContent = data.stats.totalTracks.toLocaleString();
+      document.getElementById('totalArtists').textContent = data.stats.totalArtists.toLocaleString();
+
+      // Update recent tracks list
+      const list = document.getElementById('recentTracksList');
+      if (data.stats.recentTracks && data.stats.recentTracks.length > 0) {
+        list.innerHTML = data.stats.recentTracks
+          .map(track => `<li title="${track.title}">${track.title}</li>`)
+          .join('');
+      } else {
+        list.innerHTML = '<li class="loading-item">No tracks yet</li>';
+      }
+    }
+  } catch (error) {
+    console.error('Stats error:', error);
+    document.getElementById('totalTracks').textContent = '?';
+    document.getElementById('totalArtists').textContent = '?';
+    document.getElementById('recentTracksList').innerHTML = '<li class="loading-item">Could not load</li>';
+  }
+
+  refreshBtn.classList.remove('spinning');
+}
 
 // Initialize
 init();
+loadAutoScrapeState();
+loadStats();

@@ -3,13 +3,13 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicat
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  ArrowLeft, 
-  Play, 
-  Share2, 
-  Plus, 
-  ExternalLink, 
-  Youtube, 
+import {
+  ArrowLeft,
+  Play,
+  Share2,
+  Plus,
+  ExternalLink,
+  Youtube,
   Music2,
   ListMusic,
   MessageSquare,
@@ -33,39 +33,100 @@ import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import TrackDetailModal from '@/components/TrackDetailModal';
 import { mockSetLists } from '@/mocks/tracks';
-import { Track, SourceLink, TrackConflict } from '@/types';
+import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
 import { useSets } from '@/contexts/SetsContext';
 import { useUser } from '@/contexts/UserContext';
+
+// API base URL
+const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { sets, addSourceToSet, voteOnConflict, getActiveConflicts, addTracksToSet } = useSets();
   const { userId, addPoints } = useUser();
-  
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
-  
+
+  // Database set state
+  const [dbSet, setDbSet] = useState<SetList | null>(null);
+  const [isLoadingSet, setIsLoadingSet] = useState(true);
+
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<'youtube' | 'soundcloud'>('youtube');
-  
+
   // Track Detail Modal state
   const [selectedTrack, setSelectedTrack] = useState<Track | null>(null);
   const [pendingTimestamp, setPendingTimestamp] = useState<number | null>(null);
-  
+
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerMinimized, setPlayerMinimized] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
-  
-  // Look up set from real context first, then fallback to mock data
-  // Using sets directly in useMemo for proper reactivity
+
+  // Fetch set from API
+  useEffect(() => {
+    const fetchSet = async () => {
+      if (!id) return;
+
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/sets/${id}`);
+        const data = await response.json();
+
+        if (data.success && data.set) {
+          // Transform API response to match SetList type
+          const transformedSet: SetList = {
+            id: data.set.id,
+            name: data.set.name,
+            artist: data.set.artist,
+            venue: data.set.venue,
+            date: new Date(data.set.date),
+            totalDuration: data.set.totalDuration || 0,
+            coverUrl: data.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+            plays: data.set.trackCount * 10,
+            sourceLinks: data.set.sourceLinks || [],
+            tracks: data.set.tracks?.map((t: any) => ({
+              id: t.id,
+              title: t.title,
+              artist: t.artist,
+              duration: 0,
+              coverUrl: '',
+              addedAt: new Date(t.addedAt || Date.now()),
+              source: t.source || 'database',
+              timestamp: t.timestamp || 0,
+              timestampStr: t.timestampStr,
+              verified: t.verified || !t.isId,
+              confidence: t.isId ? 0 : 1,
+              isId: t.isId,
+            })) || [],
+            hasGaps: data.set.hasGaps,
+            gapCount: data.set.gapCount,
+          };
+          setDbSet(transformedSet);
+          console.log('[SetDetail] Loaded set from API:', transformedSet.name, 'with', transformedSet.tracks?.length, 'tracks');
+        }
+      } catch (error) {
+        console.error('[SetDetail] Failed to fetch set:', error);
+      } finally {
+        setIsLoadingSet(false);
+      }
+    };
+
+    fetchSet();
+  }, [id]);
+
+  // Look up set from API first, then context, then mock data
   const setList = useMemo(() => {
-    // First try real sets from context
+    // First try database set
+    if (dbSet) {
+      return dbSet;
+    }
+    // Then try real sets from context
     const realSet = sets.find(s => s.id === id);
     if (realSet) {
       console.log('[SetDetail] Found real set:', realSet.name, 'with', realSet.tracks?.length, 'tracks');
@@ -77,7 +138,7 @@ export default function SetDetailScreen() {
       console.log('[SetDetail] Using mock set:', mockSet.name);
     }
     return mockSet;
-  }, [id, sets]); // Re-run when sets or id changes
+  }, [id, sets, dbSet]); // Re-run when sets or id changes
   
   // Tracks come directly from setList (no separate state needed for reactivity)
   const tracks = useMemo(() => {
@@ -90,36 +151,12 @@ export default function SetDetailScreen() {
     return getActiveConflicts(id);
   }, [id, getActiveConflicts]);
 
-  useEffect(() => {
-    const checkSavedStatus = async () => {
-      if (id) {
-        try {
-          const saved = await isSetSaved(id);
-          setIsSaved(saved);
-        } catch (error) {
-          console.error('Error checking saved status:', error);
-        } finally {
-          setLoadingSaved(false);
-        }
-      }
-    };
-    checkSavedStatus();
-  }, [id]);
-
-  if (!setList) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Set not found</Text>
-      </View>
-    );
-  }
-
   const sortedTracks = useMemo(() => {
     return [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   }, [tracks]);
 
   // Create a combined list of tracks and inline conflicts, sorted by timestamp
-  type TracklistItem = 
+  type TracklistItem =
     | { type: 'track'; data: Track }
     | { type: 'conflict'; data: TrackConflict };
 
@@ -155,6 +192,51 @@ export default function SetDetailScreen() {
 
     return combined;
   }, [sortedTracks, conflicts]);
+
+  const handleSave = useCallback(async () => {
+    if (!setList) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      if (isSaved) {
+        await removeSetFromLibrary(setList.id);
+        setIsSaved(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        await saveSetToLibrary(setList);
+        setIsSaved(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error) {
+      console.error('Error saving/removing set:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }, [setList, isSaved]);
+
+  useEffect(() => {
+    const checkSavedStatus = async () => {
+      if (id) {
+        try {
+          const saved = await isSetSaved(id);
+          setIsSaved(saved);
+        } catch (error) {
+          console.error('Error checking saved status:', error);
+        } finally {
+          setLoadingSaved(false);
+        }
+      }
+    };
+    checkSavedStatus();
+  }, [id]);
+
+  if (!setList) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>Set not found</Text>
+      </View>
+    );
+  }
 
   const verifiedCount = sortedTracks.filter(t => t.verified).length;
   const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
@@ -200,27 +282,6 @@ export default function SetDetailScreen() {
     addTracksToSet(setList.id, [newTrack]);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
-
-  const handleSave = useCallback(async () => {
-    if (!setList) return;
-    
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    try {
-      if (isSaved) {
-        await removeSetFromLibrary(setList.id);
-        setIsSaved(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        await saveSetToLibrary(setList);
-        setIsSaved(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } catch (error) {
-      console.error('Error saving/removing set:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }, [setList, isSaved]);
 
   const getPlatformIcon = (platform: string, size: number = 18) => {
     switch (platform) {
@@ -341,6 +402,30 @@ export default function SetDetailScreen() {
             )}
           </View>
 
+          {/* Needs Source Banner - show when no YouTube/SoundCloud for analysis */}
+          {(() => {
+            const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+            const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+            const hasAnalyzableSource = ytLink || scLink;
+
+            if (!hasAnalyzableSource) {
+              return (
+                <View style={styles.needsSourceBanner}>
+                  <View style={styles.needsSourceIconContainer}>
+                    <AlertCircle size={20} color={Colors.dark.primary} />
+                  </View>
+                  <View style={styles.needsSourceContent}>
+                    <Text style={styles.needsSourceTitle}>Source Needed for Analysis</Text>
+                    <Text style={styles.needsSourceText}>
+                      Add a YouTube or SoundCloud link to enable comment analysis and track identification
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
+            return null;
+          })()}
+
           <View style={styles.linksSection}>
             <Text style={styles.sectionLabel}>Sources</Text>
             <View style={styles.linksGrid}>
@@ -348,7 +433,7 @@ export default function SetDetailScreen() {
               {(() => {
                 const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
                 return ytLink ? (
-                  <Pressable 
+                  <Pressable
                     style={[styles.linkCard, styles.linkCardFilled]}
                     onPress={() => handleOpenSource(ytLink)}
                   >
@@ -359,7 +444,7 @@ export default function SetDetailScreen() {
                     <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                   </Pressable>
                 ) : (
-                  <Pressable 
+                  <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
                     onPress={() => {
                       setSelectedPlatform('youtube');
@@ -370,7 +455,7 @@ export default function SetDetailScreen() {
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
                       <Youtube size={16} color={Colors.dark.textMuted} />
                     </View>
-                    <Text style={styles.linkPlatformEmpty}>YouTube</Text>
+                    <Text style={styles.linkPlatformEmpty}>Add YouTube</Text>
                     <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
                   </Pressable>
                 );
@@ -380,7 +465,7 @@ export default function SetDetailScreen() {
               {(() => {
                 const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
                 return scLink ? (
-                  <Pressable 
+                  <Pressable
                     style={[styles.linkCard, styles.linkCardFilled]}
                     onPress={() => handleOpenSource(scLink)}
                   >
@@ -391,7 +476,7 @@ export default function SetDetailScreen() {
                     <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                   </Pressable>
                 ) : (
-                  <Pressable 
+                  <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
                     onPress={() => {
                       setSelectedPlatform('soundcloud');
@@ -402,7 +487,7 @@ export default function SetDetailScreen() {
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
                       <Music2 size={16} color={Colors.dark.textMuted} />
                     </View>
-                    <Text style={styles.linkPlatformEmpty}>SoundCloud</Text>
+                    <Text style={styles.linkPlatformEmpty}>Add SoundCloud</Text>
                     <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
                   </Pressable>
                 );
@@ -416,7 +501,7 @@ export default function SetDetailScreen() {
                 <Sparkles size={14} color={Colors.dark.primary} />
               </View>
               <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
-              <Text style={styles.statLabel}>ID'd</Text>
+              <Text style={styles.statLabel}>ID&apos;d</Text>
             </View>
             
             <View style={styles.statCard}>
@@ -1044,5 +1129,39 @@ const styles = StyleSheet.create({
   },
   matchingUnreleasedText: {
     color: Colors.dark.primary,
+  },
+  // Needs Source Banner styles
+  needsSourceBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 107, 53, 0.1)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.25)',
+  },
+  needsSourceIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  needsSourceContent: {
+    flex: 1,
+  },
+  needsSourceTitle: {
+    fontSize: 15,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+    marginBottom: 4,
+  },
+  needsSourceText: {
+    fontSize: 13,
+    color: Colors.dark.textSecondary,
+    lineHeight: 18,
   },
 });

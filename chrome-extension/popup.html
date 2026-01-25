@@ -292,6 +292,173 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    .auto-scrape-toggle {
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 12px;
+    }
+
+    .toggle-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .toggle-label input {
+      display: none;
+    }
+
+    .toggle-slider {
+      width: 40px;
+      height: 22px;
+      background: #333;
+      border-radius: 11px;
+      position: relative;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: #666;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: all 0.2s;
+    }
+
+    .toggle-label input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
+    }
+
+    .toggle-label input:checked + .toggle-slider::after {
+      left: 20px;
+      background: #fff;
+    }
+
+    .toggle-text {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .toggle-hint {
+      display: block;
+      font-size: 11px;
+      color: #666;
+      margin-top: 6px;
+      margin-left: 50px;
+    }
+
+    .stats-section {
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 12px;
+    }
+
+    .stats-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .stats-header h3 {
+      font-size: 13px;
+      color: #FF6B35;
+      margin: 0;
+    }
+
+    .refresh-btn {
+      background: transparent;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .refresh-btn:hover {
+      background: #333;
+      color: #fff;
+    }
+
+    .refresh-btn.spinning {
+      animation: spin 0.8s linear infinite;
+    }
+
+    .stats-counts {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .stat-box {
+      flex: 1;
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .stat-number {
+      display: block;
+      font-size: 24px;
+      font-weight: 700;
+      color: #FF6B35;
+    }
+
+    .stat-name {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+    }
+
+    .recent-tracks {
+      background: #2a2a2a;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .recent-header {
+      font-size: 11px;
+      color: #888;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .recent-tracks ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 120px;
+      overflow-y: auto;
+    }
+
+    .recent-tracks li {
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recent-tracks li:last-child {
+      border-bottom: none;
+    }
+
+    .loading-item {
+      color: #666;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -335,10 +502,42 @@
     <button class="btn btn-primary" id="scrapeBtn" disabled>
       Scrape This Page
     </button>
+
+    <div class="auto-scrape-toggle">
+      <label class="toggle-label">
+        <input type="checkbox" id="autoScrapeToggle">
+        <span class="toggle-slider"></span>
+        <span class="toggle-text">Auto-scrape mode</span>
+      </label>
+      <span class="toggle-hint">Automatically scrape when visiting pages</span>
+    </div>
     
     <button class="btn btn-secondary" id="sendBtn" style="display: none;">
       Send to IDentified
     </button>
+
+    <div class="stats-section">
+      <div class="stats-header">
+        <h3>Database Stats</h3>
+        <button class="refresh-btn" id="refreshStats" title="Refresh stats">↻</button>
+      </div>
+      <div class="stats-counts">
+        <div class="stat-box">
+          <span class="stat-number" id="totalTracks">-</span>
+          <span class="stat-name">Tracks</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-number" id="totalArtists">-</span>
+          <span class="stat-name">Artists</span>
+        </div>
+      </div>
+      <div class="recent-tracks">
+        <div class="recent-header">Recent Imports</div>
+        <ul id="recentTracksList">
+          <li class="loading-item">Loading...</li>
+        </ul>
+      </div>
+    </div>
   </div>
   
   <div id="settingsSection" class="settings" style="display: none;">

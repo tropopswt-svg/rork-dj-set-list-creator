@@ -328,7 +328,7 @@ export default function IdentifyTrackModal({
               </View>
               <Text style={styles.noMatchText}>No Match Found</Text>
               <Text style={styles.noMatchSubtext}>
-                The track couldn't be identified. This might be an unreleased track, mashup, or remix.
+                The track couldn&apos;t be identified. This might be an unreleased track, mashup, or remix.
               </Text>
               <Pressable 
                 style={styles.retryButton}

@@ -211,7 +211,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
               </View>
 
               <Text style={styles.subtitle}>
-                Paste a YouTube or SoundCloud link and we'll build the tracklist from comments
+                Paste a YouTube or SoundCloud link and we&apos;ll build the tracklist from comments
               </Text>
 
               <View style={[styles.inputContainer, isValidUrl && styles.inputValid]}>
