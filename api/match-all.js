@@ -125,30 +125,42 @@ export default async function handler(req, res) {
       const titleNorm = normalizeText(setTrack.track_title);
       const artistNorm = normalizeText(setTrack.artist_name);
 
-      // Try exact match first
+      // Skip ID tracks - they should remain unmatched until identified
+      if (setTrack.is_id || titleNorm.includes('unreleased') || titleNorm === 'id') {
+        results.unmatched++;
+        continue;
+      }
+
+      // Try exact match on title + artist (strict)
       const exactKey = `${titleNorm}|${artistNorm}`;
       let matchedTrack = trackMap.get(exactKey);
 
-      // Try title-only match if no exact match
-      if (!matchedTrack) {
-        matchedTrack = trackMap.get(`title:${titleNorm}`);
+      // Try matching with artist variations (e.g., "Artist1, Artist2" vs "Artist1")
+      if (!matchedTrack && artistNorm) {
+        // Try first artist name only
+        const firstArtist = artistNorm.split(/[,&]/)[0].trim();
+        const altKey = `${titleNorm}|${firstArtist}`;
+        matchedTrack = trackMap.get(altKey);
       }
 
-      // Try fuzzy match on title
-      if (!matchedTrack && titleNorm.length > 3) {
+      // Only do fuzzy match if title is long enough to be specific
+      if (!matchedTrack && titleNorm.length > 5) {
         for (const track of dbTracks || []) {
-          const titleSim = similarity(setTrack.track_title, track.title);
-          const artistSim = similarity(setTrack.artist_name || '', track.artist_name || '');
+          const trackTitleNorm = normalizeText(track.title);
+          const trackArtistNorm = normalizeText(track.artist_name);
 
-          // High title match + some artist match
-          if (titleSim > 0.8 && artistSim > 0.5) {
-            matchedTrack = track;
-            break;
-          }
-          // Very high title match alone
-          if (titleSim > 0.95) {
-            matchedTrack = track;
-            break;
+          // Exact title match + artist contains or is contained
+          if (titleNorm === trackTitleNorm) {
+            // Check artist match more carefully
+            if (artistNorm && trackArtistNorm) {
+              // One contains the other, or they share significant words
+              if (artistNorm.includes(trackArtistNorm) ||
+                  trackArtistNorm.includes(artistNorm) ||
+                  similarity(setTrack.artist_name, track.artist_name) > 0.7) {
+                matchedTrack = track;
+                break;
+              }
+            }
           }
         }
       }
