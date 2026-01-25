@@ -151,6 +151,13 @@ export default async function handler(req, res) {
           console.log(`[Update Tracks] Update result:`, JSON.stringify(updateResult));
         } else {
           console.log(`[Update Tracks] Update error:`, updateError);
+          // Return error immediately so we can debug
+          return res.status(500).json({
+            error: 'Update failed',
+            details: updateError,
+            updateData,
+            trackId: bestMatch.id
+          });
         }
       } else {
         // No match found - only add as new track if we have a timestamp
@@ -234,9 +241,6 @@ export default async function handler(req, res) {
       newTracksAdded,
       debug: {
         sampleTracks: verifyTracks,
-        usingServiceKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-        serviceKeyPrefix: process.env.SUPABASE_SERVICE_ROLE_KEY?.substring(0, 20) || 'NOT_SET',
-        envKeys: Object.keys(process.env).filter(k => k.includes('SUPA')),
       },
     });
 
