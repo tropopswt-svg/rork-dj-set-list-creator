@@ -132,7 +132,8 @@ async function fetchVideoComments(videoId, apiKey, maxResults = 500) {
   let nextPageToken;
   while (comments.length < maxResults) {
     const pageSize = Math.min(100, maxResults - comments.length);
-    let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet&videoId=${videoId}&maxResults=${pageSize}&order=relevance&key=${apiKey}`;
+    // Include replies to get answer comments like "It's Fisher - Losing It"
+    let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet,replies&videoId=${videoId}&maxResults=${pageSize}&order=relevance&key=${apiKey}`;
     if (nextPageToken) url += `&pageToken=${nextPageToken}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -144,16 +145,39 @@ async function fetchVideoComments(videoId, apiKey, maxResults = 500) {
     if (!data.items || data.items.length === 0) break;
     for (const item of data.items) {
       const c = item.snippet.topLevelComment.snippet;
-      comments.push({
+      const topComment = {
         id: item.id,
         authorName: c.authorDisplayName,
         text: c.textOriginal || c.textDisplay,
         likeCount: c.likeCount,
-      });
+        isReply: false,
+      };
+      comments.push(topComment);
+
+      // Process replies - these often contain track IDs answering "what's this track?"
+      if (item.replies && item.replies.comments) {
+        // Extract any timestamp from the parent comment
+        const parentTimestamps = extractTimestamps(topComment.text);
+        const parentTimestamp = parentTimestamps.length > 0 ? parentTimestamps[0] : null;
+
+        for (const reply of item.replies.comments) {
+          const r = reply.snippet;
+          comments.push({
+            id: reply.id,
+            authorName: r.authorDisplayName,
+            text: r.textOriginal || r.textDisplay,
+            likeCount: r.likeCount,
+            isReply: true,
+            parentId: item.id,
+            parentTimestamp: parentTimestamp, // Pass timestamp from parent "what's this track at X?"
+          });
+        }
+      }
     }
     nextPageToken = data.nextPageToken;
     if (!nextPageToken) break;
   }
+  console.log(`Fetched ${comments.length} YouTube comments (including replies)`);
   return comments;
 }
 
@@ -380,6 +404,7 @@ function parseComments(comments, djName = null) {
   const tracks = [];
   const seen = new Set();
 
+  // Sort: prioritize comments with many timestamps (full tracklists), then by likes
   const sorted = [...comments].sort((a, b) => {
     const aTs = extractTimestamps(a.text).length;
     const bTs = extractTimestamps(b.text).length;
@@ -388,50 +413,87 @@ function parseComments(comments, djName = null) {
     return b.likeCount - a.likeCount;
   });
 
+  // Helper to add a track if valid
+  const addTrack = (ts, info, comment, isMultiLine) => {
+    // If the parsed "artist" is actually the DJ name, fix it
+    if (djName && areNamesSimilar(info.artist, djName)) {
+      const reparsed = parseTrackInfo(info.title);
+      if (reparsed) {
+        info = reparsed;
+      } else {
+        info = { title: info.title, artist: 'Unknown Artist' };
+      }
+    }
+
+    const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      let conf = 0.5;
+      if (isMultiLine) conf += 0.2; // Full tracklist comments are more reliable
+      if (comment.likeCount > 100) conf += 0.15;
+      else if (comment.likeCount > 10) conf += 0.05;
+      tracks.push({
+        timestamp: ts.timestamp,
+        timestampFormatted: ts.formatted,
+        title: info.title,
+        artist: info.artist,
+        confidence: Math.min(conf, 1),
+        sourceAuthor: comment.authorName,
+        likes: comment.likeCount,
+      });
+    }
+  };
+
   for (const comment of sorted) {
     const text = cleanText(comment.text);
     const timestamps = extractTimestamps(text);
-    if (timestamps.length === 0) continue;
+    const lines = text.split(/[\n\r]+/).filter(l => l.trim());
 
-    const lines = text.split(/[\n\r]+/);
-    if (lines.length >= 3) {
+    // CASE 1: Multi-line tracklist (5+ timestamps = someone posted full tracklist)
+    if (timestamps.length >= 3 && lines.length >= 3) {
       for (const line of lines) {
         const lineTs = extractTimestamps(line);
         if (lineTs.length === 0) continue;
         const ts = lineTs[0];
         let afterText = line.slice(ts.position + ts.formatted.length).trim();
         afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
-        let info = parseTrackInfo(afterText);
-
+        const info = parseTrackInfo(afterText);
         if (info) {
-          // If the parsed "artist" is actually the DJ name, it's likely the track title
-          // In DJ set tracklists, people often write "DJ Name - Track Title" meaning the DJ played it
-          if (djName && areNamesSimilar(info.artist, djName)) {
-            // The "title" field likely contains the real track info
-            // Try to re-parse the title to extract actual artist - track
-            const reparsed = parseTrackInfo(info.title);
-            if (reparsed) {
-              // Found nested artist - title in what we thought was just title
-              info = reparsed;
-            } else {
-              // Just the track title, artist unknown
-              info = { title: info.title, artist: 'Unknown Artist' };
-            }
-          }
-
-          const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            let conf = 0.5;
-            if (timestamps.length >= 5) conf += 0.2;
-            if (comment.likeCount > 100) conf += 0.15;
-            else if (comment.likeCount > 10) conf += 0.05;
-            tracks.push({ timestamp: ts.timestamp, timestampFormatted: ts.formatted, title: info.title, artist: info.artist, confidence: Math.min(conf, 1), sourceAuthor: comment.authorName, likes: comment.likeCount });
-          }
+          addTrack(ts, info, comment, true);
         }
       }
     }
+    // CASE 2: Single/few line comment with timestamp(s) - like "45:30 Fisher - Losing It"
+    else if (timestamps.length > 0) {
+      for (const ts of timestamps) {
+        // Get text after this timestamp
+        const afterIndex = ts.position + ts.formatted.length;
+        let afterText = text.slice(afterIndex);
+        // If there's another timestamp, only take text up to it
+        const nextTs = timestamps.find(t => t.position > ts.position);
+        if (nextTs) {
+          afterText = text.slice(afterIndex, nextTs.position);
+        }
+        afterText = afterText.split(/[\n\r]/)[0]; // Take first line only
+        afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
+
+        const info = parseTrackInfo(afterText);
+        if (info) {
+          addTrack(ts, info, comment, false);
+        }
+      }
+    }
+    // CASE 3: Reply comment inheriting timestamp from parent
+    // "What's this track at 45:30?" -> Reply: "It's Fisher - Losing It"
+    else if (comment.isReply && comment.parentTimestamp) {
+      const info = parseTrackInfo(text);
+      if (info) {
+        addTrack(comment.parentTimestamp, info, comment, false);
+      }
+    }
   }
+
+  console.log(`Parsed ${tracks.length} tracks from comments`);
   return tracks.sort((a, b) => a.timestamp - b.timestamp);
 }
 
@@ -1331,10 +1393,24 @@ async function importFromYouTube(url, apiKey) {
   const djName = artist !== 'Unknown Artist' ? artist : video.channelTitle;
 
   const descTracks = parseDescription(video.description, djName);
+  console.log(`[YouTube Import] Description tracks: ${descTracks.length}`);
+
   const commentTracks = parseComments(comments, djName);
+  console.log(`[YouTube Import] Comment tracks: ${commentTracks.length}`);
+
+  // Log sample of found tracks
+  if (commentTracks.length > 0) {
+    console.log(`[YouTube Import] Sample comment tracks:`, commentTracks.slice(0, 5).map(t => ({
+      timestamp: t.timestampFormatted,
+      artist: t.artist,
+      title: t.title,
+      author: t.sourceAuthor,
+    })));
+  }
 
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
+  console.log(`[YouTube Import] Total tracks before dedup: ${allTracks.length}`);
   const setId = `yt-${video.id}-${Date.now()}`;
   
   // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
