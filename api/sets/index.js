@@ -1,6 +1,26 @@
 // API endpoint to list sets from database
 import { createClient } from '@supabase/supabase-js';
 
+// Extract YouTube video ID from various URL formats
+function extractYouTubeVideoId(url) {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Generate YouTube thumbnail URL from video ID
+function getYouTubeThumbnail(videoId) {
+  if (!videoId) return null;
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+}
+
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -65,24 +85,30 @@ export default async function handler(req, res) {
     }
 
     // Transform to match app's SetList type
-    const transformedSets = sets.map(set => ({
-      id: set.id,
-      name: set.title,
-      artist: set.dj_name || 'Unknown Artist',
-      venue: set.venue || null,
-      date: set.event_date || set.created_at,
-      totalDuration: set.duration_seconds || 0,
-      trackCount: set.track_count || 0,
-      coverUrl: null, // We could add cover images later
-      sourceLinks: [
-        set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
-        set.youtube_url && { platform: 'youtube', url: set.youtube_url },
-        set.soundcloud_url && { platform: 'soundcloud', url: set.soundcloud_url },
-        set.mixcloud_url && { platform: 'mixcloud', url: set.mixcloud_url },
-      ].filter(Boolean),
-      source: set.source,
-      hasGaps: false, // Will be calculated when fetching tracks
-    }));
+    const transformedSets = sets.map(set => {
+      // Generate cover URL from YouTube video if available
+      const youtubeVideoId = extractYouTubeVideoId(set.youtube_url);
+      const coverUrl = getYouTubeThumbnail(youtubeVideoId);
+
+      return {
+        id: set.id,
+        name: set.title,
+        artist: set.dj_name || 'Unknown Artist',
+        venue: set.venue || null,
+        date: set.event_date || set.created_at,
+        totalDuration: set.duration_seconds || 0,
+        trackCount: set.track_count || 0,
+        coverUrl,
+        sourceLinks: [
+          set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
+          set.youtube_url && { platform: 'youtube', url: set.youtube_url },
+          set.soundcloud_url && { platform: 'soundcloud', url: set.soundcloud_url },
+          set.mixcloud_url && { platform: 'mixcloud', url: set.mixcloud_url },
+        ].filter(Boolean),
+        source: set.source,
+        hasGaps: false,
+      };
+    });
 
     return res.status(200).json({
       success: true,
