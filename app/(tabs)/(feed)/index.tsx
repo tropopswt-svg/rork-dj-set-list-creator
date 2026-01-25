@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
-import AnimatedLogo from '@/components/AnimatedLogo';
+import IDentifiedLogo from '@/components/IDentifiedLogo';
 
 interface Artist {
   id: string;
@@ -226,7 +226,7 @@ export default function FeedScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <AnimatedLogo size="medium" />
+          <IDentifiedLogo size="medium" />
           <Pressable style={styles.notifButton}>
             <Bell size={22} color={Colors.dark.text} />
           </Pressable>

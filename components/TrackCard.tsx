@@ -252,7 +252,7 @@ export default function TrackCard({
               {isUnidentified ? 'Unknown Track' : track.title}
             </Text>
             {isUnidentified && (
-              <HelpCircle size={14} color="#F59E0B" />
+              <HelpCircle size={14} color="#cd6a6f" />
             )}
             {track.isUnreleased && !isUnidentified && (
               <AlertCircle size={14} color="#EC4899" />
@@ -263,7 +263,7 @@ export default function TrackCard({
           </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
-              <Disc3 size={12} color="#F59E0B" />
+              <Disc3 size={12} color="#cd6a6f" />
               <Text style={styles.featuredMainText}>
                 In {featuredCount} other set{featuredCount !== 1 ? 's' : ''}
               </Text>
@@ -398,9 +398,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   unidentifiedContainer: {
-    backgroundColor: 'rgba(245, 158, 11, 0.08)',
+    backgroundColor: 'rgba(205, 106, 111, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: 'rgba(205, 106, 111, 0.2)',
     borderStyle: 'dashed',
   },
   timestampBadge: {
@@ -531,7 +531,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+    backgroundColor: 'rgba(205, 106, 111, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   featuredMainText: {
-    color: '#F59E0B',
+    color: '#cd6a6f',
     fontSize: 12,
     fontWeight: '600' as const,
   },
@@ -560,7 +560,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#F59E0B',
+    backgroundColor: '#cd6a6f',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -571,17 +571,17 @@ const styles = StyleSheet.create({
     color: '#FFF',
   },
   unidentifiedTimestamp: {
-    backgroundColor: 'rgba(245, 158, 11, 0.3)',
+    backgroundColor: 'rgba(205, 106, 111, 0.3)',
   },
   unidentifiedCover: {
     opacity: 0.5,
   },
   unidentifiedTitle: {
-    color: '#F59E0B',
+    color: '#cd6a6f',
     fontStyle: 'italic',
   },
   unidentifiedArtist: {
-    color: 'rgba(245, 158, 11, 0.7)',
+    color: 'rgba(205, 106, 111, 0.7)',
     fontStyle: 'italic',
   },
   compactContainer: {

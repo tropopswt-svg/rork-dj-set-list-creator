@@ -324,7 +324,7 @@ export default function IdentifyTrackModal({
           {noMatch && (
             <View style={styles.resultContainer}>
               <View style={styles.noMatchIcon}>
-                <AlertCircle size={32} color="#F59E0B" />
+                <AlertCircle size={32} color="#cd6a6f" />
               </View>
               <Text style={styles.noMatchText}>No Match Found</Text>
               <Text style={styles.noMatchSubtext}>
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: 'rgba(205, 106, 111, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
