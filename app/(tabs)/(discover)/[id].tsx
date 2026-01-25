@@ -416,8 +416,14 @@ export default function SetDetailScreen() {
             const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
             const hasAnalyzableSource = ytLink || scLink;
 
-            // Check if tracks have timestamps (indicating analysis has been run)
-            const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
+            // Check if analysis has been run (track sources indicate this)
+            const hasYouTubeAnalysis = setList.tracks?.some(t => t.source === 'youtube');
+            const hasSoundCloudAnalysis = setList.tracks?.some(t => t.source === 'soundcloud');
+
+            // Needs analysis if we have a source but haven't analyzed it yet
+            const ytNeedsAnalysis = ytLink && !hasYouTubeAnalysis;
+            const scNeedsAnalysis = scLink && !hasSoundCloudAnalysis;
+            const anyNeedsAnalysis = ytNeedsAnalysis || scNeedsAnalysis;
 
             if (!hasAnalyzableSource) {
               return (
@@ -435,8 +441,8 @@ export default function SetDetailScreen() {
               );
             }
 
-            // Show "Needs Analysis" banner if sources exist but no timestamps
-            if (hasAnalyzableSource && !hasTimestamps) {
+            // Show "Needs Analysis" banner if sources exist but haven't been analyzed
+            if (anyNeedsAnalysis) {
               return (
                 <View style={[styles.needsSourceBanner, { backgroundColor: 'rgba(251, 146, 60, 0.1)', borderColor: 'rgba(251, 146, 60, 0.3)' }]}>
                   <View style={[styles.needsSourceIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.2)' }]}>
@@ -460,8 +466,9 @@ export default function SetDetailScreen() {
               {/* YouTube */}
               {(() => {
                 const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
-                const needsAnalysis = ytLink && !hasTimestamps;
+                // Check if any track was sourced from YouTube (indicates analysis was run)
+                const hasYouTubeAnalysis = setList.tracks?.some(t => t.source === 'youtube');
+                const needsAnalysis = ytLink && !hasYouTubeAnalysis;
 
                 return ytLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -475,7 +482,7 @@ export default function SetDetailScreen() {
                       <Text style={styles.linkPlatform}>YouTube</Text>
                       <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                     </Pressable>
-                    {needsAnalysis && (
+                    {needsAnalysis ? (
                       <Pressable
                         style={styles.analyzeButton}
                         onPress={async () => {
@@ -551,7 +558,12 @@ export default function SetDetailScreen() {
                         <Sparkles size={12} color="#FFF" />
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
-                    )}
+                    ) : hasYouTubeAnalysis ? (
+                      <View style={styles.analyzedBadge}>
+                        <CheckCircle size={10} color="#22C55E" />
+                        <Text style={styles.analyzedBadgeText}>Analyzed</Text>
+                      </View>
+                    ) : null}
                   </View>
                 ) : (
                   <Pressable
@@ -574,8 +586,9 @@ export default function SetDetailScreen() {
               {/* SoundCloud */}
               {(() => {
                 const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
-                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
-                const needsAnalysis = scLink && !hasTimestamps;
+                // Check if any track was sourced from SoundCloud (indicates analysis was run)
+                const hasSoundCloudAnalysis = setList.tracks?.some(t => t.source === 'soundcloud');
+                const needsAnalysis = scLink && !hasSoundCloudAnalysis;
 
                 return scLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -589,7 +602,7 @@ export default function SetDetailScreen() {
                       <Text style={styles.linkPlatform}>SoundCloud</Text>
                       <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
                     </Pressable>
-                    {needsAnalysis && (
+                    {needsAnalysis ? (
                       <Pressable
                         style={[styles.analyzeButton, { backgroundColor: '#FF5500' }]}
                         onPress={async () => {
@@ -663,7 +676,12 @@ export default function SetDetailScreen() {
                         <Sparkles size={12} color="#FFF" />
                         <Text style={styles.analyzeButtonText}>Analyze</Text>
                       </Pressable>
-                    )}
+                    ) : hasSoundCloudAnalysis ? (
+                      <View style={[styles.analyzedBadge, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
+                        <CheckCircle size={10} color="#FF5500" />
+                        <Text style={[styles.analyzedBadgeText, { color: '#FF5500' }]}>Analyzed</Text>
+                      </View>
+                    ) : null}
                   </View>
                 ) : (
                   <Pressable
@@ -1219,6 +1237,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600' as const,
     color: '#FFF',
+  },
+  analyzedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginTop: 6,
+  },
+  analyzedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#22C55E',
   },
   conflictHintBanner: {
     backgroundColor: 'rgba(206, 138, 75, 0.12)',

@@ -300,6 +300,11 @@
           }
           
           if (trackName !== 'Unknown' || trackArtist !== 'Unknown') {
+            // Debug: log timestamp extraction
+            if (index < 5) {
+              console.log(`[1001TL] Track ${index + 1}: "${trackName}" - timeStr="${timeStr}" secs=${secs}`);
+            }
+
             tracks.push({
               title: trackName,
               artist: trackArtist,
