@@ -202,10 +202,10 @@ module.exports = async (req, res) => {
   const supabase = createClient(supabaseUrl, supabaseKey);
 
   try {
-    // Fetch all sets
+    // Fetch all sets (database uses 'title' not 'name')
     const { data: sets, error: fetchError } = await supabase
       .from('sets')
-      .select('id, name, venue, event_name')
+      .select('id, title, venue, dj_name')
       .order('created_at', { ascending: false });
 
     if (fetchError) {
@@ -224,12 +224,12 @@ module.exports = async (req, res) => {
 
     for (const set of sets) {
       try {
-        // Parse the original name
-        const parsed = parseSetInfo(set.name);
+        // Parse the original title
+        const parsed = parseSetInfo(set.title);
 
         // Check if anything changed
         const hasChanges =
-          parsed.name !== set.name ||
+          parsed.name !== set.title ||
           (parsed.venue && parsed.venue !== set.venue);
 
         if (!hasChanges) {
@@ -237,19 +237,14 @@ module.exports = async (req, res) => {
           continue;
         }
 
-        // Update the set
+        // Update the set (database uses 'title' not 'name')
         const updateData = {
-          name: parsed.name,
+          title: parsed.name,
         };
 
         // Only update venue if we found it and it's not already set
         if (parsed.venue && !set.venue) {
           updateData.venue = parsed.venue;
-        }
-
-        // Store event name if the parsed name is different (cleaner version)
-        if (parsed.name !== set.name && !set.event_name) {
-          updateData.event_name = parsed.name;
         }
 
         const { error: updateError } = await supabase
@@ -262,18 +257,18 @@ module.exports = async (req, res) => {
           results.errors++;
           results.details.push({
             id: set.id,
-            original: set.name,
+            original: set.title,
             error: updateError.message,
           });
         } else {
           results.updated++;
           results.details.push({
             id: set.id,
-            original: set.name,
-            newName: parsed.name,
+            original: set.title,
+            newTitle: parsed.name,
             venue: parsed.venue,
           });
-          console.log(`[Migration] Updated: "${set.name}" -> "${parsed.name}" | Venue: ${parsed.venue}`);
+          console.log(`[Migration] Updated: "${set.title}" -> "${parsed.name}" | Venue: ${parsed.venue}`);
         }
       } catch (err) {
         console.error(`[Migration] Error processing set ${set.id}:`, err.message);
