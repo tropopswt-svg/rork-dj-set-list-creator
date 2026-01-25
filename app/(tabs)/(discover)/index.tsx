@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -23,6 +23,7 @@ interface Filters {
   artists: string[];
   years: string[];
   countries: string[];
+  identified: 'all' | 'identified' | 'unidentified';
 }
 
 // Extract country from location string (last part after comma)
@@ -66,6 +67,7 @@ export default function DiscoverScreen() {
     artists: [],
     years: [],
     countries: [],
+    identified: 'all',
   });
 
   // Fetch sets from database
@@ -159,7 +161,18 @@ export default function DiscoverScreen() {
     };
   }, [setLists]);
 
-  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length;
+  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0);
+
+  // Check if a set has been IDentified (analyzed via YouTube/SoundCloud)
+  const isSetIdentified = (set: SetList): boolean => {
+    // Check if set has YouTube or SoundCloud sources
+    const hasAnalyzableSource = set.sourceLinks?.some(
+      link => link.platform === 'youtube' || link.platform === 'soundcloud'
+    );
+    // Check if it's been AI processed or has tracks with timestamps
+    const hasBeenAnalyzed = set.aiProcessed || (set.tracksIdentified && set.tracksIdentified > 0);
+    return hasAnalyzableSource && hasBeenAnalyzed;
+  };
 
   const filteredSets = useMemo(() => {
     return setLists
@@ -173,6 +186,13 @@ export default function DiscoverScreen() {
             set.venue?.toLowerCase().includes(query) ||
             set.location?.toLowerCase().includes(query);
           if (!matchesSearch) return false;
+        }
+
+        // IDentified filter
+        if (selectedFilters.identified !== 'all') {
+          const identified = isSetIdentified(set);
+          if (selectedFilters.identified === 'identified' && !identified) return false;
+          if (selectedFilters.identified === 'unidentified' && identified) return false;
         }
 
         // Artist filter
@@ -213,7 +233,7 @@ export default function DiscoverScreen() {
   };
 
   const clearFilters = () => {
-    setSelectedFilters({ artists: [], years: [], countries: [] });
+    setSelectedFilters({ artists: [], years: [], countries: [], identified: 'all' });
   };
 
   const toggleFilterDropdown = () => {
@@ -314,6 +334,59 @@ export default function DiscoverScreen() {
         {/* Filter Dropdown */}
         {showFilterDropdown && (
           <Animated.View style={[styles.filterDropdown]}>
+            {/* IDentified toggle */}
+            <View style={styles.identifiedFilterRow}>
+              <Sparkles size={14} color={Colors.dark.primary} />
+              <Text style={styles.identifiedFilterLabel}>Status:</Text>
+              <View style={styles.identifiedToggleGroup}>
+                <Pressable
+                  style={[
+                    styles.identifiedToggle,
+                    selectedFilters.identified === 'all' && styles.identifiedToggleActive,
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedFilters(prev => ({ ...prev, identified: 'all' }));
+                  }}
+                >
+                  <Text style={[
+                    styles.identifiedToggleText,
+                    selectedFilters.identified === 'all' && styles.identifiedToggleTextActive,
+                  ]}>All</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.identifiedToggle,
+                    selectedFilters.identified === 'identified' && styles.identifiedToggleActive,
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedFilters(prev => ({ ...prev, identified: 'identified' }));
+                  }}
+                >
+                  <Text style={[
+                    styles.identifiedToggleText,
+                    selectedFilters.identified === 'identified' && styles.identifiedToggleTextActive,
+                  ]}>IDentified</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.identifiedToggle,
+                    selectedFilters.identified === 'unidentified' && styles.identifiedToggleActive,
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedFilters(prev => ({ ...prev, identified: 'unidentified' }));
+                  }}
+                >
+                  <Text style={[
+                    styles.identifiedToggleText,
+                    selectedFilters.identified === 'unidentified' && styles.identifiedToggleTextActive,
+                  ]}>Unanalyzed</Text>
+                </Pressable>
+              </View>
+            </View>
+
             {/* Filter section buttons */}
             <View style={styles.filterSectionButtons}>
               <Pressable
@@ -627,6 +700,45 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  identifiedFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  identifiedFilterLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  identifiedToggleGroup: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: Colors.dark.background,
+    borderRadius: 8,
+    padding: 2,
+  },
+  identifiedToggle: {
+    flex: 1,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  identifiedToggleActive: {
+    backgroundColor: Colors.dark.primary,
+  },
+  identifiedToggleText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.dark.textMuted,
+  },
+  identifiedToggleTextActive: {
+    color: Colors.dark.background,
   },
   filterSectionButtons: {
     flexDirection: 'row',

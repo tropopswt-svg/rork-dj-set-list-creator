@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, Sparkles, FileQuestion } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -276,12 +276,14 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
   };
 
   // Check if set needs analyzable sources (YouTube or SoundCloud)
-  const needsSource = !setList.sourceLinks.some(
+  const hasAnalyzableSource = setList.sourceLinks.some(
     l => l.platform === 'youtube' || l.platform === 'soundcloud'
   );
+  const needsSource = !hasAnalyzableSource;
 
-  // Check if set is fully IDentified (all tracks found, no gaps)
+  // Check if set has been IDentified (analyzed via YouTube/SoundCloud)
   const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
+  const isIdentified = hasAnalyzableSource && (setList.aiProcessed || trackCount > 0);
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
 
   // Keep full name for search indexing
@@ -372,10 +374,16 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
                 )}
               </View>
               <View style={styles.statsRow}>
-                {eventDate && (
-                  <View style={styles.eventDateBadge}>
-                    <Calendar size={9} color={Colors.dark.primary} />
-                    <Text style={styles.eventDateText}>{formatEventDate(eventDate)}</Text>
+                {/* IDentified status badge */}
+                {isIdentified ? (
+                  <View style={styles.identifiedBadge}>
+                    <Sparkles size={8} color={Colors.dark.primary} />
+                    <Text style={styles.identifiedBadgeText}>IDentified</Text>
+                  </View>
+                ) : (
+                  <View style={styles.unanalyzedBadge}>
+                    <FileQuestion size={8} color={Colors.dark.textMuted} />
+                    <Text style={styles.unanalyzedBadgeText}>Unanalyzed</Text>
                   </View>
                 )}
                 <View style={styles.tracksStat}>
@@ -627,6 +635,34 @@ const styles = StyleSheet.create({
   eventDateText: {
     fontSize: 9,
     color: Colors.dark.primary,
+    fontWeight: '500' as const,
+  },
+  identifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: `${Colors.dark.primary}15`,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  identifiedBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.primary,
+    fontWeight: '600' as const,
+  },
+  unanalyzedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(107, 114, 128, 0.12)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  unanalyzedBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.textMuted,
     fontWeight: '500' as const,
   },
   metaRow: {
