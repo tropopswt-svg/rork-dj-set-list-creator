@@ -159,54 +159,104 @@
         }
       }
 
+      // Debug: Log all elements that might contain timestamps
+      console.log('[1001TL] Looking for timestamp elements...');
+      const allCueVals = document.querySelectorAll('.cueVal');
+      const allCueIs = document.querySelectorAll('.cueI');
+      console.log('[1001TL] Found .cueVal:', allCueVals.length, 'Found .cueI:', allCueIs.length);
+      if (allCueVals.length > 0) {
+        console.log('[1001TL] First .cueVal text:', allCueVals[0].textContent);
+      }
+      if (allCueIs.length > 0) {
+        console.log('[1001TL] First .cueI text:', allCueIs[0].textContent);
+      }
+
+      // Try to find timestamp containers at the page level
+      // The timestamp might be in a separate element that's a sibling of the track info
+      const timestampMap = new Map();
+
+      // Method 1: Try finding timestamps via .cueI elements and map them by position
+      document.querySelectorAll('.cueI').forEach((cueEl, i) => {
+        const text = cueEl.textContent?.trim() || '';
+        const match = text.match(/^(\d{1,2}:\d{2}(:\d{2})?)$/);
+        if (match) {
+          timestampMap.set(i, match[1]);
+          console.log('[1001TL] Timestamp found at position', i, ':', match[1]);
+        }
+      });
+
       // Extract tracks - 1001tracklists uses .bItm for track items in the modern layout
       // Also try legacy selectors .tlpItem and .tlpTog
       const trackItems = document.querySelectorAll('.bItm:not(.bItmH):not(.con), .tlpItem, .tlpTog');
       console.log('[1001TL] Found', trackItems.length, 'track items');
 
-      trackItems.forEach((item, index) => {
+      // Also get track items via the tracklist tab if available
+      const tlTabItems = document.querySelectorAll('#tlTab .bItm');
+      console.log('[1001TL] Found', tlTabItems.length, 'track items in #tlTab');
+
+      const itemsToProcess = tlTabItems.length > 0 ? tlTabItems : trackItems;
+
+      itemsToProcess.forEach((item, index) => {
         try {
           const artistEl = item.querySelector('.blueLinkColor, a[href*="/artist/"]');
           const trackEl = item.querySelector('.trackValue, span[itemprop="name"]');
           const labelEl = item.querySelector('a[href*="/label/"]');
 
-          // Find timestamp - 1001tracklists puts it in .cueVal inside .cueI, below the artwork
-          // The timestamp shows when this track starts in the set (e.g., "06:07")
+          // Find timestamp - check multiple locations
           let timeStr = '';
 
-          // Primary selector: .cueVal contains the actual timestamp text
-          const cueVal = item.querySelector('.cueVal');
-          if (cueVal) {
-            timeStr = cueVal.textContent?.trim() || '';
+          // Method 1: Check if we have a timestamp from the map at this index
+          if (timestampMap.has(index)) {
+            timeStr = timestampMap.get(index);
           }
 
-          // Fallback: .cueI container might have the timestamp directly
+          // Method 2: Look for timestamp in .cueI or .cueVal within this item
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
-            const cueI = item.querySelector('.cueI');
-            if (cueI) {
-              timeStr = cueI.textContent?.trim() || '';
+            const cueEl = item.querySelector('.cueI, .cueVal');
+            if (cueEl) {
+              const text = cueEl.textContent?.trim() || '';
+              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              if (match) timeStr = match[1];
             }
           }
 
-          // Fallback: try older selectors
+          // Method 3: Look in the artM (artwork) area - timestamp is displayed below artwork
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
-            const timeEl = item.querySelector('.cueValueField, .time');
-            if (timeEl) {
-              timeStr = timeEl.textContent?.trim() || '';
+            const artM = item.querySelector('.artM');
+            if (artM) {
+              const text = artM.textContent?.trim() || '';
+              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              if (match) timeStr = match[1];
             }
           }
 
-          // Last resort: search for any timestamp pattern in the item text
+          // Method 4: Look in the bPlay (play button) area
+          if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
+            const bPlay = item.querySelector('.bPlay');
+            if (bPlay) {
+              const text = bPlay.textContent?.trim() || '';
+              // Exclude just numbers (track positions like "01", "02")
+              const match = text.match(/(\d{1,2}:\d{2}(:\d{2})?)/);
+              if (match) timeStr = match[1];
+            }
+          }
+
+          // Method 5: Search entire item text for timestamp pattern
           if (!timeStr || !timeStr.match(/^\d{1,2}:\d{2}/)) {
             const allText = item.textContent || '';
-            // Look for timestamps but exclude track numbers (01, 02, etc.) and play counts
+            // Match MM:SS or HH:MM:SS format
             const tsMatch = allText.match(/\b(\d{1,2}:\d{2}(:\d{2})?)\b/);
             if (tsMatch) {
               timeStr = tsMatch[1];
-            } else {
-              timeStr = '0:00';
             }
           }
+
+          // Debug: Log what we found for first few tracks
+          if (index < 3) {
+            console.log(`[1001TL] Track ${index}: timeStr="${timeStr}"`);
+          }
+
+          if (!timeStr) timeStr = '0:00';
 
           let trackArtist = artistEl?.textContent?.trim() || '';
           let trackName = trackEl?.textContent?.trim() || '';
