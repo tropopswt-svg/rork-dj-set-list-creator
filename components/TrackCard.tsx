@@ -71,7 +71,7 @@ export default function TrackCard({
 
     // Only count actual identification sources/platforms, not flags
     if (track.source === '1001tracklists' || track.source === 'database') {
-      sources.push('1001');
+      sources.push('unverified');
     }
     if (track.source === 'youtube') {
       sources.push('youtube');
@@ -124,7 +124,7 @@ export default function TrackCard({
 
     // BASELINE: From 1001Tracklists - not yet confirmed by comments
     if (track.source === '1001tracklists' || track.source === 'database') {
-      return { icon: '1001', color: '#06B6D4', label: '1001' };
+      return { icon: 'unverified', color: Colors.dark.textMuted, label: 'Unverified' };
     }
 
     // Fallback for ID tracks (unidentified)
@@ -133,7 +133,7 @@ export default function TrackCard({
     }
 
     // Default: baseline data
-    return { icon: '1001', color: '#06B6D4', label: '1001' };
+    return { icon: 'unverified', color: Colors.dark.textMuted, label: 'Unverified' };
   };
 
   const renderSourceIcon = () => {
@@ -148,9 +148,9 @@ export default function TrackCard({
         // Confirmed by YouTube or SoundCloud analysis - show checkmark with platform indicator
         IconComponent = <CheckCircle size={iconSize} color={info.color} />;
         break;
-      case '1001':
-        // Baseline from 1001Tracklists - not yet confirmed
-        IconComponent = <Wand2 size={iconSize} color={info.color} />;
+      case 'unverified':
+        // Baseline data - not yet confirmed by comments
+        IconComponent = <AlertCircle size={iconSize} color={info.color} />;
         break;
       case 'youtube':
         IconComponent = <Youtube size={iconSize} color={info.color} />;

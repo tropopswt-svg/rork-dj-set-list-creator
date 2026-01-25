@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
+import AnimatedSetCard from '@/components/AnimatedSetCard';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { mockSetLists } from '@/mocks/tracks';
@@ -56,6 +57,7 @@ export default function DiscoverScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const dropdownAnim = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
   const [refreshing, setRefreshing] = useState(false);
@@ -414,10 +416,15 @@ export default function DiscoverScreen() {
           </Animated.View>
         )}
 
-        <ScrollView
+        <Animated.ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -433,10 +440,12 @@ export default function DiscoverScreen() {
             </View>
           ) : (
             <>
-              {filteredSets.map(setList => (
-                <SetFeedCard
+              {filteredSets.map((setList, index) => (
+                <AnimatedSetCard
                   key={setList.id}
                   setList={setList}
+                  index={index}
+                  scrollY={scrollY}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
                   onArtistPress={(artist) => {
                     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
@@ -458,7 +467,7 @@ export default function DiscoverScreen() {
               )}
             </>
           )}
-        </ScrollView>
+        </Animated.ScrollView>
 
         <ImportSetModal
           visible={showImportModal}
