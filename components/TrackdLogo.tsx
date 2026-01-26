@@ -2,54 +2,44 @@ import React, { useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import Colors from '@/constants/colors';
 
-// TRACK'D Logo with spinning vinyl record 'C'
+// TRACK'D Logo with spinning vinyl grooves inside the C and tonearm needle
 
 interface TrackdLogoProps {
   size?: 'small' | 'medium' | 'large';
   showTagline?: boolean;
 }
 
-// Vinyl Record C - The C is shaped like a record with spinning grooves inside
+// The letter C that spins like a vinyl record - spins once, then waits
 const VinylC = ({
-  size = 24,
-  grooveColor = Colors.dark.primary,
-  labelColor = Colors.dark.primary,
+  size = 28,
 }: {
   size?: number;
-  grooveColor?: string;
-  labelColor?: string;
 }) => {
   const spinAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Continuous spin at 33 1/3 RPM feel (slower, vinyl-like)
-    Animated.loop(
-      Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: 3000, // Full rotation in 3 seconds
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    // Subtle pulse on the label
-    Animated.loop(
+    // Spin once slowly, wait 5 seconds, repeat
+    const spinSequence = () => {
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.05,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
+        // Spin one full rotation slowly (like a vinyl)
+        Animated.timing(spinAnim, {
           toValue: 1,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
+          duration: 2500, // Slow vinyl spin
+          easing: Easing.linear,
           useNativeDriver: true,
         }),
-      ])
-    ).start();
+        // Wait 5 seconds
+        Animated.delay(5000),
+        // Reset instantly
+        Animated.timing(spinAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]).start(() => spinSequence());
+    };
+
+    spinSequence();
   }, []);
 
   const rotation = spinAnim.interpolate({
@@ -57,93 +47,111 @@ const VinylC = ({
     outputRange: ['0deg', '360deg'],
   });
 
-  const grooveCount = Math.floor(size / 4);
-  const centerSize = size * 0.25;
-  const grooveSpacing = (size / 2 - centerSize / 2) / grooveCount;
+  const fontSize = size * 0.85;
+  const centerSize = size * 0.28; // Vinyl center label size
 
   return (
-    <View style={[styles.vinylContainer, { width: size, height: size }]}>
-      {/* The vinyl record base - dark background */}
-      <View style={[styles.vinylBase, {
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        backgroundColor: '#0a0a0a',
-      }]}>
-
-        {/* Spinning grooves layer */}
-        <Animated.View style={[
-          styles.groovesContainer,
+    <View style={[styles.vinylCContainer, { width: size, height: size }]}>
+      {/* The spinning C */}
+      <Animated.Text
+        style={[
+          styles.letterC,
           {
-            width: size,
-            height: size,
+            fontSize,
+            lineHeight: size,
             transform: [{ rotate: rotation }],
-          }
-        ]}>
-          {/* Concentric groove circles */}
-          {Array.from({ length: grooveCount }, (_, i) => {
-            const grooveSize = size - (i * grooveSpacing * 2);
-            const opacity = 0.15 + (i / grooveCount) * 0.25;
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.groove,
-                  {
-                    width: grooveSize,
-                    height: grooveSize,
-                    borderRadius: grooveSize / 2,
-                    borderColor: grooveColor,
-                    borderWidth: 0.5,
-                    opacity,
-                    position: 'absolute',
-                    left: (size - grooveSize) / 2,
-                    top: (size - grooveSize) / 2,
-                  },
-                ]}
-              />
-            );
-          })}
-
-          {/* Vinyl shine/reflection effect */}
-          <View style={[styles.vinylShine, {
-            width: size * 0.6,
-            height: size * 0.15,
-            top: size * 0.15,
-            left: size * 0.1,
-            transform: [{ rotate: '-30deg' }],
-          }]} />
-        </Animated.View>
-
-        {/* Center label (stationary) */}
-        <Animated.View style={[
-          styles.centerLabel,
-          {
-            width: centerSize,
-            height: centerSize,
-            borderRadius: centerSize / 2,
-            backgroundColor: labelColor,
-            transform: [{ scale: pulseAnim }],
-          }
-        ]}>
-          {/* Spindle hole */}
-          <View style={[styles.spindleHole, {
-            width: centerSize * 0.2,
-            height: centerSize * 0.2,
-            borderRadius: centerSize * 0.1,
-          }]} />
-        </Animated.View>
+          },
+        ]}
+      >
+        C
+      </Animated.Text>
+      {/* Vinyl center label */}
+      <View style={[styles.vinylCenter, { width: centerSize, height: centerSize, borderRadius: centerSize / 2 }]}>
+        <View style={[styles.vinylCenterDot, { width: centerSize * 0.3, height: centerSize * 0.3, borderRadius: centerSize * 0.15 }]} />
       </View>
-
-      {/* C-shape mask - creates the "C" by masking part of the record */}
-      <View style={[styles.cMask, {
-        width: size * 0.35,
-        height: size * 0.45,
-        right: -size * 0.05,
-        top: size * 0.275,
-        backgroundColor: Colors.dark.background,
-      }]} />
     </View>
+  );
+};
+
+// Animated waveform that appears every 4-5 seconds
+const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height?: number }) => {
+  const waveAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Waveform appears every 4-5 seconds, scrolls slowly, then fades
+    const waveSequence = () => {
+      Animated.sequence([
+        // Wait 4-5 seconds before showing
+        Animated.delay(4500),
+        // Fade in
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Scroll slowly across
+        Animated.timing(waveAnim, {
+          toValue: 1,
+          duration: 3500, // Slower scroll
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        // Fade out
+        Animated.timing(opacityAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        // Reset position instantly
+        Animated.timing(waveAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]).start(() => waveSequence());
+    };
+
+    waveSequence();
+  }, []);
+
+  const translateX = waveAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-width * 0.5, width * 0.3],
+  });
+
+  // Generate wave bars - taller
+  const barCount = Math.floor(width / 5);
+  const bars = Array.from({ length: barCount * 2 }, (_, i) => {
+    const progress = i / barCount;
+    const waveHeight = Math.sin(progress * Math.PI * 3) * 0.6 + 0.4;
+    return { height: waveHeight * height };
+  });
+
+  return (
+    <Animated.View style={[styles.waveformContainer, { width, height, overflow: 'hidden', opacity: opacityAnim }]}>
+      <Animated.View
+        style={[
+          styles.waveformBars,
+          { transform: [{ translateX }] },
+        ]}
+      >
+        {bars.map((bar, i) => (
+          <View
+            key={i}
+            style={[
+              styles.waveformBar,
+              {
+                height: bar.height,
+                width: 2,
+                marginHorizontal: 1,
+                backgroundColor: `rgba(226, 29, 72, ${0.2 + (bar.height / height) * 0.25})`,
+              },
+            ]}
+          />
+        ))}
+      </Animated.View>
+    </Animated.View>
   );
 };
 
@@ -151,47 +159,55 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const sizeConfig = {
-    small: { fontSize: 20, vinylSize: 22, letterSpacing: -1 },
-    medium: { fontSize: 26, vinylSize: 28, letterSpacing: -1.5 },
-    large: { fontSize: 34, vinylSize: 36, letterSpacing: -2 },
+    small: { fontSize: 22, letterSpacing: 3, vinylSize: 24, waveWidth: 140, waveHeight: 10 },
+    medium: { fontSize: 30, letterSpacing: 4, vinylSize: 32, waveWidth: 180, waveHeight: 14 },
+    large: { fontSize: 40, letterSpacing: 6, vinylSize: 42, waveWidth: 240, waveHeight: 18 },
   }[size];
 
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.01, duration: 2000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.02, duration: 3000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
       ])
     ).start();
   }, []);
 
   return (
     <Animated.View style={[styles.container, { transform: [{ scale: pulseAnim }] }]}>
+      {/* Waveform underlay - appears every few seconds */}
+      <View style={styles.waveformUnderlayWrapper}>
+        <WaveformUnderlay width={sizeConfig.waveWidth} height={sizeConfig.waveHeight} />
+      </View>
+
       <View style={styles.logoWrapper}>
-        {/* TRA */}
+        {/* TRAC */}
         <Text style={[styles.logoText, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
           TRA
         </Text>
 
         {/* Vinyl C */}
-        <View style={styles.vinylCWrapper}>
-          <VinylC size={sizeConfig.vinylSize} />
-        </View>
+        <VinylC size={sizeConfig.vinylSize} />
 
-        {/* K'D */}
+        {/* K */}
         <Text style={[styles.logoText, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
-          K'D
+          K
+        </Text>
+
+        {/* 'D */}
+        <Text style={[styles.logoTextApostrophe, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
+          'D
         </Text>
       </View>
 
       {showTagline && (
-        <Text style={styles.tagline}>Every track. Every set. Identified.</Text>
+        <Text style={styles.tagline}>Every track. Every set.</Text>
       )}
     </Animated.View>
   );
 }
 
-// Also export a simple text version for badges/small spaces
+// Simple text badge for compact spaces
 export function TrackdBadge({ size = 'small' }: { size?: 'small' | 'medium' }) {
   const sizeConfig = {
     small: { fontSize: 10, padding: 4 },
@@ -208,6 +224,23 @@ export function TrackdBadge({ size = 'small' }: { size?: 'small' | 'medium' }) {
 const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waveformUnderlayWrapper: {
+    position: 'absolute',
+    bottom: '35%',
+    opacity: 0.5,
+  },
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waveformBars: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  waveformBar: {
+    borderRadius: 1,
   },
   logoWrapper: {
     flexDirection: 'row',
@@ -216,50 +249,35 @@ const styles = StyleSheet.create({
   logoText: {
     fontWeight: '900',
     color: Colors.dark.text,
-    letterSpacing: -1,
   },
-  vinylCWrapper: {
-    marginHorizontal: -2,
+  logoTextApostrophe: {
+    fontWeight: '900',
+    color: Colors.dark.text,
+    marginLeft: -2,
   },
-  vinylContainer: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  vinylBase: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  groovesContainer: {
-    position: 'absolute',
+  vinylCContainer: {
     justifyContent: 'center',
     alignItems: 'center',
   },
-  groove: {
-    backgroundColor: 'transparent',
+  letterC: {
+    fontWeight: '900',
+    color: Colors.dark.text,
   },
-  vinylShine: {
+  vinylCenter: {
     position: 'absolute',
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: 50,
-  },
-  centerLabel: {
-    position: 'absolute',
+    backgroundColor: Colors.dark.primary,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
   },
-  spindleHole: {
-    backgroundColor: '#0a0a0a',
-  },
-  cMask: {
-    position: 'absolute',
+  vinylCenterDot: {
+    backgroundColor: Colors.dark.background,
   },
   tagline: {
     marginTop: 8,
     fontSize: 11,
     color: Colors.dark.textMuted,
-    letterSpacing: 0.5,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
   },
   badge: {
     backgroundColor: Colors.dark.primary,
@@ -268,6 +286,6 @@ const styles = StyleSheet.create({
   badgeText: {
     color: '#FFFFFF',
     fontWeight: '900',
-    letterSpacing: -0.5,
+    letterSpacing: 0.5,
   },
 });

@@ -314,65 +314,73 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
   });
 
   // Calculate dynamic font sizes based on content length and venue presence
-  const getArtistFontSize = (artists: string[], hasVenue: boolean = false) => {
+  // NEVER truncate - instead scale down font size to fit
+  const getArtistChipStyle = (artists: string[], hasVenue: boolean = false) => {
     const totalChars = artists.slice(0, 2).reduce((sum, a) => sum + a.length, 0);
-    // Smaller font when venue badge exists to prevent overlap
+    const longestName = Math.max(...artists.slice(0, 2).map(a => a.length));
+
+    // Base sizes - scale down based on content
+    let fontSize = 11;
+    let paddingH = 8;
+    let paddingV = 3;
+
     if (hasVenue) {
-      if (totalChars > 20 || artists.length > 2) return 8;
-      if (totalChars > 14) return 9;
-      return 10;
+      // With venue badge, we have less horizontal space
+      if (totalChars > 28 || longestName > 16) {
+        fontSize = 7;
+        paddingH = 4;
+        paddingV = 2;
+      } else if (totalChars > 22 || longestName > 13) {
+        fontSize = 8;
+        paddingH = 5;
+        paddingV = 2;
+      } else if (totalChars > 16 || longestName > 10) {
+        fontSize = 9;
+        paddingH = 6;
+        paddingV = 3;
+      } else {
+        fontSize = 10;
+        paddingH = 7;
+        paddingV = 3;
+      }
+    } else {
+      // No venue badge - more room
+      if (totalChars > 30 || longestName > 18) {
+        fontSize = 8;
+        paddingH = 5;
+        paddingV = 2;
+      } else if (totalChars > 24 || longestName > 14) {
+        fontSize = 9;
+        paddingH = 6;
+        paddingV = 3;
+      } else if (totalChars > 18) {
+        fontSize = 10;
+        paddingH = 7;
+        paddingV = 3;
+      }
     }
-    if (totalChars > 25 || artists.length > 2) return 9;
-    if (totalChars > 18) return 10;
-    return 11;
+
+    return { fontSize, paddingH, paddingV };
   };
 
-  // Truncate artist name if too long (to prevent overlap with venue badge)
-  const truncateArtist = (name: string, maxLength: number = 12) => {
-    if (name.length <= maxLength) return name;
-    return name.substring(0, maxLength - 1) + '…';
-  };
-
-  // Calculate how many artists to show based on name lengths
-  // If venue badge exists, we have less space - make artist chips smaller
+  // Get display artists - show full names, never truncate
+  // Only limit to 2 artists max, show +N for more
   const getDisplayArtists = (allArtists: string[], hasVenue: boolean) => {
-    const maxWidth = hasVenue ? 80 : 140; // pixels roughly
-    const maxCharsPerArtist = hasVenue ? 8 : 14;
+    if (allArtists.length === 0) return { display: [], hasMore: false, moreCount: 0 };
 
-    if (allArtists.length === 0) return { display: [], hasMore: false };
     if (allArtists.length === 1) {
       return {
-        display: [truncateArtist(allArtists[0], maxCharsPerArtist + 4)],
-        hasMore: false
+        display: [allArtists[0]], // Full name, no truncation
+        hasMore: false,
+        moreCount: 0
       };
     }
 
-    // Check total length of first two artists
-    const first = allArtists[0];
-    const second = allArtists[1];
-    const totalLength = first.length + second.length;
-
-    // If both fit comfortably, show both
-    if (totalLength <= maxCharsPerArtist * 2) {
-      return {
-        display: [first, second],
-        hasMore: allArtists.length > 2
-      };
-    }
-
-    // If first artist is very long, just show truncated first + more
-    if (first.length > maxCharsPerArtist) {
-      return {
-        display: [truncateArtist(first, maxCharsPerArtist)],
-        hasMore: true,
-        moreCount: allArtists.length - 1
-      };
-    }
-
-    // Show first and truncated second
+    // Show first two artists with full names
     return {
-      display: [first, truncateArtist(second, maxCharsPerArtist - 2)],
-      hasMore: allArtists.length > 2
+      display: [allArtists[0], allArtists[1]],
+      hasMore: allArtists.length > 2,
+      moreCount: allArtists.length - 2
     };
   };
 
@@ -1086,7 +1094,7 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
     return detectEvent(textToSearch);
   }, [setList.name, venue, setList.eventName]);
 
-  const artistFontSize = getArtistFontSize(artists, !!venue);
+  const artistChipStyle = getArtistChipStyle(artists, !!venue);
   // Apply smart shortening to venue name for display
   const displayVenue = venue ? shortenVenueName(venue) : null;
   const venueFontSize = displayVenue ? getVenueFontSize(displayVenue) : 10;
@@ -1209,7 +1217,10 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                       <Animated.View
                         style={[
                           styles.artistChip,
-                          { paddingHorizontal: displayVenue ? 5 : (artistFontSize > 9 ? 8 : 6), maxWidth: displayVenue ? 70 : 110 },
+                          {
+                            paddingHorizontal: artistChipStyle.paddingH,
+                            paddingVertical: artistChipStyle.paddingV,
+                          },
                           isSelected && styles.artistChipSelected,
                           isSelected && {
                             shadowColor: Colors.dark.primary,
@@ -1223,7 +1234,7 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                         <Text
                           style={[
                             styles.artistText,
-                            { fontSize: artistFontSize },
+                            { fontSize: artistChipStyle.fontSize },
                             isSelected && styles.artistTextSelected,
                             pressed && styles.artistTextPressed
                           ]}
@@ -1242,7 +1253,10 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                     <Animated.View
                       style={[
                         styles.artistMoreBadge,
-                        { paddingHorizontal: artistFontSize > 9 ? 10 : 7 },
+                        {
+                          paddingHorizontal: artistChipStyle.paddingH + 2,
+                          paddingVertical: artistChipStyle.paddingV,
+                        },
                         isSelected && styles.artistMoreBadgeSelected,
                         isSelected && {
                           shadowColor: Colors.dark.primary,
@@ -1256,7 +1270,7 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                       <Text
                         style={[
                           styles.artistMoreText,
-                          { fontSize: artistFontSize },
+                          { fontSize: artistChipStyle.fontSize },
                           isSelected && styles.artistMoreTextSelected,
                           pressed && styles.artistTextPressed
                         ]}
