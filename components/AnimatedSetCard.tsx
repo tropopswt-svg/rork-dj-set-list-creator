@@ -23,66 +23,74 @@ export default function AnimatedSetCard({
   onArtistPress,
 }: AnimatedSetCardProps) {
   // The scroll value when this card should be perfectly centered
-  // Card is centered when: cardTopInList - scrollY = screenCenter - cardHeight/2
-  // Simplified: scrollY = index * CARD_HEIGHT (offset to put card at screen center)
   const scrollYWhenCentered = index * CARD_HEIGHT;
 
-  // Input range with a wider "plateau" for more weight/stickiness
-  // The card stays at peak scale for a larger scroll distance
+  // WIDER input range for stronger stickiness - takes more scroll to transition
+  // This creates more "drag resistance" so user has to scroll more before
+  // the next card becomes the elevated one
   const inputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 2,    // Card is below center - small
-    scrollYWhenCentered - CARD_HEIGHT * 0.5,  // Approaching center - start growing
-    scrollYWhenCentered + CARD_HEIGHT * 0.5,  // At center plateau - stay big
-    scrollYWhenCentered + CARD_HEIGHT * 2,    // Card is above center - small again
+    scrollYWhenCentered - CARD_HEIGHT * 3,    // Card is far below - very small
+    scrollYWhenCentered - CARD_HEIGHT * 1.5,  // Approaching - start growing slowly
+    scrollYWhenCentered - CARD_HEIGHT * 0.3,  // Nearly centered - accelerate
+    scrollYWhenCentered + CARD_HEIGHT * 0.3,  // At center plateau - stay BIG
+    scrollYWhenCentered + CARD_HEIGHT * 1.5,  // Moving away - start shrinking
+    scrollYWhenCentered + CARD_HEIGHT * 3,    // Card is far above - very small
   ];
 
-  // Scale: smaller when far from center, larger at center with plateau
+  // STRONGER scale difference - much clearer which card is selected
   const scale = scrollY.interpolate({
     inputRange,
-    outputRange: [0.88, 1.05, 1.05, 0.88],
+    outputRange: [0.78, 0.85, 1.08, 1.08, 0.85, 0.78],
     extrapolate: 'clamp',
   });
 
-  // Opacity: dimmed when away from center, with plateau at full opacity
+  // STRONGER opacity contrast
   const opacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.65, 1, 1, 0.65],
+    outputRange: [0.4, 0.6, 1, 1, 0.6, 0.4],
     extrapolate: 'clamp',
   });
 
-  // Shadow/glow intensity for elevation effect
+  // STRONGER shadow/glow intensity
   const shadowOpacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 0.35, 0.35, 0],
+    outputRange: [0, 0.1, 0.5, 0.5, 0.1, 0],
     extrapolate: 'clamp',
   });
 
-  // Shadow radius for glow spread
+  // Larger shadow spread for elevated card
   const shadowRadius = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 16, 16, 0],
+    outputRange: [0, 4, 24, 24, 4, 0],
     extrapolate: 'clamp',
   });
 
-  // Slight lift effect (translateY)
+  // More pronounced lift effect
   const translateY = scrollY.interpolate({
     inputRange,
-    outputRange: [0, -4, -4, 0],
+    outputRange: [4, 2, -8, -8, 2, 4],
+    extrapolate: 'clamp',
+  });
+
+  // Add horizontal translateX for depth effect (cards offset slightly when not centered)
+  const translateX = scrollY.interpolate({
+    inputRange,
+    outputRange: [8, 4, 0, 0, 4, 8],
     extrapolate: 'clamp',
   });
 
   const animatedStyle: Animated.WithAnimatedObject<ViewStyle> = {
-    transform: [{ scale }, { translateY }],
+    transform: [{ scale }, { translateY }, { translateX }],
     opacity,
-    // Glow effect - orange tinted shadow
+    // Strong glow effect - orange tinted shadow for elevated card
     shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity,
     shadowRadius,
-    // Android elevation
+    // Android elevation - stronger for centered card
     elevation: scrollY.interpolate({
       inputRange,
-      outputRange: [0, 8, 8, 0],
+      outputRange: [0, 2, 12, 12, 2, 0],
       extrapolate: 'clamp',
     }),
   };

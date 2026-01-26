@@ -497,37 +497,36 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
 
           <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
 
-          {/* Location badge - only show if different from venue */}
-          {location && (
-            <View style={styles.locationRow}>
-              <View style={styles.locationBadge}>
-                <MapPin size={10} color="#fff" />
-                <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
-              </View>
-            </View>
-          )}
-
           <View style={styles.footer}>
             <View style={styles.metaRow}>
-              {/* Left side: Platform icons or needs source indicator */}
-              <View style={styles.platforms}>
+              {/* Left side: Platform icons + tracks count */}
+              <View style={styles.leftStats}>
                 {needsSource ? (
                   <View style={styles.needsSourceIcon}>
                     <AlertCircle size={14} color="#FF6B35" fill="rgba(255, 107, 53, 0.2)" />
                   </View>
                 ) : (
-                  getPlatformIcons()
+                  <View style={styles.platforms}>
+                    {getPlatformIcons()}
+                  </View>
                 )}
-              </View>
-
-              {/* Right side: Status badges */}
-              <View style={styles.statsRow}>
                 {/* Tracks count badge */}
                 <View style={styles.tracksBadge}>
                   <Text style={styles.tracksBadgeText}>
                     {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
                   </Text>
                 </View>
+              </View>
+
+              {/* Right side: Location + Status badges */}
+              <View style={styles.rightStats}>
+                {/* Location badge - moved to bottom right */}
+                {location && (
+                  <View style={styles.locationBadgeSmall}>
+                    <MapPin size={9} color="#fff" />
+                    <Text style={styles.locationBadgeTextSmall} numberOfLines={1}>{location}</Text>
+                  </View>
+                )}
 
                 {/* IDentified status badge */}
                 {isIdentified ? (
@@ -772,7 +771,34 @@ const styles = StyleSheet.create({
   platforms: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
+  },
+  leftStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 6,
+  },
+  rightStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  locationBadgeSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#4B5563',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    maxWidth: 90,
+  },
+  locationBadgeTextSmall: {
+    fontSize: 9,
+    color: '#fff',
+    fontWeight: '600' as const,
   },
   statsRow: {
     flexDirection: 'row',
