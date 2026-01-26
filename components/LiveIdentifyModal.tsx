@@ -369,7 +369,8 @@ export default function LiveIdentifyModal({
   const glowAnim = useRef(new Animated.Value(0.3)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
-  const overlayAnim = useRef(new Animated.Value(0)).current; // Dark overlay
+  const overlayAnim = useRef(new Animated.Value(0)).current; // Dark overlay opacity
+  const overlaySlideAnim = useRef(new Animated.Value(-1)).current; // Overlay slide (for lock effect)
   const progressAnim = useRef(new Animated.Value(0)).current; // Ring progress (0-1)
 
   // Request microphone permission
@@ -393,6 +394,7 @@ export default function LiveIdentifyModal({
       setIdentifiedTrack(null);
       setError(null);
       overlayAnim.setValue(0);
+      overlaySlideAnim.setValue(-1);
       progressAnim.setValue(0);
 
       Animated.timing(fadeAnim, {
@@ -403,6 +405,7 @@ export default function LiveIdentifyModal({
     } else {
       fadeAnim.setValue(0);
       overlayAnim.setValue(0);
+      overlaySlideAnim.setValue(-1);
       progressAnim.setValue(0);
       stopRecording();
     }
@@ -514,13 +517,22 @@ export default function LiveIdentifyModal({
       setError(null);
       setIdentifiedTrack(null);
 
-      // Animate dark overlay in (screen locker effect)
-      Animated.timing(overlayAnim, {
-        toValue: 1,
-        duration: 400,
-        easing: Easing.out(Easing.ease),
-        useNativeDriver: true,
-      }).start();
+      // Animate dark overlay in (screen locker swipe-down effect)
+      overlaySlideAnim.setValue(-1);
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 1,
+          duration: 500,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlaySlideAnim, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
 
       // Start progress ring animation (15 seconds)
       progressAnim.setValue(0);
@@ -603,12 +615,20 @@ export default function LiveIdentifyModal({
 
       const result = await response.json();
 
-      // Fade out overlay when showing results
-      Animated.timing(overlayAnim, {
-        toValue: 0,
-        duration: 400,
-        useNativeDriver: true,
-      }).start();
+      // Fade/slide out overlay when showing results
+      Animated.parallel([
+        Animated.timing(overlayAnim, {
+          toValue: 0,
+          duration: 400,
+          useNativeDriver: true,
+        }),
+        Animated.timing(overlaySlideAnim, {
+          toValue: 1,
+          duration: 400,
+          easing: Easing.in(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]).start();
 
       if (result.success && result.result) {
         console.log('[LiveIdentify] Track identified:', result.result);
@@ -648,12 +668,19 @@ export default function LiveIdentifyModal({
     setIdentifiedTrack(null);
     setError(null);
 
-    // Fade out overlay
-    Animated.timing(overlayAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    // Fade/slide out overlay
+    Animated.parallel([
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(overlaySlideAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
     progressAnim.setValue(0);
   };
 
@@ -878,25 +905,38 @@ export default function LiveIdentifyModal({
         {/* Background waveform - only visible during scanning */}
         {isScanning && <BackgroundWaveform isActive={isScanning} />}
 
-        {/* Dark overlay - screen locker effect during scanning */}
+        {/* Dark overlay - screen locker swipe effect during scanning */}
         <Animated.View
           style={[
             styles.darkOverlay,
             {
               opacity: overlayAnim.interpolate({
                 inputRange: [0, 1],
-                outputRange: [0, 0.85],
+                outputRange: [0, 0.92],
               }),
+              transform: [{
+                translateY: overlaySlideAnim.interpolate({
+                  inputRange: [-1, 0, 1],
+                  outputRange: [-screenHeight, 0, screenHeight],
+                }),
+              }],
             },
           ]}
           pointerEvents={isScanning ? 'auto' : 'none'}
         />
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          {/* Close button */}
-          <Pressable style={styles.closeButton} onPress={handleClose}>
-            <X size={28} color={Colors.dark.text} />
-          </Pressable>
+          {/* Close button - fades out during scanning (locked) */}
+          <Animated.View style={[styles.closeButtonContainer, {
+            opacity: overlayAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 0],
+            }),
+          }]}>
+            <Pressable style={styles.closeButton} onPress={handleClose}>
+              <X size={24} color={Colors.dark.text} />
+            </Pressable>
+          </Animated.View>
 
           {/* Header */}
           <View style={styles.header}>
@@ -927,12 +967,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     zIndex: 10,
   },
-  closeButton: {
+  closeButtonContainer: {
     position: 'absolute',
     top: 60,
     right: 24,
-    padding: 8,
     zIndex: 10,
+  },
+  closeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     alignItems: 'center',
