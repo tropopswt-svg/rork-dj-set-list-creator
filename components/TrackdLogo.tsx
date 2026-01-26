@@ -75,46 +75,20 @@ const VinylC = ({
   );
 };
 
-// Animated waveform that appears every 4-5 seconds
+// Animated waveform that runs continuously
 const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height?: number }) => {
   const waveAnim = useRef(new Animated.Value(0)).current;
-  const opacityAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Waveform appears every 4-5 seconds, scrolls slowly, then fades
-    const waveSequence = () => {
-      Animated.sequence([
-        // Wait 4-5 seconds before showing
-        Animated.delay(4500),
-        // Fade in
-        Animated.timing(opacityAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        // Scroll slowly across
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 3500, // Slower scroll
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        // Fade out
-        Animated.timing(opacityAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        // Reset position instantly
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(() => waveSequence());
-    };
-
-    waveSequence();
+    // Continuous scrolling waveform
+    Animated.loop(
+      Animated.timing(waveAnim, {
+        toValue: 1,
+        duration: 8000, // Slow continuous scroll
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
   }, []);
 
   const translateX = waveAnim.interpolate({
@@ -131,7 +105,7 @@ const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height
   });
 
   return (
-    <Animated.View style={[styles.waveformContainer, { width, height, overflow: 'hidden', opacity: opacityAnim }]}>
+    <View style={[styles.waveformContainer, { width, height, overflow: 'hidden' }]}>
       <Animated.View
         style={[
           styles.waveformBars,
@@ -153,7 +127,7 @@ const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height
           />
         ))}
       </Animated.View>
-    </Animated.View>
+    </View>
   );
 };
 
@@ -161,9 +135,9 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const sizeConfig = {
-    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 8 },
-    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 10 },
-    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 14 },
+    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 80 },
+    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 100 },
+    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 120 },
   }[size];
 
   useEffect(() => {
@@ -230,7 +204,12 @@ const styles = StyleSheet.create({
   },
   waveformUnderlayWrapper: {
     position: 'absolute',
-    bottom: '35%',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
     opacity: 0.4,
   },
   waveformContainer: {
