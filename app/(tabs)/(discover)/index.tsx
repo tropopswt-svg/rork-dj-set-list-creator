@@ -14,8 +14,9 @@ import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
 
-// Offset to shift the "center" down - accounts for header (~180px) plus moves center below middle
-const CENTER_OFFSET = 100;
+// Offset to shift the "center" down - moves the "selected" card to thumb position
+// Higher value = center point lower on screen
+const CENTER_OFFSET = 200;
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -128,9 +129,9 @@ export default function DiscoverScreen() {
     setSetLists(combined);
   }, [dbSets]);
 
-  // Haptic feedback when scrolling through cards
+  // Haptic feedback when scrolling through cards - strong feedback on each card
   useEffect(() => {
-    const HAPTIC_THROTTLE_MS = 80; // Minimum time between haptics
+    const HAPTIC_THROTTLE_MS = 60; // Slightly faster for responsive feel
 
     const listenerId = scrollY.addListener(({ value }) => {
       // Calculate which card is currently centered (adjusted for CENTER_OFFSET)
@@ -145,7 +146,8 @@ export default function DiscoverScreen() {
       ) {
         lastCenteredIndex.current = centeredIndex;
         lastHapticTime.current = now;
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Medium impact - noticeable "click" as you scroll through each set
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       }
     });
 
