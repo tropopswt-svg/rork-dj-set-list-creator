@@ -4,98 +4,105 @@ import Colors from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ID'D Logo - Clean, simple, recognizable
-// All letters same size, subtle animation on apostrophe and final D
+// ID'D Logo
+// [ID] with scanner waveform + 'D where D is filled with spinning vinyl grooves
 
 interface IddLogoProps {
   size?: 'small' | 'medium' | 'large';
   showTagline?: boolean;
 }
 
-// Pulsing apostrophe - like a heartbeat/detection indicator
-const PulsingApostrophe = ({ fontSize = 44 }: { fontSize?: number }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.2)).current;
+// [ID] with scanning waveform effect
+const BracketedID = ({ fontSize = 56 }: { fontSize?: number }) => {
+  const scanAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Subtle pulse
+    // Scanning waveform sweeps across
     Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.2,
-          duration: 600,
-          easing: Easing.out(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
+        Animated.timing(scanAnim, {
           toValue: 1,
-          duration: 600,
-          easing: Easing.in(Easing.ease),
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.delay(2000),
-      ])
-    ).start();
-
-    // Glow synced with pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 0.7,
-          duration: 600,
-          easing: Easing.out(Easing.ease),
+        Animated.delay(3000),
+        Animated.timing(scanAnim, {
+          toValue: 0,
+          duration: 0,
           useNativeDriver: true,
         }),
-        Animated.timing(glowAnim, {
-          toValue: 0.2,
-          duration: 600,
-          easing: Easing.in(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.delay(2000),
       ])
     ).start();
   }, []);
 
+  const containerWidth = fontSize * 1.8;
+
+  const translateX = scanAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-containerWidth * 0.3, containerWidth * 1.1],
+  });
+
+  const opacity = scanAnim.interpolate({
+    inputRange: [0, 0.1, 0.9, 1],
+    outputRange: [0, 1, 1, 0],
+  });
+
   return (
-    <View style={styles.apostropheContainer}>
-      {/* Glow behind */}
-      <Animated.View
-        style={[
-          styles.apostropheGlow,
-          {
-            width: fontSize * 0.5,
-            height: fontSize * 0.5,
-            borderRadius: fontSize * 0.25,
-            opacity: glowAnim,
-          },
-        ]}
-      />
-      <Animated.Text
-        style={[
-          styles.apostrophe,
-          {
-            fontSize,
-            transform: [{ scale: pulseAnim }],
-          },
-        ]}
-      >
-        '
-      </Animated.Text>
+    <View style={[styles.bracketedContainer, { height: fontSize * 1.1 }]}>
+      {/* Left bracket */}
+      <Text style={[styles.bracket, { fontSize }]}>[</Text>
+
+      {/* ID text with scanner overlay */}
+      <View style={[styles.idContainer, { width: containerWidth, overflow: 'hidden' }]}>
+        <Text style={[styles.idText, { fontSize }]}>ID</Text>
+
+        {/* Scanning waveform line */}
+        <Animated.View
+          style={[
+            styles.scanLine,
+            {
+              height: fontSize * 0.9,
+              transform: [{ translateX }],
+              opacity,
+            },
+          ]}
+        >
+          {/* Waveform bars */}
+          {Array.from({ length: 8 }, (_, i) => {
+            const h = Math.sin((i / 8) * Math.PI) * 0.7 + 0.3;
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.waveBar,
+                  {
+                    height: fontSize * 0.8 * h,
+                    backgroundColor: Colors.dark.primary,
+                  },
+                ]}
+              />
+            );
+          })}
+        </Animated.View>
+      </View>
+
+      {/* Right bracket */}
+      <Text style={[styles.bracket, { fontSize }]}>]</Text>
     </View>
   );
 };
 
-// Final D with spinning vinyl center inside the bowl
-const VinylD = ({ fontSize = 44 }: { fontSize?: number }) => {
+// Vinyl D - the D shape filled with spinning vinyl grooves
+const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
   const spinAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Continuous slow spin
+    // Continuous vinyl spin
     Animated.loop(
       Animated.timing(spinAnim, {
         toValue: 1,
-        duration: 4000,
+        duration: 3000,
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -107,122 +114,152 @@ const VinylD = ({ fontSize = 44 }: { fontSize?: number }) => {
     outputRange: ['0deg', '360deg'],
   });
 
-  const centerSize = fontSize * 0.3;
+  const dWidth = fontSize * 0.75;
+  const dHeight = fontSize;
+  const vinylSize = fontSize * 1.4; // Vinyl larger than D to ensure coverage
 
   return (
-    <View style={[styles.vinylDContainer, { height: fontSize }]}>
-      <Text style={[styles.letter, { fontSize }]}>D</Text>
-      {/* Vinyl center positioned in the D's bowl */}
-      <Animated.View
-        style={[
-          styles.vinylCenter,
-          {
-            width: centerSize,
-            height: centerSize,
-            borderRadius: centerSize / 2,
-            right: fontSize * 0.15,
-            transform: [{ rotate: rotation }],
-          },
-        ]}
-      >
-        <View
+    <View style={[styles.vinylDWrapper, { width: dWidth, height: dHeight }]}>
+      {/* The D-shaped mask container */}
+      <View style={[styles.vinylDMask, { width: dWidth, height: dHeight }]}>
+        {/* Spinning vinyl underneath */}
+        <Animated.View
           style={[
-            styles.vinylDot,
+            styles.vinylDisc,
             {
-              width: centerSize * 0.3,
-              height: centerSize * 0.3,
-              borderRadius: centerSize * 0.15,
+              width: vinylSize,
+              height: vinylSize,
+              borderRadius: vinylSize / 2,
+              transform: [{ rotate: rotation }],
             },
           ]}
-        />
-        {/* Groove lines */}
-        <View style={[styles.vinylGroove, { width: centerSize * 0.8, height: 1 }]} />
-        <View style={[styles.vinylGroove, { width: 1, height: centerSize * 0.8 }]} />
-      </Animated.View>
-    </View>
-  );
-};
-
-// Waveform background - subtle, full width, full height
-const WaveformBg = ({ width = 200, height = 80 }: { width?: number; height?: number }) => {
-  const waveAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(waveAnim, {
-        toValue: 1,
-        duration: 15000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
-
-  const translateX = waveAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -width * 0.5],
-  });
-
-  const barCount = Math.floor(width / 4);
-  const bars = Array.from({ length: barCount * 2 }, (_, i) => {
-    const progress = i / barCount;
-    const waveHeight = Math.sin(progress * Math.PI * 4) * 0.5 + 0.5;
-    return { height: waveHeight * height };
-  });
-
-  return (
-    <View style={[styles.waveformBg, { width, height, overflow: 'hidden' }]}>
-      <Animated.View
-        style={[styles.waveformBars, { transform: [{ translateX }] }]}
-      >
-        {bars.map((bar, i) => (
+        >
+          {/* Vinyl grooves - concentric rings */}
+          {Array.from({ length: 12 }, (_, i) => {
+            const ringSize = vinylSize * (1 - i * 0.07);
+            return (
+              <View
+                key={i}
+                style={[
+                  styles.vinylGroove,
+                  {
+                    width: ringSize,
+                    height: ringSize,
+                    borderRadius: ringSize / 2,
+                    borderWidth: i % 2 === 0 ? 1.5 : 0.5,
+                    borderColor: i % 3 === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                  },
+                ]}
+              />
+            );
+          })}
+          {/* Center label */}
           <View
-            key={i}
             style={[
-              styles.waveformBar,
+              styles.vinylLabel,
               {
-                height: bar.height,
-                width: 2,
-                marginHorizontal: 1,
-                backgroundColor: `rgba(226, 29, 72, ${0.015 + (bar.height / height) * 0.03})`,
+                width: vinylSize * 0.25,
+                height: vinylSize * 0.25,
+                borderRadius: vinylSize * 0.125,
               },
             ]}
           />
-        ))}
-      </Animated.View>
+          {/* Center hole */}
+          <View
+            style={[
+              styles.vinylHole,
+              {
+                width: vinylSize * 0.06,
+                height: vinylSize * 0.06,
+                borderRadius: vinylSize * 0.03,
+              },
+            ]}
+          />
+        </Animated.View>
+      </View>
+
+      {/* D letter outline on top - acts as the "cookie cutter" mask */}
+      <View style={[styles.dOverlay, { width: dWidth, height: dHeight }]}>
+        {/* Left side cutout (the inside of D) */}
+        <View
+          style={[
+            styles.dCutout,
+            {
+              width: dWidth * 0.35,
+              height: dHeight * 0.5,
+              borderTopRightRadius: dHeight * 0.25,
+              borderBottomRightRadius: dHeight * 0.25,
+              left: dWidth * 0.22,
+            },
+          ]}
+        />
+        {/* Top cutout */}
+        <View
+          style={[
+            styles.dCutoutTop,
+            {
+              width: dWidth,
+              height: dHeight * 0.12,
+              top: 0,
+            },
+          ]}
+        />
+        {/* Bottom cutout */}
+        <View
+          style={[
+            styles.dCutoutTop,
+            {
+              width: dWidth,
+              height: dHeight * 0.12,
+              bottom: 0,
+            },
+          ]}
+        />
+        {/* Right side - round off */}
+        <View
+          style={[
+            styles.dCutoutRight,
+            {
+              width: dWidth * 0.15,
+              height: dHeight,
+              right: 0,
+              borderTopLeftRadius: dHeight * 0.5,
+              borderBottomLeftRadius: dHeight * 0.5,
+            },
+          ]}
+        />
+      </View>
     </View>
   );
 };
 
 export default function IddLogo({ size = 'medium', showTagline = false }: IddLogoProps) {
   const sizeConfig = {
-    small: { fontSize: 36, letterSpacing: 5, waveHeight: 70 },
-    medium: { fontSize: 48, letterSpacing: 7, waveHeight: 90 },
-    large: { fontSize: 64, letterSpacing: 10, waveHeight: 110 },
+    small: { fontSize: 42, spacing: 4 },
+    medium: { fontSize: 56, spacing: 6 },
+    large: { fontSize: 72, spacing: 8 },
   }[size];
 
   return (
     <View style={styles.container}>
-      {/* Waveform background */}
-      <View style={styles.waveformWrapper}>
-        <WaveformBg width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
-      </View>
-
       <View style={styles.logoWrapper}>
-        {/* I */}
-        <Text style={[styles.letter, { fontSize: sizeConfig.fontSize, marginRight: sizeConfig.letterSpacing }]}>
-          I
+        {/* [ID] with scanner */}
+        <BracketedID fontSize={sizeConfig.fontSize} />
+
+        {/* Apostrophe */}
+        <Text
+          style={[
+            styles.apostrophe,
+            {
+              fontSize: sizeConfig.fontSize,
+              marginLeft: sizeConfig.spacing,
+            }
+          ]}
+        >
+          '
         </Text>
 
-        {/* D */}
-        <Text style={[styles.letter, { fontSize: sizeConfig.fontSize, marginRight: sizeConfig.letterSpacing * 0.3 }]}>
-          D
-        </Text>
-
-        {/* Pulsing apostrophe */}
-        <PulsingApostrophe fontSize={sizeConfig.fontSize} />
-
-        {/* Final D with vinyl */}
+        {/* Vinyl D */}
         <VinylD fontSize={sizeConfig.fontSize} />
       </View>
 
@@ -252,70 +289,93 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  waveformWrapper: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
-    left: 0,
-    right: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.5,
-  },
-  waveformBg: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  waveformBars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  waveformBar: {
-    borderRadius: 1,
-  },
   logoWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  letter: {
-    fontWeight: '900',
-    color: Colors.dark.text,
+  bracketedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  apostropheContainer: {
+  bracket: {
+    fontWeight: '300',
+    color: Colors.dark.textMuted,
+  },
+  idContainer: {
     justifyContent: 'center',
     alignItems: 'center',
-    marginTop: -8,
+    position: 'relative',
   },
-  apostropheGlow: {
+  idText: {
+    fontWeight: '900',
+    color: Colors.dark.text,
+    letterSpacing: 2,
+  },
+  scanLine: {
     position: 'absolute',
-    backgroundColor: Colors.dark.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  waveBar: {
+    width: 3,
+    borderRadius: 1.5,
   },
   apostrophe: {
     fontWeight: '900',
-    color: Colors.dark.primary,
+    color: Colors.dark.text,
   },
-  vinylDContainer: {
-    justifyContent: 'center',
-    alignItems: 'flex-start',
+  vinylDWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
   },
-  vinylCenter: {
+  vinylDMask: {
     position: 'absolute',
-    backgroundColor: Colors.dark.primary,
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  vinylDot: {
-    backgroundColor: Colors.dark.background,
+  vinylDisc: {
+    backgroundColor: '#1a1a1a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'absolute',
   },
   vinylGroove: {
     position: 'absolute',
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  vinylLabel: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.primary,
+  },
+  vinylHole: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.background,
+  },
+  dOverlay: {
+    position: 'absolute',
+    backgroundColor: 'transparent',
+  },
+  dCutout: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.background,
+    top: '25%',
+  },
+  dCutoutTop: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.background,
+    left: 0,
+  },
+  dCutoutRight: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.background,
   },
   tagline: {
-    marginTop: 8,
-    fontSize: 11,
+    marginTop: 12,
+    fontSize: 12,
     color: Colors.dark.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 2,
     textTransform: 'uppercase',
   },
   badge: {
