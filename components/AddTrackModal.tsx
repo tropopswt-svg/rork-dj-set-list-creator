@@ -21,6 +21,9 @@ import ArtistAutocomplete from './ArtistAutocomplete';
 import { searchTracks, isSupabaseConfigured } from '@/lib/supabase';
 import type { DbTrack, DbArtist } from '@/lib/supabase/types';
 
+// API base URL
+const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
+
 interface AddTrackModalProps {
   visible: boolean;
   onClose: () => void;
@@ -169,27 +172,46 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleFetchFromLink = () => {
+  const handleFetchFromLink = async () => {
     if (!trackUrl.trim()) return;
-    
+
     setIsFetching(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
-    setTimeout(() => {
-      const platform = detectPlatform(trackUrl);
-      if (platform === 'spotify') {
-        setTitle('Melodic Dreams');
-        setArtist('Unknown Artist');
-      } else if (platform === 'soundcloud') {
-        setTitle('Underground Groove');
-        setArtist('Local Producer');
+
+    try {
+      // Call the API to fetch track metadata
+      const response = await fetch(`${API_BASE_URL}/api/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'fetchTrackMetadata',
+          url: trackUrl.trim(),
+        }),
+      });
+
+      const result = await response.json();
+      console.log('[AddTrackModal] Fetch result:', result);
+
+      if (result.success) {
+        if (result.title) setTitle(result.title);
+        if (result.artist) setArtist(result.artist);
+        setFetchedFromLink(true);
+
+        // If needs manual entry, still mark as fetched but show message
+        if (result.needsManualEntry) {
+          console.log('[AddTrackModal]', result.message);
+        }
       } else {
-        setTitle('Track Title');
-        setArtist('Artist Name');
+        // Fallback to platform detection for basic info
+        const platform = detectPlatform(trackUrl);
+        console.log('[AddTrackModal] API failed, using fallback for:', platform);
       }
-      setFetchedFromLink(true);
+    } catch (error) {
+      console.error('[AddTrackModal] Fetch error:', error);
+      // Silently fail - user can still manually enter info
+    } finally {
       setIsFetching(false);
-    }, 1200);
+    }
   };
 
   const handleSubmit = () => {

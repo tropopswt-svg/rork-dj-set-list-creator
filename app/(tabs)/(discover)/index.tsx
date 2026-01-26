@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -13,10 +13,12 @@ import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
+import { useSets } from '@/contexts/SetsContext';
+import { detectEvent, getEventLabel } from '@/components/EventBadge';
 
 // Offset to shift the "center" down - moves the "selected" card to thumb position
 // Higher value = center point lower on screen
-const CENTER_OFFSET = 200;
+const CENTER_OFFSET = 107;
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -28,6 +30,7 @@ interface Filters {
   years: string[];
   countries: string[];
   identified: 'all' | 'identified' | 'unidentified' | 'needs-source';
+  eventId: string | null; // Filter by event/venue badge
 }
 
 // Extract country from location string (last part after comma)
@@ -53,6 +56,7 @@ const extractYear = (date: Date | string): string => {
 
 export default function DiscoverScreen() {
   const router = useRouter();
+  const { refreshSetsMetadata } = useSets();
   const [setLists, setSetLists] = useState<SetList[]>([]);
   const [dbSets, setDbSets] = useState<SetList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +79,159 @@ export default function DiscoverScreen() {
     years: [],
     countries: [],
     identified: 'all',
+    eventId: null,
   });
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Hidden admin menu - tap 2 times, then hold to open
+  const hiddenTapCount = useRef(0);
+  const hiddenTapTimer = useRef<NodeJS.Timeout | null>(null);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showAdminMenu, setShowAdminMenu] = useState(false);
+  const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
+  const [adminMode, setAdminMode] = useState<'none' | 'remove' | 'edit' | 'badge'>('none');
+  const [showRefreshResults, setShowRefreshResults] = useState(false);
+  const [lastRefreshResults, setLastRefreshResults] = useState<{
+    updated: number;
+    failed: number;
+    updatedSets: Array<{ setId: string; setName: string; updates: Record<string, string> }>;
+    failedSets: Array<{ setId: string; setName: string; error: string }>;
+  } | null>(null);
+
+  // Handle press in - start long press detection after 2 taps
+  const handleHiddenPressIn = useCallback(() => {
+    console.log('[Admin] Press in, tap count:', hiddenTapCount.current);
+
+    // If we've tapped twice, start long press timer
+    if (hiddenTapCount.current >= 2) {
+      console.log('[Admin] Starting long press detection...');
+      longPressTimer.current = setTimeout(() => {
+        console.log('[Admin] Long press triggered! Opening menu...');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        hiddenTapCount.current = 0;
+        setShowAdminMenu(true);
+      }, 500); // 500ms hold
+    }
+  }, []);
+
+  // Handle press out - cancel long press
+  const handleHiddenPressOut = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  // Handle tap
+  const handleHiddenTap = useCallback(() => {
+    hiddenTapCount.current += 1;
+    console.log('[Admin] Tap count:', hiddenTapCount.current);
+
+    // Light haptic on each tap
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Reset timer on each tap
+    if (hiddenTapTimer.current) {
+      clearTimeout(hiddenTapTimer.current);
+    }
+
+    // Reset count after 2 seconds of no activity
+    hiddenTapTimer.current = setTimeout(() => {
+      console.log('[Admin] Resetting tap count');
+      hiddenTapCount.current = 0;
+    }, 2000);
+  }, []);
+
+  // Admin menu actions
+  const handleRefreshMetadata = useCallback(async () => {
+    setShowAdminMenu(false);
+    setIsRefreshingMetadata(true);
+
+    Alert.alert(
+      'Refreshing Metadata',
+      'Fetching updated venue and location info from YouTube descriptions...',
+      [{ text: 'OK' }]
+    );
+
+    try {
+      console.log('[Admin] Starting metadata refresh...');
+      const result = await refreshSetsMetadata();
+      console.log('[Admin] Refresh complete:', result);
+
+      // Store the results for viewing later
+      setLastRefreshResults(result);
+
+      setTimeout(() => {
+        Alert.alert(
+          'Metadata Refresh Complete',
+          `Updated: ${result.updated} sets\nFailed: ${result.failed}\n\nTap "View Results" in admin menu to see details.`,
+          [{ text: 'OK' }]
+        );
+      }, 500);
+    } catch (error: any) {
+      console.error('[Admin] Refresh error:', error);
+      Alert.alert('Error', `Failed to refresh metadata: ${error.message || 'Unknown error'}`);
+    } finally {
+      setIsRefreshingMetadata(false);
+    }
+  }, [refreshSetsMetadata]);
+
+  // View last refresh results
+  const handleViewRefreshResults = useCallback(() => {
+    setShowAdminMenu(false);
+    if (lastRefreshResults) {
+      setShowRefreshResults(true);
+    } else {
+      Alert.alert('No Results', 'No metadata refresh has been performed yet.');
+    }
+  }, [lastRefreshResults]);
+
+  const handleEnterRemoveMode = useCallback(() => {
+    setShowAdminMenu(false);
+    setAdminMode('remove');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Remove Mode',
+      'Tap on sets to remove them. Tap "Done" when finished.',
+      [{ text: 'OK' }]
+    );
+  }, []);
+
+  const handleEnterEditMode = useCallback(() => {
+    setShowAdminMenu(false);
+    setAdminMode('edit');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Edit Mode',
+      'Tap on sets to edit their names and details. Tap "Done" when finished.',
+      [{ text: 'OK' }]
+    );
+  }, []);
+
+  const handleEnterBadgeMode = useCallback(() => {
+    setShowAdminMenu(false);
+    setAdminMode('badge');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Alert.alert(
+      'Badge Mode',
+      'Tap on sets to change their event badges. Tap "Done" when finished.',
+      [{ text: 'OK' }]
+    );
+  }, []);
+
+  const handleExitAdminMode = useCallback(() => {
+    setAdminMode('none');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  // Handle event badge press - filter by event
+  const handleEventFilter = useCallback((eventId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelectedFilters(prev => ({
+      ...prev,
+      eventId: prev.eventId === eventId ? null : eventId, // Toggle filter
+    }));
+  }, []);
 
   // Fetch sets from database
   const fetchSets = useCallback(async () => {
@@ -138,16 +294,17 @@ export default function DiscoverScreen() {
       const centeredIndex = Math.round((value + CENTER_OFFSET) / CARD_HEIGHT);
       const now = Date.now();
 
-      // Trigger haptic if centered card changed (with throttle for smooth feel)
-      if (
-        centeredIndex !== lastCenteredIndex.current &&
-        centeredIndex >= 0 &&
-        now - lastHapticTime.current > HAPTIC_THROTTLE_MS
-      ) {
+      // Update selected index immediately for responsive visual feedback
+      if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
         lastCenteredIndex.current = centeredIndex;
-        lastHapticTime.current = now;
-        // Medium impact - noticeable "click" as you scroll through each set
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setSelectedIndex(centeredIndex);
+
+        // Trigger haptic with throttle for smooth feel
+        if (now - lastHapticTime.current > HAPTIC_THROTTLE_MS) {
+          lastHapticTime.current = now;
+          // Medium impact - noticeable "click" as you scroll through each set
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
       }
     });
 
@@ -257,6 +414,13 @@ export default function DiscoverScreen() {
           if (!country || !selectedFilters.countries.includes(country)) return false;
         }
 
+        // Event/Venue badge filter
+        if (selectedFilters.eventId) {
+          const textToSearch = `${set.name} ${set.venue || ''} ${set.eventName || ''}`;
+          const detectedEventId = detectEvent(textToSearch);
+          if (detectedEventId !== selectedFilters.eventId) return false;
+        }
+
         return true;
       })
       .sort((a, b) => {
@@ -270,6 +434,23 @@ export default function DiscoverScreen() {
   // Calculate initial scroll position to start in the middle of the list
   const middleIndex = Math.floor(filteredSets.length / 2);
   const initialScrollOffset = Math.max(0, middleIndex * CARD_HEIGHT - CENTER_OFFSET);
+
+  // Calculate snap positions - each card should snap when it's in the "centered" (raised) position
+  const snapOffsets = useMemo(() => {
+    const offsets: number[] = [];
+    filteredSets.forEach((_, index) => {
+      // Position where this card is centered/raised
+      const offset = index * CARD_HEIGHT - CENTER_OFFSET;
+      if (offset >= 0) {
+        offsets.push(offset);
+      }
+    });
+    // Add 0 as first snap point if not already there
+    if (offsets.length === 0 || offsets[0] !== 0) {
+      offsets.unshift(0);
+    }
+    return offsets;
+  }, [filteredSets.length]);
 
   // Set scroll position to middle when data loads
   const filteredSetKey = useMemo(() => filteredSets.map(s => s.id).join(','), [filteredSets]);
@@ -329,7 +510,18 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <View style={styles.headerSpacer} />
+          {/* Hidden admin button - tap 2 times, then hold */}
+          <Pressable
+            style={styles.hiddenTapArea}
+            onPress={handleHiddenTap}
+            onPressIn={handleHiddenPressIn}
+            onPressOut={handleHiddenPressOut}
+            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          >
+            {isRefreshingMetadata && (
+              <ActivityIndicator size="small" color={Colors.dark.primary} />
+            )}
+          </Pressable>
           <IDentifiedLogo />
           <View style={styles.headerSpacer}>
             <Pressable 
@@ -391,6 +583,23 @@ export default function DiscoverScreen() {
             )}
           </Pressable>
         </View>
+
+        {/* Active Event Filter Badge */}
+        {selectedFilters.eventId && (
+          <View style={styles.activeEventFilter}>
+            <Text style={styles.activeEventFilterLabel}>Showing:</Text>
+            <Pressable
+              style={styles.activeEventBadge}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setSelectedFilters(prev => ({ ...prev, eventId: null }));
+              }}
+            >
+              <Text style={styles.activeEventText}>{getEventLabel(selectedFilters.eventId)}</Text>
+              <X size={12} color={Colors.dark.primary} />
+            </Pressable>
+          </View>
+        )}
 
         {/* Filter Dropdown */}
         {showFilterDropdown && (
@@ -572,6 +781,8 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
+          snapToOffsets={snapOffsets}
+          decelerationRate={0.985}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
@@ -598,11 +809,13 @@ export default function DiscoverScreen() {
                   index={index}
                   scrollY={scrollY}
                   centerOffset={CENTER_OFFSET}
+                  isSelected={index === selectedIndex}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
                   onArtistPress={(artist) => {
                     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
                     router.push(`/(tabs)/(discover)/artist/${slug}`);
                   }}
+                  onEventPress={handleEventFilter}
                 />
               ))}
 
@@ -626,6 +839,144 @@ export default function DiscoverScreen() {
           onClose={() => setShowImportModal(false)}
           onImport={handleImport}
         />
+
+        {/* Admin Menu Modal */}
+        <Modal
+          visible={showAdminMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowAdminMenu(false)}
+        >
+          <Pressable
+            style={styles.adminModalOverlay}
+            onPress={() => setShowAdminMenu(false)}
+          >
+            <View style={styles.adminMenuContainer}>
+              <View style={styles.adminMenuHeader}>
+                <Settings size={20} color={Colors.dark.primary} />
+                <Text style={styles.adminMenuTitle}>Admin Menu</Text>
+                <Pressable onPress={() => setShowAdminMenu(false)} hitSlop={8}>
+                  <X size={20} color={Colors.dark.textMuted} />
+                </Pressable>
+              </View>
+
+              <Pressable style={styles.adminMenuItem} onPress={handleRefreshMetadata}>
+                <RefreshCw size={18} color={Colors.dark.text} />
+                <View style={styles.adminMenuItemContent}>
+                  <Text style={styles.adminMenuItemText}>Refresh Metadata</Text>
+                  <Text style={styles.adminMenuItemDesc}>Re-fetch venue/location from YouTube</Text>
+                </View>
+              </Pressable>
+
+              <Pressable style={styles.adminMenuItem} onPress={handleEnterRemoveMode}>
+                <Trash2 size={18} color="#EF4444" />
+                <View style={styles.adminMenuItemContent}>
+                  <Text style={styles.adminMenuItemText}>Remove Sets</Text>
+                  <Text style={styles.adminMenuItemDesc}>Tap sets to delete them</Text>
+                </View>
+              </Pressable>
+
+              <Pressable style={styles.adminMenuItem} onPress={handleEnterEditMode}>
+                <Edit3 size={18} color={Colors.dark.text} />
+                <View style={styles.adminMenuItemContent}>
+                  <Text style={styles.adminMenuItemText}>Edit Names</Text>
+                  <Text style={styles.adminMenuItemDesc}>Modify set names and artists</Text>
+                </View>
+              </Pressable>
+
+              <Pressable style={styles.adminMenuItem} onPress={handleEnterBadgeMode}>
+                <Tag size={18} color={Colors.dark.text} />
+                <View style={styles.adminMenuItemContent}>
+                  <Text style={styles.adminMenuItemText}>Manage Badges</Text>
+                  <Text style={styles.adminMenuItemDesc}>Change event/venue badges</Text>
+                </View>
+              </Pressable>
+
+              {lastRefreshResults && (
+                <Pressable style={[styles.adminMenuItem, styles.adminMenuItemHighlight]} onPress={handleViewRefreshResults}>
+                  <Sparkles size={18} color={Colors.dark.primary} />
+                  <View style={styles.adminMenuItemContent}>
+                    <Text style={[styles.adminMenuItemText, { color: Colors.dark.primary }]}>View Last Refresh Results</Text>
+                    <Text style={styles.adminMenuItemDesc}>{lastRefreshResults.updated} updated, {lastRefreshResults.failed} failed</Text>
+                  </View>
+                </Pressable>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+
+        {/* Refresh Results Modal */}
+        <Modal
+          visible={showRefreshResults}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowRefreshResults(false)}
+        >
+          <View style={styles.resultsModalOverlay}>
+            <View style={styles.resultsModalContainer}>
+              <View style={styles.resultsModalHeader}>
+                <Text style={styles.resultsModalTitle}>Metadata Refresh Results</Text>
+                <Pressable onPress={() => setShowRefreshResults(false)} hitSlop={8}>
+                  <X size={24} color={Colors.dark.text} />
+                </Pressable>
+              </View>
+
+              <ScrollView style={styles.resultsScrollView}>
+                {lastRefreshResults && lastRefreshResults.updatedSets.length > 0 && (
+                  <View style={styles.resultsSection}>
+                    <Text style={styles.resultsSectionTitle}>✅ Updated Sets ({lastRefreshResults.updatedSets.length})</Text>
+                    {lastRefreshResults.updatedSets.map((item, index) => (
+                      <View key={index} style={styles.resultItem}>
+                        <Text style={styles.resultSetName} numberOfLines={1}>{item.setName}</Text>
+                        <View style={styles.resultUpdates}>
+                          {Object.entries(item.updates).map(([key, value]) => (
+                            <Text key={key} style={styles.resultUpdateText}>
+                              • {key}: {value}
+                            </Text>
+                          ))}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {lastRefreshResults && lastRefreshResults.failedSets.length > 0 && (
+                  <View style={styles.resultsSection}>
+                    <Text style={[styles.resultsSectionTitle, { color: '#EF4444' }]}>❌ Failed Sets ({lastRefreshResults.failedSets.length})</Text>
+                    {lastRefreshResults.failedSets.map((item, index) => (
+                      <View key={index} style={styles.resultItem}>
+                        <Text style={styles.resultSetName} numberOfLines={1}>{item.setName}</Text>
+                        <Text style={styles.resultErrorText}>{item.error}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+
+                {lastRefreshResults && lastRefreshResults.updatedSets.length === 0 && lastRefreshResults.failedSets.length === 0 && (
+                  <Text style={styles.noResultsText}>No sets were updated or failed.</Text>
+                )}
+              </ScrollView>
+
+              <Pressable style={styles.resultsCloseButton} onPress={() => setShowRefreshResults(false)}>
+                <Text style={styles.resultsCloseButtonText}>Close</Text>
+              </Pressable>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Admin Mode Bar */}
+        {adminMode !== 'none' && (
+          <View style={styles.adminModeBar}>
+            <Text style={styles.adminModeText}>
+              {adminMode === 'remove' ? 'Remove Mode - Tap sets to delete' :
+               adminMode === 'edit' ? 'Edit Mode - Tap sets to edit' :
+               'Badge Mode - Tap sets to change badges'}
+            </Text>
+            <Pressable style={styles.adminModeDoneButton} onPress={handleExitAdminMode}>
+              <Text style={styles.adminModeDoneText}>Done</Text>
+            </Pressable>
+          </View>
+        )}
 
       </SafeAreaView>
     </View>
@@ -651,6 +1002,12 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 44,
     alignItems: 'flex-end',
+  },
+  hiddenTapArea: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   addButton: {
     width: 38,
@@ -679,8 +1036,35 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 8,
+  },
+  activeEventFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    gap: 8,
+  },
+  activeEventFilterLabel: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+  },
+  activeEventBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(226, 29, 72, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  activeEventText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
   },
   filterChip: {
     flex: 1,
@@ -916,5 +1300,180 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.primary,
     fontWeight: '500',
+  },
+  // Admin Menu styles
+  adminModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  adminMenuContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 16,
+    padding: 16,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  adminMenuHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  adminMenuTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginLeft: 10,
+  },
+  adminMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 6,
+    backgroundColor: Colors.dark.surfaceLight,
+  },
+  adminMenuItemContent: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  adminMenuItemText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.dark.text,
+  },
+  adminMenuItemDesc: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginTop: 2,
+  },
+  // Admin Mode Bar
+  adminModeBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingBottom: 34, // Account for bottom safe area
+  },
+  adminModeText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  adminModeDoneButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  adminModeDoneText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  // Admin Menu Highlight for results button
+  adminMenuItemHighlight: {
+    backgroundColor: 'rgba(226, 29, 72, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.3)',
+  },
+  // Refresh Results Modal styles
+  resultsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  resultsModalContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    maxHeight: '80%',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    overflow: 'hidden',
+  },
+  resultsModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+    backgroundColor: Colors.dark.surfaceLight,
+  },
+  resultsModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  resultsScrollView: {
+    padding: 16,
+    maxHeight: 400,
+  },
+  resultsSection: {
+    marginBottom: 20,
+  },
+  resultsSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
+  resultItem: {
+    backgroundColor: Colors.dark.background,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  resultSetName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginBottom: 6,
+  },
+  resultUpdates: {
+    gap: 2,
+  },
+  resultUpdateText: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    lineHeight: 18,
+  },
+  resultErrorText: {
+    fontSize: 12,
+    color: '#EF4444',
+    marginTop: 4,
+  },
+  resultsCloseButton: {
+    backgroundColor: Colors.dark.primary,
+    margin: 16,
+    marginTop: 0,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  resultsCloseButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

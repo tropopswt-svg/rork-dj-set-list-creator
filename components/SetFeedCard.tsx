@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, Animated, Easing, Alert } from 'react-native';
+import EventBadge, { detectEvent, EVENT_BADGES } from './EventBadge';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, HelpCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -10,6 +11,8 @@ interface SetFeedCardProps {
   setList: SetList;
   onPress?: () => void;
   onArtistPress?: (artist: string) => void;
+  onEventPress?: (eventId: string) => void;
+  isSelected?: boolean; // Whether this card is the main/centered one in the scroll wheel
 }
 
 const coverImages = [
@@ -20,6 +23,78 @@ const coverImages = [
   'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=400&h=400&fit=crop',
   'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
 ];
+
+// Festival/Event to actual geographic location mapping (for deduplication)
+// When venue IS a festival, we show this as the location instead of repeating the festival name
+const FESTIVAL_LOCATIONS: Record<string, string> = {
+  // Major festivals with specific locations
+  'Coachella': 'Indio, California',
+  'Tomorrowland': 'Boom, Belgium',
+  'Burning Man': 'Black Rock Desert, Nevada',
+  'EDC': 'Las Vegas, Nevada',
+  'EDC Las Vegas': 'Las Vegas, Nevada',
+  'Ultra': 'Miami, Florida',
+  'Ultra Music Festival': 'Miami, Florida',
+  'Lollapalooza': 'Grant Park, Chicago',
+  'Awakenings': 'Spaarnwoude, Netherlands',
+  'Time Warp': 'Mannheim, Germany',
+  'Dekmantel': 'Amsterdamse Bos, Netherlands',
+  'Sónar': 'Barcelona, Spain',
+  'Primavera Sound': 'Barcelona, Spain',
+  'Movement': 'Hart Plaza, Detroit',
+  'Movement Detroit': 'Hart Plaza, Detroit',
+  'Exit Festival': 'Novi Sad, Serbia',
+  'Electric Forest': 'Rothbury, Michigan',
+  'Outside Lands': 'Golden Gate Park, San Francisco',
+  'Lightning in a Bottle': 'Bakersfield, California',
+  'CRSSD': 'Waterfront Park, San Diego',
+  'III Points': 'Wynwood, Miami',
+  'Shambhala': 'Salmo River Ranch, BC',
+  'Day Zero': 'Tulum, Mexico',
+  'BPM Festival': 'Costa Rica',
+  'ADE': 'Amsterdam, Netherlands',
+  'Creamfields': 'Daresbury, UK',
+  // Ibiza clubs (venue IS the destination)
+  'Ushuaïa': 'Playa d\'en Bossa, Ibiza',
+  'Hï Ibiza': 'Playa d\'en Bossa, Ibiza',
+  'Pacha': 'Ibiza Town, Ibiza',
+  'Amnesia': 'San Rafael, Ibiza',
+  'DC-10': 'Playa d\'en Bossa, Ibiza',
+  'Privilege': 'San Rafael, Ibiza',
+  // Berlin clubs
+  'Berghain': 'Kreuzberg, Berlin',
+  'Tresor': 'Mitte, Berlin',
+  'Watergate': 'Kreuzberg, Berlin',
+  // Burning Man camps/art cars
+  'Robot Heart': 'Black Rock City, Nevada',
+  'Mayan Warrior': 'Black Rock City, Nevada',
+  'Camp Question Mark': 'Black Rock City, Nevada',
+  // Coachella stages
+  'Yuma': 'Indio, California',
+  'Yuma Stage': 'Indio, California',
+  'Yuma Tent': 'Indio, California',
+  'Sahara': 'Indio, California',
+  'Sahara Stage': 'Indio, California',
+  'Gobi': 'Indio, California',
+  'Gobi Stage': 'Indio, California',
+  'Mojave': 'Indio, California',
+  'Mojave Stage': 'Indio, California',
+  'Do LaB': 'Indio, California',
+  // Lollapalooza stages
+  'Perry Stage': 'Grant Park, Chicago',
+  'Perrys Stage': 'Grant Park, Chicago',
+  // Radio shows/podcasts (use the broadcast origin as location)
+  'BBC Radio 1': 'London, UK',
+  'Essential Mix': 'London, UK',
+  'Boiler Room': 'Various Locations',
+  'Cercle': 'Various Locations',
+  'Defected Radio': 'London, UK',
+  'Drumcode Radio': 'Stockholm, Sweden',
+  // Label parties (event-based, travels)
+  'Circoloco': 'Various Locations',
+  'Defected': 'Various Locations',
+  'elrow': 'Various Locations',
+};
 
 // Venue to location mapping for deriving location from venue
 const VENUE_LOCATIONS: Record<string, string> = {
@@ -97,9 +172,31 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'ADE': 'Amsterdam, Netherlands',
   'BPM Festival': 'Mexico',
   'Burning Man': 'Nevada, USA',
+  'Black Rock City': 'Nevada, USA',
+  'Robot Heart': 'Burning Man, Nevada',
+  'Mayan Warrior': 'Burning Man, Nevada',
   'Lightning in a Bottle': 'California, USA',
   'CRSSD': 'San Diego, USA',
   'III Points': 'Miami, USA',
+  'Lollapalooza': 'Chicago, USA',
+  'Perry Stage': 'Lollapalooza, Chicago',
+  'Perrys Stage': 'Lollapalooza, Chicago',
+  // Chicago venues
+  'Navy Pier': 'Chicago, USA',
+  'Spybar': 'Chicago, USA',
+  'Sound-Bar': 'Chicago, USA',
+  'Prysm': 'Chicago, USA',
+  'Radius Chicago': 'Chicago, USA',
+  'House Calls': 'Chicago, USA',
+  'Obskür': 'Various',
+  'Obskur': 'Various',
+  'Electric Forest': 'Michigan, USA',
+  'Outside Lands': 'San Francisco, USA',
+  'Holy Ship': 'Cruise',
+  'Shambhala': 'British Columbia, Canada',
+  'Day Zero': 'Tulum, Mexico',
+  'Zamna': 'Tulum, Mexico',
+  'Exit Festival': 'Serbia',
   // Radio Shows
   'BBC Radio 1': 'London, UK',
   'BBC Radio 1 Dance': 'London, UK',
@@ -152,6 +249,20 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Resistance': 'Miami, USA',
   'elrow': 'Barcelona, Spain',
   'Music On': 'Ibiza, Spain',
+  'Destino': 'Ibiza, Spain',
+  'Destino Ibiza': 'Ibiza, Spain',
+  'Blue Marlin': 'Ibiza, Spain',
+  'Blue Marlin Ibiza': 'Ibiza, Spain',
+  'Pikes': 'Ibiza, Spain',
+  'Pikes Ibiza': 'Ibiza, Spain',
+  'Las Dalias': 'Ibiza, Spain',
+  'Akasha': 'Ibiza, Spain',
+  'Cova Santa': 'Ibiza, Spain',
+  'Heart Ibiza': 'Ibiza, Spain',
+  'Eden': 'Ibiza, Spain',
+  'Es Paradis': 'Ibiza, Spain',
+  'Cafe Mambo': 'Ibiza, Spain',
+  'Cafe del Mar': 'Ibiza, Spain',
   'Knee Deep In Sound': 'Ibiza, Spain',
   'Paradise': 'Ibiza, Spain',
   'Solid Grooves': 'Ibiza, Spain',
@@ -159,15 +270,110 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Printworks': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPress, isSelected = false }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
-  // Calculate dynamic font sizes based on content length
-  const getArtistFontSize = (artists: string[], maxWidth: number = 180) => {
-    const totalChars = artists.slice(0, 3).reduce((sum, a) => sum + a.length, 0);
+  // Pulsing glow animation for selected card's artist chips
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (isSelected) {
+      // Start pulsing glow animation
+      const pulseAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 1,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0,
+            duration: 1500,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ])
+      );
+      pulseAnimation.start();
+      return () => pulseAnimation.stop();
+    } else {
+      glowAnim.setValue(0);
+    }
+  }, [isSelected, glowAnim]);
+
+  // Interpolate glow values
+  const glowShadowOpacity = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  const glowShadowRadius = glowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [4, 12],
+  });
+
+  // Calculate dynamic font sizes based on content length and venue presence
+  const getArtistFontSize = (artists: string[], hasVenue: boolean = false) => {
+    const totalChars = artists.slice(0, 2).reduce((sum, a) => sum + a.length, 0);
+    // Smaller font when venue badge exists to prevent overlap
+    if (hasVenue) {
+      if (totalChars > 20 || artists.length > 2) return 8;
+      if (totalChars > 14) return 9;
+      return 10;
+    }
     if (totalChars > 25 || artists.length > 2) return 9;
     if (totalChars > 18) return 10;
     return 11;
+  };
+
+  // Truncate artist name if too long (to prevent overlap with venue badge)
+  const truncateArtist = (name: string, maxLength: number = 12) => {
+    if (name.length <= maxLength) return name;
+    return name.substring(0, maxLength - 1) + '…';
+  };
+
+  // Calculate how many artists to show based on name lengths
+  // If venue badge exists, we have less space - make artist chips smaller
+  const getDisplayArtists = (allArtists: string[], hasVenue: boolean) => {
+    const maxWidth = hasVenue ? 80 : 140; // pixels roughly
+    const maxCharsPerArtist = hasVenue ? 8 : 14;
+
+    if (allArtists.length === 0) return { display: [], hasMore: false };
+    if (allArtists.length === 1) {
+      return {
+        display: [truncateArtist(allArtists[0], maxCharsPerArtist + 4)],
+        hasMore: false
+      };
+    }
+
+    // Check total length of first two artists
+    const first = allArtists[0];
+    const second = allArtists[1];
+    const totalLength = first.length + second.length;
+
+    // If both fit comfortably, show both
+    if (totalLength <= maxCharsPerArtist * 2) {
+      return {
+        display: [first, second],
+        hasMore: allArtists.length > 2
+      };
+    }
+
+    // If first artist is very long, just show truncated first + more
+    if (first.length > maxCharsPerArtist) {
+      return {
+        display: [truncateArtist(first, maxCharsPerArtist)],
+        hasMore: true,
+        moreCount: allArtists.length - 1
+      };
+    }
+
+    // Show first and truncated second
+    return {
+      display: [first, truncateArtist(second, maxCharsPerArtist - 2)],
+      hasMore: allArtists.length > 2
+    };
   };
 
   const getVenueFontSize = (venue: string) => {
@@ -176,25 +382,184 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
     return 10;
   };
 
+  // Smart venue name shortening - keep critical info, remove fluff
+  const shortenVenueName = (venue: string, maxLength: number = 18): string => {
+    if (!venue) return '';
+
+    let shortened = venue;
+
+    // Step 1: Apply specific known transformations
+    const specificReplacements: [RegExp, string][] = [
+      // River/water venues → City + Boat/River
+      [/Hudson River Boat Party/i, 'NYC Boat Party'],
+      [/Hudson River/i, 'NYC Hudson'],
+      [/East River Ferry/i, 'NYC Ferry'],
+      [/East River/i, 'NYC East River'],
+      [/Thames Boat Party/i, 'Thames Boat'],
+      [/Thames/i, 'London Thames'],
+
+      // BBC Radio patterns - simplify heavily
+      [/BBC Radio 1 in Ibiza/i, 'Radio 1 Ibiza'],
+      [/BBC Radio 1 Ibiza/i, 'Radio 1 Ibiza'],
+      [/Radio 1 Main Stage/i, 'Radio 1'],
+      [/(\d+)\s+Ibiza\s+Radio\s*1?\s*Main Stage/i, 'Radio 1 Ibiza'],
+      [/Ibiza Radio 1 Main Stage/i, 'Radio 1 Ibiza'],
+      [/BBC Radio 1 Dance/i, 'Radio 1 Dance'],
+      [/BBC Radio 1/i, 'Radio 1'],
+
+      // Festival stages - remove "Stage" suffix when venue is clear
+      [/Yuma (?:Tent|Stage)/i, 'Yuma'],
+      [/Sahara (?:Tent|Stage)/i, 'Sahara'],
+      [/Gobi (?:Tent|Stage)/i, 'Gobi'],
+      [/Mojave (?:Tent|Stage)/i, 'Mojave'],
+      [/Perry(?:'?s)? Stage/i, 'Perrys'],
+      [/Do\s?LaB Stage/i, 'Do LaB'],
+      [/Heineken House/i, 'Heineken'],
+      [/Main Stage/i, 'Main'],
+
+      // Location expansions → abbreviations
+      [/New York City/i, 'NYC'],
+      [/New York/i, 'NYC'],
+      [/Los Angeles/i, 'LA'],
+      [/San Francisco/i, 'SF'],
+      [/San Diego/i, 'SD'],
+      [/Las Vegas/i, 'Vegas'],
+      [/Brooklyn/i, 'BK'],
+
+      // Tomorrowland stages
+      [/Tomorrowland Main Stage/i, 'TML Main'],
+      [/Tomorrowland Freedom/i, 'TML Freedom'],
+      [/Tomorrowland/i, 'TML'],
+
+      // Other festival abbreviations
+      [/Electric Daisy Carnival/i, 'EDC'],
+      [/Ultra Music Festival/i, 'Ultra'],
+      [/Burning Man/i, 'BM'],
+      [/Black Rock City/i, 'BRC'],
+
+      // Club/venue clarifications
+      [/Brooklyn Mirage/i, 'BK Mirage'],
+      [/Avant Gardner/i, 'Avant Gardner'],
+      [/Knockdown Center/i, 'Knockdown'],
+      [/Ministry of Sound/i, 'MoS'],
+      [/Warehouse Project/i, 'WHP'],
+
+      // Common venue words to abbreviate/remove
+      [/Music Festival/i, 'Fest'],
+      [/Festival/i, 'Fest'],
+      [/Warehouse/i, 'WH'],
+      [/Broadcasting House/i, 'Studio'],
+      [/Pop[- ]?Up/i, 'Pop-Up'],
+      [/Nightclub/i, ''],
+      [/Night Club/i, ''],
+    ];
+
+    for (const [pattern, replacement] of specificReplacements) {
+      shortened = shortened.replace(pattern, replacement);
+    }
+
+    // Step 2: If still too long, apply generic shortening
+    if (shortened.length > maxLength) {
+      // Remove common suffixes that add little info
+      const removableSuffixes = [
+        /\s+Stage$/i,
+        /\s+Tent$/i,
+        /\s+Arena$/i,
+        /\s+Room$/i,
+        /\s+Hall$/i,
+        /\s+Club$/i,
+        /\s+Venue$/i,
+      ];
+
+      for (const suffix of removableSuffixes) {
+        if (shortened.length > maxLength) {
+          shortened = shortened.replace(suffix, '');
+        }
+      }
+    }
+
+    // Step 3: If still too long, try removing numbers at start (like "528 Ibiza...")
+    if (shortened.length > maxLength) {
+      shortened = shortened.replace(/^\d+\s+/, '');
+    }
+
+    // Step 4: If still too long, truncate with ellipsis but try to break at word boundary
+    if (shortened.length > maxLength) {
+      const truncated = shortened.substring(0, maxLength - 1);
+      const lastSpace = truncated.lastIndexOf(' ');
+      if (lastSpace > maxLength * 0.6) {
+        // Break at word boundary if it's not too far back
+        shortened = truncated.substring(0, lastSpace) + '…';
+      } else {
+        shortened = truncated + '…';
+      }
+    }
+
+    return shortened.trim();
+  };
+
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.();
   };
 
-  const handleArtistPress = () => {
+  const handleArtistPress = (artistName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // If multiple artists, show picker popup
-    if (artists.length > 1) {
-      setShowArtistPicker(true);
-    } else if (artists.length === 1) {
-      onArtistPress?.(artists[0]);
-    }
+    onArtistPress?.(artistName);
+  };
+
+  const handleMorePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowArtistPicker(true);
   };
 
   const handleSelectArtist = (artistName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowArtistPicker(false);
     onArtistPress?.(artistName);
+  };
+
+  // Handle ID badge press - show explanation popup
+  const handleIDBadgePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      'Track Identification',
+      isIdentified
+        ? `This set has been analyzed and ${trackCount} track${trackCount !== 1 ? 's' : ''} ${trackCount !== 1 ? 'have' : 'has'} been identified.\n\n` +
+          (isFullyIdentified
+            ? '⭐ Fully identified - all tracks in this set have been found!'
+            : 'Some tracks may still be unidentified or have gaps.')
+        : 'This set has not been analyzed yet.\n\n' +
+          'Once analyzed, we\'ll identify the tracks played in this set using audio fingerprinting and tracklist databases.',
+      [{ text: 'Got it', style: 'default' }]
+    );
+  };
+
+  // Handle unanalyzed badge press - show explanation
+  const handleUnanalyzedBadgePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      'Not Yet Analyzed',
+      'This set hasn\'t been analyzed for track identification yet.\n\n' +
+      'Tap the set to view details and start the identification process.',
+      [{ text: 'Got it', style: 'default' }]
+    );
+  };
+
+  // Handle needs source icon press - explain how to add a link
+  const handleNeedsSourcePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Alert.alert(
+      'Source Link Required',
+      'This set needs a YouTube or SoundCloud link to enable track identification.\n\n' +
+      '📎 How to add a link:\n' +
+      '1. Tap on this set to open it\n' +
+      '2. Look for the "Add Source" button\n' +
+      '3. Paste a YouTube or SoundCloud URL\n\n' +
+      '🎵 What happens next:\n' +
+      'Once linked, we can analyze the audio to automatically identify the tracks played in this set!',
+      [{ text: 'Got it', style: 'default' }]
+    );
   };
 
   // Parse multiple artists from name (handles &, and, vs, b2b, b3b patterns)
@@ -240,6 +605,130 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
     'Colombia', 'Chile', 'Peru', 'South Africa', 'India', 'Thailand', 'Indonesia',
     'United States', 'United Kingdom', 'The Netherlands', 'Ibiza', 'Mallorca',
   ];
+
+  // Country to flag emoji mapping
+  const COUNTRY_FLAGS: Record<string, string> = {
+    'Germany': '🇩🇪',
+    'Spain': '🇪🇸',
+    'UK': '🇬🇧',
+    'USA': '🇺🇸',
+    'Netherlands': '🇳🇱',
+    'The Netherlands': '🇳🇱',
+    'Belgium': '🇧🇪',
+    'France': '🇫🇷',
+    'Italy': '🇮🇹',
+    'Australia': '🇦🇺',
+    'Brazil': '🇧🇷',
+    'Argentina': '🇦🇷',
+    'Mexico': '🇲🇽',
+    'Canada': '🇨🇦',
+    'Japan': '🇯🇵',
+    'Portugal': '🇵🇹',
+    'Switzerland': '🇨🇭',
+    'Austria': '🇦🇹',
+    'Poland': '🇵🇱',
+    'Czech Republic': '🇨🇿',
+    'Croatia': '🇭🇷',
+    'Greece': '🇬🇷',
+    'Sweden': '🇸🇪',
+    'Norway': '🇳🇴',
+    'Denmark': '🇩🇰',
+    'Finland': '🇫🇮',
+    'Ireland': '🇮🇪',
+    'Scotland': '🏴󠁧󠁢󠁳󠁣󠁴󠁿',
+    'England': '🏴󠁧󠁢󠁥󠁮󠁧󠁿',
+    'Colombia': '🇨🇴',
+    'Chile': '🇨🇱',
+    'Peru': '🇵🇪',
+    'South Africa': '🇿🇦',
+    'India': '🇮🇳',
+    'Thailand': '🇹🇭',
+    'Indonesia': '🇮🇩',
+    'United States': '🇺🇸',
+    'United Kingdom': '🇬🇧',
+    'Ibiza': '🇪🇸',
+    'Mallorca': '🇪🇸',
+    'California': '🇺🇸',
+    'Nevada': '🇺🇸',
+    'New York': '🇺🇸',
+    'Miami': '🇺🇸',
+    'Los Angeles': '🇺🇸',
+    'Detroit': '🇺🇸',
+    'San Diego': '🇺🇸',
+    'Las Vegas': '🇺🇸',
+    'London': '🇬🇧',
+    'Manchester': '🇬🇧',
+    'Bristol': '🇬🇧',
+    'Berlin': '🇩🇪',
+    'Hamburg': '🇩🇪',
+    'Cologne': '🇩🇪',
+    'Stockholm': '🇸🇪',
+    'Amsterdam': '🇳🇱',
+    'Barcelona': '🇪🇸',
+    'Paris': '🇫🇷',
+    'Coachella': '🇺🇸',
+  };
+
+  // Parse location into city and country
+  const parseLocation = (loc: string): { city: string | null; country: string | null; flag: string | null } => {
+    if (!loc) return { city: null, country: null, flag: null };
+
+    const parts = loc.split(',').map(p => p.trim());
+
+    // Check if any part matches a known country
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const part = parts[i];
+      const flag = COUNTRY_FLAGS[part];
+      if (flag) {
+        const city = parts.slice(0, i).join(', ') || null;
+        return { city, country: part, flag };
+      }
+    }
+
+    // Check if the whole string is a known location with a flag
+    const directFlag = COUNTRY_FLAGS[loc];
+    if (directFlag) {
+      return { city: null, country: loc, flag: directFlag };
+    }
+
+    // No country found, treat whole thing as city
+    return { city: loc, country: null, flag: null };
+  };
+
+  // Get smart location that avoids duplicating venue/festival name
+  // If venue is a festival (e.g., "Coachella"), return actual location (e.g., "Indio, California")
+  // instead of repeating "Coachella" in both venue and location badges
+  const getSmartLocation = (venue: string | null, rawLocation: string | null): string | null => {
+    if (!venue) return rawLocation;
+
+    // Check if venue is a festival with a known actual location
+    const festivalLocation = FESTIVAL_LOCATIONS[venue];
+    if (festivalLocation) {
+      // Don't show "Various Locations" - it's not helpful
+      if (festivalLocation === 'Various Locations') {
+        return null;
+      }
+      return festivalLocation;
+    }
+
+    // If rawLocation contains the venue name, try to extract just the geographic part
+    if (rawLocation) {
+      const venueLower = venue.toLowerCase();
+      const locLower = rawLocation.toLowerCase();
+
+      // If location starts with or contains venue name, it's likely redundant
+      if (locLower.includes(venueLower) || venueLower.includes(locLower)) {
+        // Try to get location from VENUE_LOCATIONS instead
+        const venueLocation = VENUE_LOCATIONS[venue];
+        if (venueLocation && !venueLocation.toLowerCase().includes(venueLower)) {
+          return venueLocation;
+        }
+        return null; // Don't show redundant location
+      }
+    }
+
+    return rawLocation;
+  };
 
   // Parse set name to extract venue, location, and date
   // Remove artist name(s) if they appear at the start (since they're shown separately)
@@ -362,9 +851,165 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
 
   const { cleanName, eventDate, venue: parsedVenue, location: parsedLocation } = parseSetName(setList.name, artists);
 
+  // Stage to parent festival mapping
+  const STAGE_TO_FESTIVAL: Record<string, string> = {
+    'yuma': 'Coachella',
+    'yuma stage': 'Coachella',
+    'yuma tent': 'Coachella',
+    'sahara': 'Coachella',
+    'sahara stage': 'Coachella',
+    'sahara tent': 'Coachella',
+    'gobi': 'Coachella',
+    'gobi stage': 'Coachella',
+    'mojave': 'Coachella',
+    'mojave stage': 'Coachella',
+    'do lab': 'Coachella',
+    'dolab': 'Coachella',
+    'main stage': null, // Generic, need context
+    'mainstage': null,
+    'perrys': 'Lollapalooza',
+    'perrys stage': 'Lollapalooza',
+    'perry stage': 'Lollapalooza',
+    'carl cox megastructure': 'Ultra',
+    'megastructure': 'Ultra',
+    'resistance': 'Ultra',
+    'worldwide stage': 'Ultra',
+    'arcadia': 'Tomorrowland',
+    'freedom stage': 'Tomorrowland',
+    'neon garden': 'EDC',
+    'circuit grounds': 'EDC',
+    'kinetic field': 'EDC',
+    'cosmic meadow': 'EDC',
+    'bass pod': 'EDC',
+  };
+
+  // Event series that travel to different venues
+  const TRAVELING_EVENTS = ['defected', 'elrow', 'circoloco', 'music on', 'solid grooves', 'afterlife', 'keinemusik', 'hyte', 'paradise', 'drumcode', 'ants', 'pure', 'pyramid'];
+
+  // Known event series names to detect
+  const EVENT_SERIES = ['music on', 'circoloco', 'defected', 'elrow', 'afterlife', 'hyte', 'paradise', 'solid grooves', 'ants', 'pure'];
+
+  // Known Ibiza venues for context
+  const IBIZA_VENUES = ['ushuaia', 'hi ibiza', 'hï ibiza', 'pacha', 'amnesia', 'dc-10', 'dc10', 'privilege', 'destino', 'blue marlin', 'pikes', 'eden', 'es paradis', 'cafe mambo', 'heart ibiza', 'cova santa'];
+
+  // Format display name nicely - focus on event/venue, not artist (artist shown in chips)
+  const formatDisplayName = (): string => {
+    const originalName = setList.name;
+    const eventVenue = setList.venue || parsedVenue;
+    const eventLocation = setList.location || parsedLocation;
+    const eventName = setList.eventName;
+    const year = eventDate ? eventDate.getFullYear() : (setList.date ? new Date(setList.date).getFullYear() : null);
+    const lowerOriginal = originalName.toLowerCase();
+
+    // Extract event descriptors (closing, opening, etc.)
+    const isClosing = /\bclosing\b/i.test(originalName);
+    const isOpening = /\bopening\b/i.test(originalName);
+    const isParty = /\bparty\b/i.test(originalName);
+
+    // Detect if this is an event series (like Music On, Circoloco)
+    let detectedEventSeries: string | null = null;
+    for (const series of EVENT_SERIES) {
+      if (lowerOriginal.includes(series) || eventName?.toLowerCase().includes(series) || eventVenue?.toLowerCase().includes(series)) {
+        // Capitalize properly
+        detectedEventSeries = series.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        break;
+      }
+    }
+
+    // Detect physical venue from name (look for known venues)
+    let physicalVenue: string | null = null;
+    for (const venue of IBIZA_VENUES) {
+      if (lowerOriginal.includes(venue)) {
+        // Capitalize properly
+        if (venue === 'hi ibiza' || venue === 'hï ibiza') physicalVenue = 'Hï Ibiza';
+        else if (venue === 'dc-10' || venue === 'dc10') physicalVenue = 'DC-10';
+        else physicalVenue = venue.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        break;
+      }
+    }
+
+    // Check if venue is actually a stage name, map to parent festival
+    let displayVenue = eventVenue;
+    if (eventVenue) {
+      const lowerVenue = eventVenue.toLowerCase();
+      const parentFestival = STAGE_TO_FESTIVAL[lowerVenue];
+      if (parentFestival) {
+        displayVenue = parentFestival;
+      }
+    }
+
+    // Build the display name
+    let result = '';
+
+    // Case 1: Event series at a physical venue (e.g., "Music On @ Destino")
+    if (detectedEventSeries && physicalVenue && detectedEventSeries.toLowerCase() !== physicalVenue.toLowerCase()) {
+      result = `${detectedEventSeries} ${physicalVenue}`;
+    }
+    // Case 2: Event series with location (traveling event)
+    else if (detectedEventSeries) {
+      result = detectedEventSeries;
+      if (eventLocation) {
+        const city = eventLocation.split(',')[0].trim();
+        if (!result.toLowerCase().includes(city.toLowerCase())) {
+          result += ` ${city}`;
+        }
+      }
+    }
+    // Case 3: Physical venue with event type (e.g., "Hi Ibiza Closing Party")
+    else if (physicalVenue || displayVenue) {
+      result = physicalVenue || displayVenue || '';
+
+      // Add descriptor if meaningful
+      if (isClosing) {
+        result += ' Closing';
+        if (isParty) result += ' Party';
+      } else if (isOpening) {
+        result += ' Opening';
+        if (isParty) result += ' Party';
+      }
+
+      // For traveling events, add location
+      const isTraveling = result && TRAVELING_EVENTS.some(e => result.toLowerCase().includes(e));
+      if (isTraveling && eventLocation) {
+        const city = eventLocation.split(',')[0].trim();
+        if (!result.toLowerCase().includes(city.toLowerCase())) {
+          result += ` ${city}`;
+        }
+      } else if (year && !result.includes(String(year)) && !isClosing && !isOpening) {
+        // Add year for fixed-location festivals (but not for closing/opening parties)
+        result += ` ${year}`;
+      }
+    }
+    // Case 4: Use cleaned name
+    else if (cleanName && cleanName !== originalName) {
+      result = cleanName;
+    }
+    // Case 5: Fallback - clean up the original name
+    else {
+      result = originalName;
+
+      // Remove artist prefix if present
+      for (const artist of artists) {
+        const artistPattern = new RegExp(`^${artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-–@|:]\\s*`, 'i');
+        result = result.replace(artistPattern, '');
+      }
+
+      // Remove date suffix
+      result = result.replace(/\s*\d{4}[-/]\d{2}[-/]\d{2}\s*$/, '').trim();
+    }
+
+    return result.trim() || originalName;
+  };
+
   // Use database fields if available, fall back to parsed values, then venue lookup
   const venue = setList.venue || parsedVenue;
-  const location = setList.location || parsedLocation || (venue ? VENUE_LOCATIONS[venue] : null);
+  const rawLocation = setList.location || parsedLocation || (venue ? VENUE_LOCATIONS[venue] : null);
+
+  // Get smart location that avoids duplicating venue name (for festivals/events)
+  const smartLocation = getSmartLocation(venue, rawLocation);
+
+  // Parse location into city and country/flag
+  const { city: locationCity, flag: locationFlag } = parseLocation(smartLocation || '');
 
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
@@ -433,10 +1078,22 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
 
   // Keep full name for search indexing
-  const searchableText = `${setList.name} ${setList.artist} ${venue || ''} ${location || ''}`.trim();
+  const searchableText = `${setList.name} ${setList.artist} ${venue || ''} ${smartLocation || ''}`.trim();
 
-  const artistFontSize = getArtistFontSize(artists);
-  const venueFontSize = venue ? getVenueFontSize(venue) : 10;
+  // Detect festival/radio show event from name, venue, or event name
+  const detectedEvent = useMemo(() => {
+    const textToSearch = `${setList.name} ${venue || ''} ${setList.eventName || ''}`;
+    return detectEvent(textToSearch);
+  }, [setList.name, venue, setList.eventName]);
+
+  const artistFontSize = getArtistFontSize(artists, !!venue);
+  // Apply smart shortening to venue name for display
+  const displayVenue = venue ? shortenVenueName(venue) : null;
+  const venueFontSize = displayVenue ? getVenueFontSize(displayVenue) : 10;
+
+  // Get smart display artists that won't overlap with venue badge
+  const { display: displayArtists, hasMore: showMoreButton, moreCount } = getDisplayArtists(artists, !!venue);
+  const actualMoreCount = moreCount ?? (artists.length - displayArtists.length);
 
   return (
     <Pressable
@@ -445,22 +1102,79 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
       accessibilityLabel={searchableText}
     >
       {/* Venue badge - top right corner */}
-      {venue && (
-        <View style={styles.venueBadgeTopRight}>
-          <Ticket size={venueFontSize} color={Colors.dark.primary} />
-          <Text style={[styles.venueBadgeText, { fontSize: venueFontSize }]} numberOfLines={1}>{venue}</Text>
-        </View>
+      {displayVenue && (
+        <Animated.View
+          style={[
+            styles.venueBadgeTopRight,
+            isSelected && styles.venueBadgeSelected,
+            isSelected && {
+              shadowColor: Colors.dark.primary,
+              shadowOffset: { width: 0, height: 2 },
+              shadowOpacity: glowShadowOpacity,
+              shadowRadius: glowShadowRadius,
+            },
+          ]}
+        >
+          <Ticket size={venueFontSize} color={isSelected ? '#FFF8F0' : Colors.dark.primary} />
+          <Text
+            style={[
+              styles.venueBadgeText,
+              { fontSize: venueFontSize },
+              isSelected && styles.venueBadgeTextSelected,
+            ]}
+            numberOfLines={1}
+          >
+            {displayVenue}
+          </Text>
+        </Animated.View>
       )}
 
       <View style={styles.row}>
         <View style={styles.coverContainer}>
-          <Image
-            source={{ uri: getCoverImage() }}
-            style={styles.cover}
-            contentFit="cover"
-            onError={handleImageError}
-            cachePolicy="memory-disk"
-          />
+          {/* Show event-branded placeholder if no YouTube source but we detect an event */}
+          {needsSource && detectedEvent && EVENT_BADGES[detectedEvent] ? (
+            <View
+              style={[
+                styles.eventPlaceholder,
+                {
+                  backgroundColor: EVENT_BADGES[detectedEvent].backgroundColor,
+                  borderColor: EVENT_BADGES[detectedEvent].borderColor || EVENT_BADGES[detectedEvent].backgroundColor,
+                },
+              ]}
+            >
+              <Text style={[
+                styles.eventPlaceholderEmoji,
+                { color: EVENT_BADGES[detectedEvent].textColor },
+                EVENT_BADGES[detectedEvent].isEmoji && { fontSize: 32 },
+                EVENT_BADGES[detectedEvent].fontStyle === 'handwritten' && { fontStyle: 'italic', fontWeight: '400', fontSize: 32 },
+              ]}>
+                {EVENT_BADGES[detectedEvent].shortLabel}
+              </Text>
+              {/* Show RADIO subtext for radio shows */}
+              {EVENT_BADGES[detectedEvent].hasRadioSubtext && (
+                <Text style={[
+                  styles.eventPlaceholderRadio,
+                  { color: EVENT_BADGES[detectedEvent].textColor },
+                ]}>
+                  RADIO
+                </Text>
+              )}
+              <Text style={[
+                styles.eventPlaceholderLabel,
+                { color: EVENT_BADGES[detectedEvent].textColor },
+              ]} numberOfLines={1}>
+                {EVENT_BADGES[detectedEvent].label}
+              </Text>
+            </View>
+          ) : (
+            <Image
+              source={{ uri: getCoverImage() }}
+              style={styles.cover}
+              contentFit="cover"
+              onError={handleImageError}
+              cachePolicy="memory-disk"
+            />
+          )}
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
               <Play size={14} color="#fff" fill="#fff" />
@@ -479,32 +1193,104 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
         </View>
 
         <View style={styles.content}>
-          {/* Artists row - dynamically sized to fit */}
-          <Pressable style={styles.artistSection} onPress={handleArtistPress} hitSlop={4}>
-            <View style={styles.artistRow}>
-              {artists.slice(0, 3).map((artist, index) => (
-                <View key={index} style={[styles.artistChip, { paddingHorizontal: artistFontSize > 9 ? 8 : 6 }]}>
-                  <Text style={[styles.artistText, { fontSize: artistFontSize }]} numberOfLines={1}>{artist}</Text>
-                </View>
-              ))}
-              {artists.length > 3 && (
-                <View style={[styles.artistMoreBadge, { paddingHorizontal: artistFontSize > 9 ? 10 : 7 }]}>
-                  <Text style={[styles.artistMoreText, { fontSize: artistFontSize }]}>+{artists.length - 3}</Text>
-                </View>
+          {/* Artists row - smart truncation to prevent overlap with venue badge */}
+          <View style={styles.artistSection}>
+            <Animated.View style={styles.artistRow}>
+              {displayArtists.map((artist, index) => {
+                // Find original artist for the press handler
+                const originalArtist = artists.find(a => a.startsWith(artist.replace('…', ''))) || artist;
+                return (
+                  <Pressable
+                    key={index}
+                    onPress={() => handleArtistPress(originalArtist)}
+                    hitSlop={4}
+                  >
+                    {({ pressed }) => (
+                      <Animated.View
+                        style={[
+                          styles.artistChip,
+                          { paddingHorizontal: displayVenue ? 5 : (artistFontSize > 9 ? 8 : 6), maxWidth: displayVenue ? 70 : 110 },
+                          isSelected && styles.artistChipSelected,
+                          isSelected && {
+                            shadowColor: Colors.dark.primary,
+                            shadowOffset: { width: 0, height: 2 },
+                            shadowOpacity: glowShadowOpacity,
+                            shadowRadius: glowShadowRadius,
+                          },
+                          pressed && styles.artistChipPressed
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.artistText,
+                            { fontSize: artistFontSize },
+                            isSelected && styles.artistTextSelected,
+                            pressed && styles.artistTextPressed
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {artist}
+                        </Text>
+                      </Animated.View>
+                    )}
+                  </Pressable>
+                );
+              })}
+              {(showMoreButton || actualMoreCount > 0) && (
+                <Pressable onPress={handleMorePress} hitSlop={4}>
+                  {({ pressed }) => (
+                    <Animated.View
+                      style={[
+                        styles.artistMoreBadge,
+                        { paddingHorizontal: artistFontSize > 9 ? 10 : 7 },
+                        isSelected && styles.artistMoreBadgeSelected,
+                        isSelected && {
+                          shadowColor: Colors.dark.primary,
+                          shadowOffset: { width: 0, height: 2 },
+                          shadowOpacity: glowShadowOpacity,
+                          shadowRadius: glowShadowRadius,
+                        },
+                        pressed && styles.artistMoreBadgePressed
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.artistMoreText,
+                          { fontSize: artistFontSize },
+                          isSelected && styles.artistMoreTextSelected,
+                          pressed && styles.artistTextPressed
+                        ]}
+                      >
+                        +{actualMoreCount}
+                      </Text>
+                    </Animated.View>
+                  )}
+                </Pressable>
               )}
-            </View>
-          </Pressable>
+            </Animated.View>
+          </View>
 
-          <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
+          {/* Set name with accent bar */}
+          <View style={styles.nameContainer}>
+            <View style={[styles.nameAccent, isSelected && styles.nameAccentSelected]} />
+            <Text
+              style={[styles.name, isSelected && styles.nameSelected]}
+              numberOfLines={2}
+            >
+              {formatDisplayName()}
+            </Text>
+          </View>
 
           <View style={styles.footer}>
             <View style={styles.metaRow}>
               {/* Left side: Platform icons + tracks count */}
               <View style={styles.leftStats}>
                 {needsSource ? (
-                  <View style={styles.needsSourceIcon}>
-                    <AlertCircle size={14} color="#FF6B35" fill="rgba(255, 107, 53, 0.2)" />
-                  </View>
+                  <Pressable onPress={handleNeedsSourcePress} hitSlop={8}>
+                    <View style={styles.needsSourceIcon}>
+                      <AlertCircle size={14} color="#FF6B35" fill="rgba(255, 107, 53, 0.2)" />
+                    </View>
+                  </Pressable>
                 ) : (
                   <View style={styles.platforms}>
                     {getPlatformIcons()}
@@ -518,25 +1304,39 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
                 </View>
               </View>
 
-              {/* Right side: Location + Status badges */}
+              {/* Right side: Location + Event badge + Status badges */}
               <View style={styles.rightStats}>
-                {/* Location badge - moved to bottom right */}
-                {location && (
-                  <View style={styles.locationBadgeSmall}>
-                    <MapPin size={9} color="#fff" />
-                    <Text style={styles.locationBadgeTextSmall} numberOfLines={1}>{location}</Text>
+                {/* Location badge - blue box */}
+                {locationCity && (
+                  <View style={styles.locationBadgeBlue}>
+                    <MapPin size={10} color="#fff" />
+                    <Text style={styles.locationBadgeBlueText} numberOfLines={1}>
+                      {locationCity}
+                    </Text>
+                    {locationFlag && (
+                      <Text style={styles.locationFlagSmall}>{locationFlag}</Text>
+                    )}
                   </View>
                 )}
 
-                {/* IDentified status badge - square logo style */}
+                {/* Event/Festival badge - clickable to filter by event */}
+                {detectedEvent && (
+                  <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
+                )}
+
+                {/* IDentified status badge - pressable to show explanation */}
                 {isIdentified ? (
-                  <View style={styles.identifiedBadge}>
-                    <Text style={styles.identifiedBadgeText}>ID</Text>
-                  </View>
+                  <Pressable onPress={handleIDBadgePress} hitSlop={4}>
+                    <View style={styles.identifiedBadge}>
+                      <Text style={styles.identifiedBadgeText}>ID</Text>
+                    </View>
+                  </Pressable>
                 ) : (
-                  <View style={styles.unanalyzedBadge}>
-                    <Text style={styles.unanalyzedBadgeText}>?</Text>
-                  </View>
+                  <Pressable onPress={handleUnanalyzedBadgePress} hitSlop={4}>
+                    <View style={styles.unanalyzedBadge}>
+                      <Text style={styles.unanalyzedBadgeText}>?</Text>
+                    </View>
+                  </Pressable>
                 )}
               </View>
             </View>
@@ -609,12 +1409,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: Colors.dark.primary,
-    maxWidth: 140,
+    maxWidth: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
     shadowRadius: 2,
     elevation: 4,
+  },
+  venueBadgeSelected: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  venueBadgeTextSelected: {
+    color: '#FFF8F0',
   },
   pressed: {
     opacity: 0.95,
@@ -634,6 +1441,34 @@ const styles = StyleSheet.create({
   cover: {
     width: '100%',
     height: '100%',
+  },
+  eventPlaceholder: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderRadius: 10,
+    padding: 4,
+  },
+  eventPlaceholderEmoji: {
+    fontSize: 24,
+    fontWeight: '900' as const,
+    letterSpacing: -1,
+  },
+  eventPlaceholderLabel: {
+    fontSize: 8,
+    fontWeight: '700' as const,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  eventPlaceholderRadio: {
+    fontSize: 6,
+    fontWeight: '800' as const,
+    letterSpacing: 1,
+    marginTop: -2,
   },
   playOverlay: {
     position: 'absolute',
@@ -696,8 +1531,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: Colors.dark.primary,
+  },
+  artistChipSelected: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  artistChipPressed: {
+    backgroundColor: Colors.dark.primary,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
   artistText: {
     fontSize: 11,
@@ -705,23 +1552,73 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
     letterSpacing: 0.3,
   },
+  artistTextSelected: {
+    color: '#FFF8F0', // Cream white for selected state
+  },
+  artistTextPressed: {
+    color: '#fff',
+  },
   artistMoreBadge: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(226, 29, 72, 0.25)', // Subtle primary tint - shows it's different/clickable
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+    borderStyle: 'dashed',
+  },
+  artistMoreBadgeSelected: {
+    backgroundColor: Colors.dark.primary,
+    borderStyle: 'solid',
+  },
+  artistMoreBadgePressed: {
+    backgroundColor: Colors.dark.primary,
+    borderStyle: 'solid',
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
   artistMoreText: {
     fontSize: 11,
     fontWeight: '800' as const,
+    color: Colors.dark.primary,
+  },
+  artistMoreTextSelected: {
     color: '#FFF',
   },
+  nameContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginVertical: 6,
+    paddingLeft: 2,
+  },
+  nameAccent: {
+    width: 3,
+    minHeight: 16,
+    backgroundColor: Colors.dark.border,
+    borderRadius: 2,
+    marginRight: 8,
+    alignSelf: 'stretch',
+  },
+  nameAccentSelected: {
+    backgroundColor: Colors.dark.primary,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 4,
+  },
   name: {
+    flex: 1,
     fontSize: 13,
     fontWeight: '600' as const,
     color: Colors.dark.text,
     lineHeight: 17,
-    marginBottom: 4,
+  },
+  nameSelected: {
+    color: Colors.dark.primary,
+    fontWeight: '700' as const,
   },
   // Location row - more prominent
   locationRow: {
@@ -779,24 +1676,30 @@ const styles = StyleSheet.create({
   rightStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    flexWrap: 'wrap',
+    gap: 4,
     justifyContent: 'flex-end',
+    maxWidth: 180,
   },
-  locationBadgeSmall: {
+  // Blue location badge - clean rectangle matching other badges
+  locationBadgeBlue: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#4B5563',
+    backgroundColor: '#2563EB', // Blue color
     paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 4,
+    height: 20,
     maxWidth: 90,
   },
-  locationBadgeTextSmall: {
-    fontSize: 9,
+  locationBadgeBlueText: {
+    fontSize: 8,
     color: '#fff',
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
+    flexShrink: 1,
+  },
+  locationFlagSmall: {
+    fontSize: 10,
   },
   statsRow: {
     flexDirection: 'row',

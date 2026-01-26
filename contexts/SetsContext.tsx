@@ -11,7 +11,7 @@ const TRACK_REPOSITORY_KEY = 'track_repository';
 const CONFLICTS_STORAGE_KEY = 'track_conflicts';
 
 // API base URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
 function normalizeUrl(url: string): string {
   return url
@@ -626,11 +626,126 @@ export const [SetsProvider, useSets] = createContextHook(() => {
    * Get all conflicts needing votes (for discovery feed)
    */
   const getConflictsNeedingVotes = useCallback((userId: string): TrackConflict[] => {
-    return conflicts.filter(c => 
-      c.status === 'active' && 
+    return conflicts.filter(c =>
+      c.status === 'active' &&
       !c.votes.some(v => v.oderId === userId)
     );
   }, [conflicts]);
+
+  /**
+   * Refresh metadata for all YouTube sets by re-parsing their descriptions
+   * This updates venue, location, stage, and other metadata
+   */
+  const refreshSetsMetadata = useCallback(async (): Promise<{
+    updated: number;
+    failed: number;
+    updatedSets: Array<{ setId: string; setName: string; updates: Record<string, string> }>;
+    failedSets: Array<{ setId: string; setName: string; error: string }>;
+  }> => {
+    // Find all sets with YouTube sources (check both sets and submittedSets)
+    const allSets = [...sets, ...submittedSets.filter(s => !sets.find(set => set.id === s.id))];
+    console.log('[SetsContext] Total sets to check:', allSets.length, '(sets:', sets.length, ', submitted:', submittedSets.length, ')');
+
+    const setsWithYouTube = allSets.filter(set =>
+      set.sourceLinks?.some(s => s.platform === 'youtube')
+    );
+
+    if (setsWithYouTube.length === 0) {
+      console.log('[SetsContext] No YouTube sets to refresh');
+      console.log('[SetsContext] Sample set sourceLinks:', allSets[0]?.sourceLinks);
+      return { updated: 0, failed: 0, updatedSets: [], failedSets: [] };
+    }
+
+    console.log('[SetsContext] Refreshing metadata for', setsWithYouTube.length, 'YouTube sets');
+    console.log('[SetsContext] Sets to refresh:', setsWithYouTube.map(s => ({ id: s.id, name: s.name })));
+
+    try {
+      const requestBody = {
+        action: 'batchRefreshMetadata',
+        sets: setsWithYouTube.map(set => ({
+          id: set.id,
+          sourceLinks: set.sourceLinks,
+        })),
+      };
+      console.log('[SetsContext] Sending request to:', `${API_BASE_URL}/api/import`);
+      console.log('[SetsContext] Request body:', JSON.stringify(requestBody).substring(0, 500));
+
+      const response = await fetch(`${API_BASE_URL}/api/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+      });
+
+      const responseText = await response.text();
+      console.log('[SetsContext] Raw response:', responseText.substring(0, 500));
+
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (e) {
+        console.error('[SetsContext] Failed to parse response:', e);
+        return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
+      }
+
+      if (!result.success) {
+        console.error('[SetsContext] Batch refresh failed:', result.error);
+        console.error('[SetsContext] Full result:', result);
+        return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
+      }
+
+      let updated = 0;
+      let failed = 0;
+      const updatedSets: Array<{ setId: string; setName: string; updates: Record<string, string> }> = [];
+      const failedSets: Array<{ setId: string; setName: string; error: string }> = [];
+
+      // Update each set with new metadata
+      for (const item of result.results) {
+        // Find the set name for display
+        const set = setsWithYouTube.find(s => s.id === item.setId);
+        const setName = set?.name || item.setId;
+
+        if (item.success && item.metadata) {
+          const updates: Partial<SetList> = {};
+          const updateDetails: Record<string, string> = {};
+
+          // Only update fields if they're missing or we have better data
+          if (item.metadata.venue) {
+            updates.venue = item.metadata.venue;
+            updateDetails.venue = item.metadata.venue;
+          }
+          if (item.metadata.location) {
+            updates.location = item.metadata.location;
+            updateDetails.location = item.metadata.location;
+          }
+          if (item.metadata.stage) {
+            updates.stage = item.metadata.stage;
+            updateDetails.stage = item.metadata.stage;
+          }
+          if (item.metadata.eventName) {
+            updates.eventName = item.metadata.eventName;
+            updateDetails.eventName = item.metadata.eventName;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            updateSet(item.setId, updates);
+            updated++;
+            updatedSets.push({ setId: item.setId, setName, updates: updateDetails });
+            console.log('[SetsContext] Updated metadata for set:', item.setId, updates);
+          }
+        } else {
+          failed++;
+          failedSets.push({ setId: item.setId, setName, error: item.error || 'Unknown error' });
+        }
+      }
+
+      console.log('[SetsContext] Metadata refresh complete:', updated, 'updated,', failed, 'failed');
+      return { updated, failed, updatedSets, failedSets };
+
+    } catch (error: any) {
+      console.error('[SetsContext] Error refreshing metadata:', error);
+      return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
+    }
+  }, [sets, submittedSets, updateSet]);
 
   return {
     sets,
@@ -663,6 +778,8 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     voteOnConflict,
     getActiveConflicts,
     getConflictsNeedingVotes,
+    // Metadata refresh
+    refreshSetsMetadata,
   };
 });
 

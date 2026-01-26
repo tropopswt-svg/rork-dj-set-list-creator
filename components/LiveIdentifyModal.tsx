@@ -372,6 +372,7 @@ export default function LiveIdentifyModal({
   const overlayAnim = useRef(new Animated.Value(0)).current; // Dark overlay opacity
   const overlaySlideAnim = useRef(new Animated.Value(-1)).current; // Overlay slide (for lock effect)
   const progressAnim = useRef(new Animated.Value(0)).current; // Ring progress (0-1)
+  const listeningPulseAnim = useRef(new Animated.Value(0)).current; // Listening text pulse
 
   // Request microphone permission
   useEffect(() => {
@@ -494,8 +495,9 @@ export default function LiveIdentifyModal({
       recordingRef.current = null;
     }
 
-    // Reset overlay and progress
+    // Reset overlay, progress, and listening pulse
     progressAnim.stopAnimation();
+    listeningPulseAnim.stopAnimation();
   }, []);
 
   const startRecording = async () => {
@@ -517,18 +519,18 @@ export default function LiveIdentifyModal({
       setError(null);
       setIdentifiedTrack(null);
 
-      // Animate dark overlay in (screen locker swipe-down effect)
+      // Animate dark overlay in (screen locker swipe-down effect) - slow dramatic lockdown
       overlaySlideAnim.setValue(-1);
       Animated.parallel([
         Animated.timing(overlayAnim, {
           toValue: 1,
-          duration: 500,
+          duration: 600,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(overlaySlideAnim, {
           toValue: 0,
-          duration: 500,
+          duration: 600,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
@@ -542,6 +544,25 @@ export default function LiveIdentifyModal({
         easing: Easing.linear,
         useNativeDriver: false, // Can't use native driver for interpolated rotation
       }).start();
+
+      // Start listening text pulse animation - faster, more visible
+      listeningPulseAnim.setValue(0);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(listeningPulseAnim, {
+            toValue: 1,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(listeningPulseAnim, {
+            toValue: 0,
+            duration: 1200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
 
       // Configure audio mode for optimal recording
       await Audio.setAudioModeAsync({
@@ -769,7 +790,20 @@ export default function LiveIdentifyModal({
               </Animated.View>
             </View>
             {/* Stealth status text - above secret message */}
-            <Text style={styles.stealthListeningText}>Listening...</Text>
+            <Animated.View
+              style={[
+                styles.stealthListeningContainer,
+                {
+                  opacity: listeningPulseAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.08, 0.28],
+                  }),
+                },
+              ]}
+            >
+              <Text style={styles.stealthListeningDots}>...</Text>
+              <Text style={styles.stealthListeningText}>Listening</Text>
+            </Animated.View>
             {/* Secret message */}
             <Text style={styles.secretMessage}>
               Shhh... We Won't Let Anyone Know You Don't Know Ball 😏
@@ -908,14 +942,11 @@ export default function LiveIdentifyModal({
           style={[
             styles.darkOverlay,
             {
-              opacity: overlayAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0, 0.92],
-              }),
+              opacity: 0.95, // Solid opacity - no fade, just slide
               transform: [{
                 translateY: overlaySlideAnim.interpolate({
                   inputRange: [-1, 0, 1],
-                  outputRange: [-screenHeight, 0, screenHeight],
+                  outputRange: [-screenHeight * 1.1, 0, screenHeight * 1.1],
                 }),
               }],
             },
@@ -926,9 +957,10 @@ export default function LiveIdentifyModal({
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {/* Close button - fades out during scanning (locked) */}
           <Animated.View style={[styles.closeButtonContainer, {
-            opacity: overlayAnim.interpolate({
-              inputRange: [0, 1],
-              outputRange: [1, 0],
+            opacity: overlaySlideAnim.interpolate({
+              inputRange: [-1, -0.5, 0],
+              outputRange: [1, 0.5, 0],
+              extrapolate: 'clamp',
             }),
           }]}>
             <Pressable style={styles.closeButton} onPress={handleClose}>
@@ -1048,15 +1080,28 @@ const styles = StyleSheet.create({
     marginTop: 32,
     textAlign: 'center',
   },
-  stealthListeningText: {
+  stealthListeningContainer: {
     position: 'absolute',
-    bottom: 100,
-    left: 24,
-    right: 24,
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.15)', // Very dim - barely visible
-    textAlign: 'center',
-    letterSpacing: 1,
+    bottom: 140,
+    left: 0,
+    right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stealthListeningDots: {
+    fontSize: 35,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.12)',
+    letterSpacing: 2,
+    marginRight: -8,
+  },
+  stealthListeningText: {
+    fontSize: 35,
+    fontWeight: '900',
+    color: 'rgba(255, 255, 255, 0.12)',
+    letterSpacing: 5,
+    textTransform: 'uppercase',
   },
   secretMessage: {
     position: 'absolute',

@@ -54,6 +54,8 @@ export interface SetList {
   artist: string;
   venue?: string;
   location?: string;
+  stage?: string; // Festival stage name (e.g., "Main Stage", "Yuma Tent")
+  eventName?: string; // Event/festival name if different from venue
   date: Date;
   tracks: Track[];
   coverUrl?: string;
@@ -62,6 +64,8 @@ export interface SetList {
   aiProcessed?: boolean;
   commentsScraped?: number;
   tracksIdentified?: number;
+  trackCount?: number;
+  hasGaps?: boolean;
   plays?: number;
   // Multi-source merging
   conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes

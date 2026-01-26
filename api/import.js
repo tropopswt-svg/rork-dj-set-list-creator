@@ -593,6 +593,17 @@ const VENUE_DATABASE = {
   'output': { name: 'Output', location: 'Brooklyn, USA', aliases: ['output brooklyn'] },
   'nowadays': { name: 'Nowadays', location: 'New York, USA', aliases: [] },
 
+  // Chicago
+  'navy pier': { name: 'Navy Pier', location: 'Chicago, USA', aliases: ['navypier'] },
+  'spybar': { name: 'Spybar', location: 'Chicago, USA', aliases: ['spy bar'] },
+  'sound-bar': { name: 'Sound-Bar', location: 'Chicago, USA', aliases: ['soundbar chicago'] },
+  'prysm': { name: 'Prysm', location: 'Chicago, USA', aliases: ['prysm nightclub'] },
+  'radius': { name: 'Radius Chicago', location: 'Chicago, USA', aliases: ['radius'] },
+
+  // Radio Shows / Event Series
+  'house calls': { name: 'House Calls', location: 'Chicago, USA', aliases: ['housecalls'] },
+  'obskur': { name: 'Obskür', location: 'Various', aliases: ['obskür', 'obskur music'] },
+
   // Miami
   'space miami': { name: 'Club Space', location: 'Miami, USA', aliases: ['club space', 'space'] },
   'e11even': { name: 'E11EVEN', location: 'Miami, USA', aliases: ['eleven', 'e11even miami'] },
@@ -617,6 +628,15 @@ const VENUE_DATABASE = {
   'mysteryland': { name: 'Mysteryland', location: 'Netherlands', aliases: [] },
   'sonar': { name: 'Sónar', location: 'Barcelona, Spain', aliases: ['sonar barcelona', 'sonar festival'] },
   'bpm festival': { name: 'BPM Festival', location: 'Various', aliases: ['bpm'] },
+  'burning man': { name: 'Burning Man', location: 'Nevada, USA', aliases: ['burningman', 'playa', 'black rock city', 'robot heart', 'mayan warrior', 'camp question mark'] },
+  'lollapalooza': { name: 'Lollapalooza', location: 'Chicago, USA', aliases: ['lolla', 'lollapalooza chicago', 'perry stage', 'perrys stage'] },
+  'electric forest': { name: 'Electric Forest', location: 'Michigan, USA', aliases: ['e forest'] },
+  'lightning in a bottle': { name: 'Lightning in a Bottle', location: 'California, USA', aliases: ['lib', 'lightning bottle'] },
+  'outsidelands': { name: 'Outside Lands', location: 'San Francisco, USA', aliases: ['outside lands', 'osl'] },
+  'holy ship': { name: 'Holy Ship!', location: 'Cruise', aliases: ['holyship'] },
+  'shambhala': { name: 'Shambhala', location: 'British Columbia, Canada', aliases: [] },
+  'day zero': { name: 'Day Zero', location: 'Tulum, Mexico', aliases: ['dayzero'] },
+  'zamna': { name: 'Zamna', location: 'Tulum, Mexico', aliases: ['zamna tulum'] },
 
   // Radio/Online
   'bbc radio 1': { name: 'BBC Radio 1', location: 'UK', aliases: ['radio 1', 'bbc r1', 'radio one'] },
@@ -633,6 +653,46 @@ const VENUE_DATABASE = {
   'ants': { name: 'ANTS', location: 'Ushuaïa Ibiza', aliases: ['ants ibiza'] },
   'resistance': { name: 'Resistance', location: 'Various', aliases: ['ultra resistance'] },
   'elrow': { name: 'elrow', location: 'Various', aliases: ['el row'] },
+
+  // NYC Event Series
+  'raw cuts': { name: 'Raw Cuts', location: 'New York, USA', aliases: ['rawcuts', 'raw cuts nyc'] },
+  'teksupport': { name: 'Teksupport', location: 'New York, USA', aliases: ['tek support', 'teksupport nyc'] },
+  'cityfox': { name: 'Cityfox', location: 'New York, USA', aliases: ['the cityfox', 'cityfox experience'] },
+  'mister saturday night': { name: 'Mister Saturday Night', location: 'New York, USA', aliases: ['mister sunday'] },
+  'good room': { name: 'Good Room', location: 'Brooklyn, USA', aliases: ['goodroom'] },
+  'elsewhere': { name: 'Elsewhere', location: 'Brooklyn, USA', aliases: ['elsewhere brooklyn'] },
+  'knockdown center': { name: 'Knockdown Center', location: 'Queens, USA', aliases: ['knockdown'] },
+  'the lot radio': { name: 'The Lot Radio', location: 'Brooklyn, USA', aliases: ['lot radio'] },
+
+  // LA Event Series
+  'sound': { name: 'Sound Nightclub', location: 'Los Angeles, USA', aliases: ['sound la', 'sound nightclub la'] },
+  'factory 93': { name: 'Factory 93', location: 'Los Angeles, USA', aliases: ['factory93'] },
+  'incognito': { name: 'Incognito', location: 'Los Angeles, USA', aliases: ['incognito la'] },
+
+  // Chicago Event Series
+  'smartbar': { name: 'Smartbar', location: 'Chicago, USA', aliases: ['smart bar'] },
+  'primary': { name: 'Primary', location: 'Chicago, USA', aliases: ['primary chicago'] },
+
+  // Miami Event Series
+  'club space': { name: 'Club Space', location: 'Miami, USA', aliases: ['space miami', 'space terrace'] },
+  'do not sit': { name: 'Do Not Sit On The Furniture', location: 'Miami, USA', aliases: ['do not sit on the furniture', 'dnsotf'] },
+  'treehouse': { name: 'Treehouse Miami', location: 'Miami, USA', aliases: ['treehouse miami'] },
+
+  // UK Event Series
+  'fuse': { name: 'FUSE', location: 'London, UK', aliases: ['fuse london'] },
+  'e1': { name: 'E1 London', location: 'London, UK', aliases: ['e1 london', 'studio spaces'] },
+  'xoyo': { name: 'XOYO', location: 'London, UK', aliases: ['xoyo london'] },
+
+  // Label Parties
+  'music on': { name: 'Music On', location: 'Ibiza, Spain', aliases: ['musicon', 'marco carola music on'] },
+  'paradise': { name: 'Paradise', location: 'Ibiza, Spain', aliases: ['paradise ibiza', 'jamie jones paradise'] },
+  'solid grooves': { name: 'Solid Grooves', location: 'Ibiza, Spain', aliases: ['solidgrooves'] },
+  'keinemusik': { name: 'Keinemusik', location: 'Various', aliases: ['keine musik', '&me'] },
+  'tale of us': { name: 'Tale Of Us', location: 'Various', aliases: ['afterlife'] },
+  'hyte': { name: 'HYTE', location: 'Various', aliases: ['hyte ibiza', 'hyte berlin'] },
+  'toolroom': { name: 'Toolroom', location: 'UK', aliases: ['toolroom records'] },
+  'dirtybird': { name: 'Dirtybird', location: 'Various', aliases: ['dirty bird', 'dirtybird campout'] },
+  'hot creations': { name: 'Hot Creations', location: 'Various', aliases: ['hotcreations'] },
 };
 
 // Countries and states to strip from set names
@@ -825,6 +885,278 @@ function parseSetInfo(title) {
   }
 
   console.log(`[parseSetInfo] "${title}" -> artist: "${result.artist}", name: "${result.name}", venue: "${result.venue}", location: "${result.location}"`);
+
+  return result;
+}
+
+/**
+ * Parse YouTube video description for venue, location, city, country, and stage info
+ * Looks for common patterns in descriptions like:
+ * - "Location: Berlin, Germany"
+ * - "Venue: Berghain"
+ * - "Stage: Main Stage"
+ * - "Recorded at Tomorrowland"
+ * - "Live from Ushuaïa Ibiza"
+ */
+function parseDescriptionMetadata(description) {
+  if (!description) return {};
+
+  const result = {
+    venue: null,
+    location: null,
+    city: null,
+    country: null,
+    stage: null,
+    eventName: null,
+    recordedDate: null,
+  };
+
+  const lines = description.split(/[\n\r]+/).map(l => l.trim()).filter(l => l.length > 0);
+  const lowerDesc = description.toLowerCase();
+
+  // Pattern 1: Explicit field labels (common in well-formatted descriptions)
+  const fieldPatterns = [
+    { field: 'venue', patterns: [/(?:venue|club|location)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+    { field: 'city', patterns: [/(?:city)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+    { field: 'country', patterns: [/(?:country)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+    { field: 'stage', patterns: [/(?:stage)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+    { field: 'eventName', patterns: [/(?:event|festival)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+    { field: 'recordedDate', patterns: [/(?:date|recorded|filmed)\s*[:|-]\s*(.+?)(?:\n|$)/i] },
+  ];
+
+  for (const { field, patterns } of fieldPatterns) {
+    for (const pattern of patterns) {
+      const match = description.match(pattern);
+      if (match && match[1]) {
+        const value = match[1].trim().replace(/[,\s]+$/, '');
+        if (value.length > 1 && value.length < 100) {
+          result[field] = value;
+          break;
+        }
+      }
+    }
+  }
+
+  // Pattern 2: "Location: City, Country" format - split into city and country
+  const locationLineMatch = description.match(/(?:location|place|where)\s*[:|-]\s*([^,\n]+),\s*([^\n]+)/i);
+  if (locationLineMatch) {
+    if (!result.city) result.city = locationLineMatch[1].trim();
+    if (!result.country) result.country = locationLineMatch[2].trim();
+    if (!result.location) result.location = `${locationLineMatch[1].trim()}, ${locationLineMatch[2].trim()}`;
+  }
+
+  // Pattern 3: "Recorded at / Live from / Filmed at" patterns
+  const recordedAtPatterns = [
+    /(?:recorded|filmed|shot|captured)\s+(?:at|in|@)\s+([^,\n]+(?:,\s*[^,\n]+)?)/i,
+    /(?:live\s+from|live\s+at|streaming\s+from)\s+([^,\n]+(?:,\s*[^,\n]+)?)/i,
+    /(?:from|at)\s+the\s+([^,\n]+(?:,\s*[^,\n]+)?)/i,
+  ];
+
+  for (const pattern of recordedAtPatterns) {
+    const match = description.match(pattern);
+    if (match && match[1]) {
+      const extracted = match[1].trim();
+      // Check if it's a known venue
+      const normalized = normalizeVenue(extracted);
+      if (normalized.venue && !result.venue) {
+        result.venue = normalized.venue;
+        if (normalized.location && !result.location) {
+          result.location = normalized.location;
+        }
+      } else if (!result.venue && extracted.length > 2 && extracted.length < 80) {
+        // Might be a venue or location
+        result.venue = extracted;
+      }
+      break;
+    }
+  }
+
+  // Pattern 4: Check for known venues from VENUE_DATABASE anywhere in description
+  if (!result.venue) {
+    for (const [key, data] of Object.entries(VENUE_DATABASE)) {
+      const allTerms = [key, ...data.aliases];
+      for (const term of allTerms) {
+        // Look for venue names with word boundaries (not part of other words)
+        const termPattern = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        if (termPattern.test(description)) {
+          result.venue = data.name;
+          if (!result.location && data.location && data.location !== 'Various') {
+            result.location = data.location;
+          }
+          break;
+        }
+      }
+      if (result.venue) break;
+    }
+  }
+
+  // Pattern 5: Look for common location formats in description
+  // "Berlin, Germany", "New York, USA", "Ibiza, Spain" etc.
+  const cityCountryPattern = /\b([A-Z][a-zA-Z\s]+),\s*(Germany|Spain|UK|USA|Netherlands|Belgium|France|Italy|Australia|Brazil|Mexico|Portugal|Switzerland|Austria|Poland|Croatia|Greece|Sweden|Japan|Canada|Argentina|Colombia|South Africa|United States|United Kingdom|England|Scotland)\b/g;
+  let cityCountryMatch;
+  while ((cityCountryMatch = cityCountryPattern.exec(description)) !== null) {
+    if (!result.city) result.city = cityCountryMatch[1].trim();
+    if (!result.country) result.country = cityCountryMatch[2].trim();
+    if (!result.location) result.location = `${cityCountryMatch[1].trim()}, ${cityCountryMatch[2].trim()}`;
+    break; // Take first match
+  }
+
+  // Pattern 6: Stage information - common in festival sets
+  const stagePatterns = [
+    /\b(main\s*stage|mainstage)\b/i,
+    /\b(arcadia|arcadia\s*spider)\b/i,
+    /\b(freedom\s*stage|liberty\s*stage)\b/i,
+    /\b(yuma\s*tent|yuma\s*stage|yuma)\b/i,
+    /\b(sahara\s*tent|sahara\s*stage|sahara)\b/i,
+    /\b(do\s*lab|dolab)\b/i,
+    /\b(gobi\s*tent|gobi\s*stage|gobi)\b/i,
+    /\b(mojave\s*tent|mojave\s*stage|mojave)\b/i,
+    /\b(outdoor\s*stage|outdoor)\b/i,
+    /\b(carl\s*cox\s*megastructure|megastructure)\b/i,
+    /\b(resistance\s*stage|resistance)\b/i,
+    /\b(worldwide\s*stage)\b/i,
+    /\b(neon\s*garden)\b/i,
+    /\b(circuit\s*grounds)\b/i,
+    /\b(kinetic\s*field)\b/i,
+    /\b(cosmic\s*meadow)\b/i,
+    /\b(bass\s*pod)\b/i,
+  ];
+
+  if (!result.stage) {
+    for (const pattern of stagePatterns) {
+      const match = description.match(pattern);
+      if (match) {
+        result.stage = match[1].trim();
+        break;
+      }
+    }
+  }
+
+  // Pattern 7: Extract event date from description
+  const datePatterns = [
+    /(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})/,  // DD/MM/YYYY or MM/DD/YYYY
+    /(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})/,  // YYYY/MM/DD
+    /(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*\d{4}/i,
+  ];
+
+  if (!result.recordedDate) {
+    for (const pattern of datePatterns) {
+      const match = description.match(pattern);
+      if (match) {
+        result.recordedDate = match[0];
+        break;
+      }
+    }
+  }
+
+  // Pattern 8: City abbreviations and common city names
+  // These are often found in set titles like "Raw Cuts NYC Pop Up"
+  const cityAbbreviations = {
+    'NYC': { city: 'New York', country: 'USA' },
+    'NY': { city: 'New York', country: 'USA' },
+    'LA': { city: 'Los Angeles', country: 'USA' },
+    'SF': { city: 'San Francisco', country: 'USA' },
+    'CHI': { city: 'Chicago', country: 'USA' },
+    'MIA': { city: 'Miami', country: 'USA' },
+    'ATL': { city: 'Atlanta', country: 'USA' },
+    'BK': { city: 'Brooklyn', country: 'USA' },
+    'LDN': { city: 'London', country: 'UK' },
+    'BCN': { city: 'Barcelona', country: 'Spain' },
+    'AMS': { city: 'Amsterdam', country: 'Netherlands' },
+    'BER': { city: 'Berlin', country: 'Germany' },
+    'IBZ': { city: 'Ibiza', country: 'Spain' },
+  };
+
+  if (!result.city || !result.country) {
+    for (const [abbrev, loc] of Object.entries(cityAbbreviations)) {
+      // Look for abbreviation with word boundaries (case insensitive for consistency)
+      const abbrevPattern = new RegExp(`\\b${abbrev}\\b`, 'i');
+      if (abbrevPattern.test(description)) {
+        if (!result.city) result.city = loc.city;
+        if (!result.country) result.country = loc.country;
+        if (!result.location) result.location = `${loc.city}, ${loc.country}`;
+        console.log(`[parseDescriptionMetadata] Found city abbreviation: ${abbrev} -> ${loc.city}, ${loc.country}`);
+        break;
+      }
+    }
+  }
+
+  // Pattern 9: Common city names without country
+  const knownCities = {
+    'New York': 'USA',
+    'Brooklyn': 'USA',
+    'Queens': 'USA',
+    'Manhattan': 'USA',
+    'Los Angeles': 'USA',
+    'San Francisco': 'USA',
+    'Chicago': 'USA',
+    'Miami': 'USA',
+    'Detroit': 'USA',
+    'Las Vegas': 'USA',
+    'Denver': 'USA',
+    'Austin': 'USA',
+    'Seattle': 'USA',
+    'Portland': 'USA',
+    'Boston': 'USA',
+    'Philadelphia': 'USA',
+    'Atlanta': 'USA',
+    'London': 'UK',
+    'Manchester': 'UK',
+    'Bristol': 'UK',
+    'Glasgow': 'UK',
+    'Birmingham': 'UK',
+    'Leeds': 'UK',
+    'Berlin': 'Germany',
+    'Hamburg': 'Germany',
+    'Munich': 'Germany',
+    'Cologne': 'Germany',
+    'Frankfurt': 'Germany',
+    'Amsterdam': 'Netherlands',
+    'Rotterdam': 'Netherlands',
+    'Barcelona': 'Spain',
+    'Madrid': 'Spain',
+    'Ibiza': 'Spain',
+    'Valencia': 'Spain',
+    'Paris': 'France',
+    'Lyon': 'France',
+    'Marseille': 'France',
+    'Melbourne': 'Australia',
+    'Sydney': 'Australia',
+    'Toronto': 'Canada',
+    'Montreal': 'Canada',
+    'Vancouver': 'Canada',
+    'Tokyo': 'Japan',
+    'Osaka': 'Japan',
+    'São Paulo': 'Brazil',
+    'Rio de Janeiro': 'Brazil',
+    'Buenos Aires': 'Argentina',
+    'Mexico City': 'Mexico',
+    'Tulum': 'Mexico',
+  };
+
+  if (!result.city || !result.country) {
+    for (const [cityName, country] of Object.entries(knownCities)) {
+      const cityPattern = new RegExp(`\\b${cityName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+      if (cityPattern.test(description)) {
+        if (!result.city) result.city = cityName;
+        if (!result.country) result.country = country;
+        if (!result.location) result.location = `${cityName}, ${country}`;
+        console.log(`[parseDescriptionMetadata] Found city name: ${cityName} -> ${cityName}, ${country}`);
+        break;
+      }
+    }
+  }
+
+  // Build full location from city + country if not already set
+  if (!result.location && (result.city || result.country)) {
+    if (result.city && result.country) {
+      result.location = `${result.city}, ${result.country}`;
+    } else {
+      result.location = result.city || result.country;
+    }
+  }
+
+  console.log(`[parseDescriptionMetadata] Found: venue="${result.venue}", location="${result.location}", city="${result.city}", country="${result.country}", stage="${result.stage}"`);
 
   return result;
 }
@@ -1683,8 +2015,18 @@ async function importFromYouTube(url, apiKey) {
 
   // Extract DJ/artist name, event name, venue, location from video title
   const setInfo = parseSetInfo(video.title);
-  const { name, artist, venue, location } = setInfo;
+  const { name, artist, venue: titleVenue, location: titleLocation } = setInfo;
   const djName = artist !== 'Unknown Artist' ? artist : video.channelTitle;
+
+  // Also parse the description for additional metadata (venue, location, stage, etc.)
+  const descMetadata = parseDescriptionMetadata(video.description);
+  console.log(`[YouTube Import] Description metadata:`, descMetadata);
+
+  // Use title info first, fall back to description metadata
+  const venue = titleVenue || descMetadata.venue || null;
+  const location = titleLocation || descMetadata.location || null;
+  const stage = descMetadata.stage || null;
+  const eventName = descMetadata.eventName || null;
 
   const descTracks = parseDescription(video.description, djName);
   console.log(`[YouTube Import] Description tracks: ${descTracks.length}`);
@@ -1721,6 +2063,8 @@ async function importFromYouTube(url, apiKey) {
     artist: djName,
     venue: venue || null,
     location: location || null,
+    stage: stage || null,
+    eventName: eventName || null,
     date: video.publishedAt,
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,
@@ -2805,6 +3149,184 @@ async function handleChromeExtensionImport(req, res, data) {
   });
 }
 
+// ============ FETCH TRACK METADATA ============
+
+/**
+ * Fetch metadata for a single track link (for AddTrackModal)
+ * Supports: YouTube, SoundCloud, Spotify (basic), Beatport (basic)
+ */
+async function fetchTrackMetadata(url, apiKey) {
+  const platform = detectPlatform(url);
+  console.log(`[fetchTrackMetadata] Platform: ${platform}, URL: ${url}`);
+
+  try {
+    if (platform === 'youtube') {
+      const videoId = extractVideoId(url);
+      if (!videoId) throw new Error('Invalid YouTube URL');
+
+      const video = await fetchVideoInfo(videoId, apiKey);
+
+      // Parse artist and title from video title
+      const parsed = parseSetInfo(video.title);
+
+      return {
+        success: true,
+        platform: 'youtube',
+        title: parsed.name || video.title,
+        artist: parsed.artist !== 'Unknown Artist' ? parsed.artist : video.channelTitle,
+        duration: parseDuration(video.duration),
+        coverUrl: video.thumbnailUrl,
+        channelName: video.channelTitle,
+        publishedAt: video.publishedAt,
+        description: video.description,
+        venue: parsed.venue,
+        location: parsed.location,
+      };
+    }
+
+    if (platform === 'soundcloud') {
+      // Try oEmbed first for basic info
+      const oembedUrl = `${SOUNDCLOUD_OEMBED}?format=json&url=${encodeURIComponent(url)}`;
+      const response = await fetch(oembedUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        // Parse artist from title (usually "Artist - Track Title")
+        const titleParts = data.title.split(' - ');
+        let artist = data.author_name;
+        let title = data.title;
+
+        if (titleParts.length >= 2) {
+          artist = titleParts[0].trim();
+          title = titleParts.slice(1).join(' - ').trim();
+        }
+
+        return {
+          success: true,
+          platform: 'soundcloud',
+          title,
+          artist,
+          coverUrl: data.thumbnail_url,
+          channelName: data.author_name,
+        };
+      }
+    }
+
+    if (platform === 'spotify') {
+      // For Spotify, we extract track ID and return basic info
+      // Full metadata would require Spotify API auth
+      const trackIdMatch = url.match(/track\/([a-zA-Z0-9]+)/);
+      if (trackIdMatch) {
+        return {
+          success: true,
+          platform: 'spotify',
+          spotifyId: trackIdMatch[1],
+          // User will need to manually enter title/artist or we can use Spotify API
+          title: '',
+          artist: '',
+          needsManualEntry: true,
+          message: 'Spotify link detected. Please enter track details manually.',
+        };
+      }
+    }
+
+    if (platform === 'beatport') {
+      // Extract info from Beatport URL structure
+      // URLs like: beatport.com/track/track-name/12345
+      const match = url.match(/beatport\.com\/track\/([^/]+)\/(\d+)/);
+      if (match) {
+        const trackSlug = match[1].replace(/-/g, ' ');
+        return {
+          success: true,
+          platform: 'beatport',
+          title: trackSlug.replace(/\b\w/g, l => l.toUpperCase()),
+          artist: '',
+          beatportId: match[2],
+          needsManualEntry: true,
+          message: 'Beatport link detected. Please verify track details.',
+        };
+      }
+    }
+
+    // Unsupported platform - return basic info
+    return {
+      success: true,
+      platform,
+      title: '',
+      artist: '',
+      needsManualEntry: true,
+      message: `${platform} link detected. Please enter track details manually.`,
+    };
+
+  } catch (error) {
+    console.error('[fetchTrackMetadata] Error:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      platform,
+    };
+  }
+}
+
+// ============ REFRESH SET METADATA ============
+
+/**
+ * Re-process a YouTube set to extract better metadata from description
+ * Used to update existing sets with venue, location, stage info
+ */
+async function refreshSetMetadata(youtubeUrl, apiKey) {
+  const videoId = extractVideoId(youtubeUrl);
+  if (!videoId) throw new Error('Invalid YouTube URL');
+
+  const video = await fetchVideoInfo(videoId, apiKey);
+
+  // Parse title for basic info
+  const titleInfo = parseSetInfo(video.title);
+
+  // Parse TITLE for city abbreviations and event names (e.g., "Raw Cuts NYC Pop Up")
+  const titleMetadata = parseDescriptionMetadata(video.title);
+  console.log('[refreshSetMetadata] Title metadata:', titleMetadata);
+
+  // Parse description for additional metadata
+  const descMetadata = parseDescriptionMetadata(video.description);
+  console.log('[refreshSetMetadata] Description metadata:', descMetadata);
+
+  // Combine - title takes precedence, then title metadata, then description fills gaps
+  const metadata = {
+    name: titleInfo.name,
+    artist: titleInfo.artist !== 'Unknown Artist' ? titleInfo.artist : video.channelTitle,
+    venue: titleInfo.venue || titleMetadata.venue || descMetadata.venue,
+    location: titleInfo.location || titleMetadata.location || descMetadata.location,
+    city: titleMetadata.city || descMetadata.city,
+    country: titleMetadata.country || descMetadata.country,
+    stage: titleMetadata.stage || descMetadata.stage,
+    eventName: titleMetadata.eventName || descMetadata.eventName,
+    recordedDate: descMetadata.recordedDate,
+    coverUrl: video.thumbnailUrl,
+    totalDuration: parseDuration(video.duration),
+    publishedAt: video.publishedAt,
+  };
+
+  // If we found city/country but no location, build it
+  if (!metadata.location && (metadata.city || metadata.country)) {
+    if (metadata.city && metadata.country) {
+      metadata.location = `${metadata.city}, ${metadata.country}`;
+    } else {
+      metadata.location = metadata.city || metadata.country;
+    }
+  }
+
+  console.log('[refreshSetMetadata] Final extracted metadata:', metadata);
+
+  return {
+    success: true,
+    videoId,
+    metadata,
+  };
+}
+
 // ============ MAIN HANDLER ============
 
 module.exports = async (req, res) => {
@@ -2841,20 +3363,128 @@ module.exports = async (req, res) => {
   body = body || {};
   
   console.log('[Import] Received request:', {
+    action: body.action,
     chromeExtension: body.chromeExtension,
     hasUrl: !!body.url,
     hasTracks: !!body.tracks,
     hasArtists: !!body.artists,
+    hasSets: !!body.sets,
+    setsCount: body.sets?.length,
     source: body.source,
+    bodyKeys: Object.keys(body),
   });
-  
+
   // Handle Chrome Extension import
   if (body.chromeExtension) {
     return handleChromeExtensionImport(req, res, body);
   }
 
+  // Handle action-based requests
+  if (body.action) {
+    console.log('[Import] Processing action:', body.action);
+    const apiKey = process.env.YOUTUBE_API_KEY;
+
+    // Fetch metadata for a single track link (for AddTrackModal)
+    if (body.action === 'fetchTrackMetadata') {
+      if (!body.url) return res.status(400).json({ error: 'URL is required' });
+      try {
+        const result = await fetchTrackMetadata(body.url, apiKey);
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error('[fetchTrackMetadata] Error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+    }
+
+    // Refresh metadata for an existing YouTube set
+    if (body.action === 'refreshSetMetadata') {
+      if (!body.url) return res.status(400).json({ error: 'YouTube URL is required' });
+      if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
+      try {
+        const result = await refreshSetMetadata(body.url, apiKey);
+        return res.status(200).json(result);
+      } catch (error) {
+        console.error('[refreshSetMetadata] Error:', error.message);
+        return res.status(500).json({ success: false, error: error.message });
+      }
+    }
+
+    // Batch refresh metadata for multiple sets
+    if (body.action === 'batchRefreshMetadata') {
+      console.log('[batchRefreshMetadata] Starting batch refresh for', body.sets?.length, 'sets');
+      if (!body.sets || !Array.isArray(body.sets)) {
+        console.log('[batchRefreshMetadata] Error: sets array missing or invalid');
+        return res.status(400).json({ error: 'sets array is required' });
+      }
+      if (!apiKey) {
+        console.log('[batchRefreshMetadata] Error: No YouTube API key');
+        return res.status(500).json({ error: 'YouTube API key not configured' });
+      }
+
+      const results = [];
+      for (const set of body.sets) {
+        // Find YouTube source link
+        const ytSource = set.sourceLinks?.find(s => s.platform === 'youtube');
+        if (!ytSource) {
+          results.push({ setId: set.id, success: false, error: 'No YouTube source' });
+          continue;
+        }
+
+        try {
+          const result = await refreshSetMetadata(ytSource.url, apiKey);
+          results.push({
+            setId: set.id,
+            success: true,
+            metadata: result.metadata,
+          });
+        } catch (error) {
+          results.push({ setId: set.id, success: false, error: error.message });
+        }
+      }
+
+      return res.status(200).json({ success: true, results });
+    }
+
+    console.log('[Import] Unknown action:', body.action);
+    return res.status(400).json({ error: `Unknown action: ${body.action}` });
+  }
+
+  // Fallback: Handle batch refresh if sets array is present (in case action wasn't detected)
+  if (body.sets && Array.isArray(body.sets) && body.sets.length > 0) {
+    console.log('[Import] Fallback: Detected sets array, treating as batchRefreshMetadata');
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: 'YouTube API key not configured' });
+
+    const results = [];
+    for (const set of body.sets) {
+      const ytSource = set.sourceLinks?.find(s => s.platform === 'youtube');
+      if (!ytSource) {
+        results.push({ setId: set.id, success: false, error: 'No YouTube source' });
+        continue;
+      }
+
+      try {
+        const result = await refreshSetMetadata(ytSource.url, apiKey);
+        results.push({
+          setId: set.id,
+          success: true,
+          metadata: result.metadata,
+        });
+      } catch (error) {
+        results.push({ setId: set.id, success: false, error: error.message });
+      }
+    }
+
+    return res.status(200).json({ success: true, results });
+  }
+
+  // If no action, this is a standard import that requires a URL
   const { url, mergeWith } = body;
-  if (!url) return res.status(400).json({ error: 'URL is required' });
+  if (!url) {
+    console.log('[Import] No URL provided and no action specified. Body keys:', Object.keys(body));
+    console.log('[Import] Body action value:', body.action, 'typeof:', typeof body.action);
+    return res.status(400).json({ error: 'URL is required' });
+  }
 
   try {
     const platform = detectPlatform(url);
