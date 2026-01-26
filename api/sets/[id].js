@@ -71,6 +71,7 @@ export default async function handler(req, res) {
       timestamp: track.timestamp_seconds || 0,
       timestampStr: track.timestamp_str || '0:00',
       isId: track.is_id || false,
+      isTimed: track.is_timed !== false, // Default to true for backwards compatibility
       trackId: track.track_id, // Reference to tracks table
       addedAt: track.created_at,
       // Source is '1001tracklists' since that's where set_tracks come from

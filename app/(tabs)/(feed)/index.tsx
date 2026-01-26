@@ -1,12 +1,15 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Bell, UserPlus, Play, ChevronRight, Music } from 'lucide-react-native';
+import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
 import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFollowing, useNotifications, useLikeSet } from '@/hooks/useSocial';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
 
 interface Artist {
@@ -14,152 +17,143 @@ interface Artist {
   name: string;
   image: string;
   following: boolean;
-  latestSet?: {
-    id: string;
-    name: string;
-    venue: string;
-    date: string;
-    image: string;
-  };
 }
 
-interface FeedItem {
-  id: string;
-  type: 'new_set' | 'live_now';
-  artist: Artist;
-  set: {
-    id: string;
-    name: string;
-    venue: string;
-    date: string;
-    image: string;
-    duration: string;
-    tracksIdentified: number;
-  };
-  timestamp: Date;
-}
-
-const followedArtists: Artist[] = [
-  { 
-    id: '1', 
-    name: 'Dixon', 
-    image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
-    following: true,
-    latestSet: {
-      id: '1',
-      name: 'Boiler Room Berlin',
-      venue: 'Kreuzberg Warehouse',
-      date: '2d ago',
-      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-    }
-  },
-  { 
-    id: '2', 
-    name: 'Âme', 
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop',
-    following: true,
-  },
-  { 
-    id: '3', 
-    name: 'Hunee', 
-    image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=200&h=200&fit=crop',
-    following: true,
-  },
-  { 
-    id: '4', 
-    name: 'Ben Böhmer', 
-    image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=200&h=200&fit=crop',
-    following: true,
-  },
-];
-
+// Suggested artists (will come from API later)
 const suggestedArtists: Artist[] = [
-  { 
-    id: '5', 
-    name: 'Chris Stussy', 
+  {
+    id: '5',
+    name: 'Chris Stussy',
     image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop',
     following: false,
   },
-  { 
-    id: '6', 
-    name: 'Sama\'', 
+  {
+    id: '6',
+    name: 'Sama\'',
     image: 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=200&h=200&fit=crop',
     following: false,
   },
-  { 
-    id: '7', 
-    name: 'Solomun', 
+  {
+    id: '7',
+    name: 'Solomun',
     image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=200&h=200&fit=crop',
     following: false,
   },
 ];
 
-const feedItems: FeedItem[] = [
-  {
-    id: '1',
-    type: 'new_set',
-    artist: followedArtists[0],
-    set: {
-      id: '1',
-      name: 'Boiler Room Berlin 2024',
-      venue: 'Kreuzberg Warehouse, Berlin',
-      date: '2 hours ago',
-      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-      duration: '2h 15m',
-      tracksIdentified: 24,
-    },
-    timestamp: new Date(),
-  },
-  {
-    id: '2',
-    type: 'new_set',
-    artist: followedArtists[1],
-    set: {
-      id: '2',
-      name: 'Cercle Festival Sunset',
-      venue: 'French Alps',
-      date: '1 day ago',
-      image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-      duration: '1h 30m',
-      tracksIdentified: 16,
-    },
-    timestamp: new Date(Date.now() - 86400000),
-  },
-  {
-    id: '3',
-    type: 'new_set',
-    artist: followedArtists[2],
-    set: {
-      id: '3',
-      name: 'Dekmantel Festival 2024',
-      venue: 'Amsterdamse Bos',
-      date: '3 days ago',
-      image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
-      duration: '2h 00m',
-      tracksIdentified: 28,
-    },
-    timestamp: new Date(Date.now() - 259200000),
-  },
-  {
-    id: '4',
-    type: 'new_set',
-    artist: followedArtists[3],
-    set: {
-      id: '4',
-      name: 'Anjunadeep Open Air',
-      venue: 'The Brooklyn Mirage, NYC',
-      date: '5 days ago',
-      image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=400&h=400&fit=crop',
-      duration: '1h 45m',
-      tracksIdentified: 20,
-    },
-    timestamp: new Date(Date.now() - 432000000),
-  },
-];
+// Feed item component with like functionality
+function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
+  const { isAuthenticated } = useAuth();
+  const { isLiked, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
+  const router = useRouter();
+
+  const handleLike = () => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    toggleLike();
+  };
+
+  const handleComment = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/(tabs)/(discover)/${item.set.id}?showComments=true`);
+  };
+
+  const handleShare = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(`https://identified.app/set/${item.set.id}`, {
+          dialogTitle: `Check out ${item.set.name} on IDentified`,
+        });
+      }
+    } catch (error) {
+      console.log('Share error:', error);
+    }
+  };
+
+  return (
+    <View style={styles.feedCard}>
+      <Pressable onPress={onPress}>
+        <View style={styles.feedHeader}>
+          <Image
+            source={{ uri: item.artist.image }}
+            style={styles.feedArtistImage}
+            contentFit="cover"
+          />
+          <View style={styles.feedHeaderText}>
+            <Text style={styles.feedArtistName}>{item.artist.name}</Text>
+            <Text style={styles.feedAction}>posted a new set</Text>
+          </View>
+          <Text style={styles.feedTime}>{item.set.date}</Text>
+        </View>
+        <View style={styles.feedContent}>
+          <View style={styles.feedCoverContainer}>
+            <Image
+              source={{ uri: item.set.image }}
+              style={styles.feedCover}
+              contentFit="cover"
+            />
+            <View style={styles.feedPlayOverlay}>
+              <View style={styles.feedPlayButton}>
+                <Play size={20} color="#fff" fill="#fff" />
+              </View>
+            </View>
+          </View>
+          <View style={styles.feedSetInfo}>
+            <Text style={styles.feedSetName} numberOfLines={2}>{item.set.name}</Text>
+            <Text style={styles.feedSetVenue}>{item.set.venue}</Text>
+            <View style={styles.feedSetStats}>
+              <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
+              {item.set.duration && <View style={styles.feedSetDivider} />}
+              <View style={styles.feedTracksRow}>
+                <Music size={12} color={Colors.dark.textMuted} />
+                <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Pressable>
+
+      {/* Social Actions */}
+      <View style={styles.socialActions}>
+        <Pressable
+          style={styles.actionButton}
+          onPress={handleLike}
+          disabled={likeLoading}
+        >
+          <Heart
+            size={20}
+            color={isLiked ? '#EF4444' : Colors.dark.textMuted}
+            fill={isLiked ? '#EF4444' : 'none'}
+          />
+          <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
+            Like
+          </Text>
+        </Pressable>
+
+        <Pressable style={styles.actionButton} onPress={handleComment}>
+          <MessageCircle size={20} color={Colors.dark.textMuted} />
+          <Text style={styles.actionText}>Comment</Text>
+        </Pressable>
+
+        <Pressable style={styles.actionButton} onPress={handleShare}>
+          <Share2 size={20} color={Colors.dark.textMuted} />
+          <Text style={styles.actionText}>Share</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export default function FeedScreen() {
   const router = useRouter();
   const { sets } = useSets();
+  const { isAuthenticated, user, profile } = useAuth();
+  const { followedArtists, isLoading: followingLoading } = useFollowing();
+  const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
   const [following, setFollowing] = useState<Record<string, boolean>>({});
 
@@ -210,6 +204,25 @@ export default function FeedScreen() {
       }));
   }, [sets]);
 
+  // Artists the user follows
+  const followedArtistsList = useMemo(() => {
+    if (!isAuthenticated || followedArtists.length === 0) {
+      // Show placeholder artists when not logged in
+      return [
+        { id: '1', name: 'Dixon', image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop', following: true },
+        { id: '2', name: 'Âme', image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&h=200&fit=crop', following: true },
+        { id: '3', name: 'Hunee', image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=200&h=200&fit=crop', following: true },
+        { id: '4', name: 'Ben Böhmer', image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=200&h=200&fit=crop', following: true },
+      ];
+    }
+    return followedArtists.map(f => ({
+      id: f.following_artist?.id || '',
+      name: f.following_artist?.name || '',
+      image: f.following_artist?.image_url || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+      following: true,
+    }));
+  }, [isAuthenticated, followedArtists]);
+
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     setTimeout(() => {
@@ -218,8 +231,21 @@ export default function FeedScreen() {
   }, []);
 
   const toggleFollow = (artistId: string) => {
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setFollowing(prev => ({ ...prev, [artistId]: !prev[artistId] }));
+  };
+
+  const handleNotifications = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (!isAuthenticated) {
+      router.push('/(auth)/login');
+      return;
+    }
+    // TODO: Navigate to notifications screen
   };
 
   return (
@@ -227,12 +253,30 @@ export default function FeedScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <IDentifiedLogo size="medium" />
-          <Pressable style={styles.notifButton}>
-            <Bell size={22} color={Colors.dark.text} />
-          </Pressable>
+          <View style={styles.headerRight}>
+            {!isAuthenticated && (
+              <Pressable
+                style={styles.loginButton}
+                onPress={() => router.push('/(auth)/login')}
+              >
+                <LogIn size={16} color="#fff" />
+                <Text style={styles.loginButtonText}>Login</Text>
+              </Pressable>
+            )}
+            <Pressable style={styles.notifButton} onPress={handleNotifications}>
+              <Bell size={22} color={Colors.dark.text} />
+              {unreadCount > 0 && (
+                <View style={styles.notifBadge}>
+                  <Text style={styles.notifBadgeText}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          </View>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -244,26 +288,32 @@ export default function FeedScreen() {
             />
           }
         >
+          {/* Following section */}
           <View style={styles.followingSection}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Following</Text>
-              <Text style={styles.sectionCount}>{followedArtists.length} artists</Text>
+              <Text style={styles.sectionCount}>
+                {isAuthenticated ? `${followedArtistsList.length} artists` : 'Log in to follow'}
+              </Text>
             </View>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.followingContainer}
             >
-              {followedArtists.map((artist) => (
-                <Pressable 
-                  key={artist.id} 
+              {followedArtistsList.map((artist) => (
+                <Pressable
+                  key={artist.id}
                   style={styles.followingItem}
                   onPress={() => {
                     Haptics.selectionAsync();
+                    if (artist.id) {
+                      router.push(`/(tabs)/(discover)/artist/${artist.id}`);
+                    }
                   }}
                 >
-                  <Image 
-                    source={{ uri: artist.image }} 
+                  <Image
+                    source={{ uri: artist.image }}
                     style={styles.followingImage}
                     contentFit="cover"
                   />
@@ -273,6 +323,7 @@ export default function FeedScreen() {
             </ScrollView>
           </View>
 
+          {/* Suggested Artists */}
           <View style={styles.suggestedSection}>
             <View style={styles.sectionHeaderRow}>
               <Text style={styles.sectionTitle}>Suggested Artists</Text>
@@ -281,20 +332,20 @@ export default function FeedScreen() {
                 <ChevronRight size={14} color={Colors.dark.primary} />
               </Pressable>
             </View>
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.suggestedContainer}
             >
               {suggestedArtists.map((artist) => (
                 <View key={artist.id} style={styles.suggestedCard}>
-                  <Image 
-                    source={{ uri: artist.image }} 
+                  <Image
+                    source={{ uri: artist.image }}
                     style={styles.suggestedImage}
                     contentFit="cover"
                   />
                   <Text style={styles.suggestedName}>{artist.name}</Text>
-                  <Pressable 
+                  <Pressable
                     style={[
                       styles.followButton,
                       following[artist.id] && styles.followingButton
@@ -311,59 +362,28 @@ export default function FeedScreen() {
             </ScrollView>
           </View>
 
+          {/* Recent Activity Feed */}
           <View style={styles.feedSection}>
             <Text style={styles.feedTitle}>Recent Activity</Text>
             {realFeedItems.length > 0 ? (
               realFeedItems.map((item) => (
-                <Pressable 
+                <FeedCard
                   key={item.id}
-                  style={styles.feedCard}
+                  item={item}
                   onPress={() => {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     router.push(`/(tabs)/(discover)/${item.set.id}`);
                   }}
-                >
-                  <View style={styles.feedHeader}>
-                    <Image 
-                      source={{ uri: item.artist.image }} 
-                      style={styles.feedArtistImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.feedHeaderText}>
-                      <Text style={styles.feedArtistName}>{item.artist.name}</Text>
-                      <Text style={styles.feedAction}>posted a new set</Text>
-                    </View>
-                    <Text style={styles.feedTime}>{item.set.date}</Text>
-                  </View>
-                  <View style={styles.feedContent}>
-                    <View style={styles.feedCoverContainer}>
-                      <Image 
-                        source={{ uri: item.set.image }} 
-                        style={styles.feedCover}
-                        contentFit="cover"
-                      />
-                      <View style={styles.feedPlayOverlay}>
-                        <View style={styles.feedPlayButton}>
-                          <Play size={20} color="#fff" fill="#fff" />
-                        </View>
-                      </View>
-                    </View>
-                    <View style={styles.feedSetInfo}>
-                      <Text style={styles.feedSetName} numberOfLines={2}>{item.set.name}</Text>
-                      <Text style={styles.feedSetVenue}>{item.set.venue}</Text>
-                      <View style={styles.feedSetStats}>
-                        <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
-                        <View style={styles.feedSetDivider} />
-                        <View style={styles.feedTracksRow}>
-                          <Music size={12} color={Colors.dark.textMuted} />
-                          <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </Pressable>
+                />
               ))
-            ) : null}
+            ) : (
+              <View style={styles.emptyFeed}>
+                <Text style={styles.emptyFeedText}>No sets yet</Text>
+                <Text style={styles.emptyFeedSubtext}>
+                  Follow artists to see their latest sets
+                </Text>
+              </View>
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -387,11 +407,24 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '700' as const,
-    color: Colors.dark.text,
-    letterSpacing: -0.3,
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
   },
   notifButton: {
     width: 38,
@@ -402,6 +435,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  notifBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   scrollView: {
     flex: 1,
@@ -637,5 +687,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
     fontWeight: '500' as const,
+  },
+  socialActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: Colors.dark.border,
+    marginTop: 12,
+    paddingTop: 12,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  actionText: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+    fontWeight: '500',
+  },
+  actionTextActive: {
+    color: '#EF4444',
+  },
+  emptyFeed: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyFeedText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginBottom: 8,
+  },
+  emptyFeedSubtext: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
   },
 });

@@ -1,333 +1,340 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Heart, MessageCircle, Music, Clock, CheckCircle, Users, Share2 } from 'lucide-react-native';
+import { Heart, MessageCircle, Music, Clock, CheckCircle, Users, Share2, Bell, UserPlus } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
+import { useFeed, useFollowing, useNotifications, ActivityWithDetails } from '@/hooks/useSocial';
 
-interface Friend {
-  id: string;
-  name: string;
-  username: string;
-  avatar: string;
+function formatTimeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diff = now.getTime() - date.getTime();
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+
+  if (minutes < 60) return `${minutes}m ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return `${days}d ago`;
 }
 
-interface SocialActivity {
-  id: string;
-  type: 'liked_set' | 'contributed_track' | 'verified_track' | 'commented';
-  friend: Friend;
-  set?: {
-    id: string;
-    name: string;
-    artist: string;
-    image: string;
-  };
-  track?: {
-    title: string;
-    artist: string;
-    timestamp: string;
-  };
-  comment?: string;
-  timestamp: Date;
+function getActivityIcon(type: string) {
+  switch (type) {
+    case 'like_set':
+      return <Heart size={14} color={Colors.dark.error} fill={Colors.dark.error} />;
+    case 'track_id':
+      return <Music size={14} color={Colors.dark.primary} />;
+    case 'new_set':
+      return <Music size={14} color={Colors.dark.success} />;
+    case 'follow_user':
+    case 'follow_artist':
+      return <UserPlus size={14} color={Colors.dark.primary} />;
+    default:
+      return <MessageCircle size={14} color={Colors.dark.textSecondary} />;
+  }
 }
 
-const friends: Friend[] = [
-  { id: '1', name: 'Logan Williams', username: 'techno_head', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop' },
-  { id: '2', name: 'Mondo Arce', username: 'dance_lover92', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop' },
-  { id: '3', name: 'Niels Steenberg', username: 'basshead_mike', avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop' },
-  { id: '4', name: 'Emma Chen', username: 'emma_beats', avatar: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&h=200&fit=crop' },
-];
+function getActivityText(activity: ActivityWithDetails) {
+  switch (activity.activity_type) {
+    case 'like_set':
+      return 'liked a set';
+    case 'track_id':
+      return 'identified a track';
+    case 'new_set':
+      return 'new set added';
+    case 'follow_user':
+      return `started following ${activity.target_user?.display_name || activity.target_user?.username}`;
+    case 'follow_artist':
+      return `started following ${activity.artist?.name}`;
+    default:
+      return '';
+  }
+}
 
-const socialActivities: SocialActivity[] = [
-  {
-    id: '1',
-    type: 'contributed_track',
-    friend: friends[0],
-    set: {
-      id: '1',
-      name: 'Boiler Room Berlin',
-      artist: 'Dixon',
-      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-    },
-    track: {
-      title: 'Strobe',
-      artist: 'deadmau5',
-      timestamp: '32:15',
-    },
-    timestamp: new Date(Date.now() - 1800000),
-  },
-  {
-    id: '2',
-    type: 'liked_set',
-    friend: friends[1],
-    set: {
-      id: '2',
-      name: 'Cercle Festival Sunset',
-      artist: 'Âme',
-      image: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-    },
-    timestamp: new Date(Date.now() - 3600000),
-  },
-  {
-    id: '3',
-    type: 'verified_track',
-    friend: friends[2],
-    set: {
-      id: '3',
-      name: 'Dekmantel Festival 2024',
-      artist: 'Hunee',
-      image: 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
-    },
-    track: {
-      title: 'Cola',
-      artist: 'CamelPhat & Elderbrook',
-      timestamp: '45:20',
-    },
-    timestamp: new Date(Date.now() - 7200000),
-  },
-  {
-    id: '4',
-    type: 'contributed_track',
-    friend: friends[3],
-    set: {
-      id: '4',
-      name: 'HÖR Berlin Marathon',
-      artist: 'Sama\' Abdulhadi',
-      image: 'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
-    },
-    track: {
-      title: 'Opus',
-      artist: 'Eric Prydz',
-      timestamp: '1:15:30',
-    },
-    timestamp: new Date(Date.now() - 14400000),
-  },
-  {
-    id: '5',
-    type: 'liked_set',
-    friend: friends[0],
-    set: {
-      id: '5',
-      name: 'Warehouse Project Opening',
-      artist: 'Ben Böhmer',
-      image: 'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=400&h=400&fit=crop',
-    },
-    timestamp: new Date(Date.now() - 28800000),
-  },
-  {
-    id: '6',
-    type: 'verified_track',
-    friend: friends[1],
-    set: {
-      id: '1',
-      name: 'Boiler Room Berlin',
-      artist: 'Dixon',
-      image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-    },
-    track: {
-      title: 'Sandstorm',
-      artist: 'Darude',
-      timestamp: '58:45',
-    },
-    timestamp: new Date(Date.now() - 43200000),
-  },
-];
+function ActivityCard({ activity, onPress }: { activity: ActivityWithDetails; onPress: () => void }) {
+  const [liked, setLiked] = useState(false);
+
+  const toggleLike = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setLiked(!liked);
+  };
+
+  return (
+    <Pressable style={styles.activityCard} onPress={onPress}>
+      <View style={styles.activityHeader}>
+        <Image
+          source={{ uri: activity.user?.avatar_url || 'https://via.placeholder.com/40' }}
+          style={styles.activityAvatar}
+          contentFit="cover"
+        />
+        <View style={styles.activityHeaderText}>
+          <View style={styles.activityNameRow}>
+            <Text style={styles.activityFriendName}>
+              {activity.user?.display_name || activity.user?.username || 'User'}
+            </Text>
+            {getActivityIcon(activity.activity_type)}
+          </View>
+          <Text style={styles.activityAction}>{getActivityText(activity)}</Text>
+        </View>
+        <Text style={styles.activityTime}>{formatTimeAgo(activity.created_at)}</Text>
+      </View>
+
+      {activity.set && (
+        <View style={styles.activityContent}>
+          <Image
+            source={{ uri: activity.set.cover_url || 'https://via.placeholder.com/64' }}
+            style={styles.activitySetImage}
+            contentFit="cover"
+          />
+          <View style={styles.activitySetInfo}>
+            <Text style={styles.activitySetName} numberOfLines={1}>
+              {activity.set.name}
+            </Text>
+            <Text style={styles.activitySetArtist}>{activity.set.artist_name}</Text>
+            {activity.metadata?.track_title && (
+              <View style={styles.trackBadge}>
+                <Music size={11} color={Colors.dark.primary} />
+                <Text style={styles.trackBadgeText}>
+                  {activity.metadata.track_artist} - {activity.metadata.track_title}
+                </Text>
+                {activity.metadata.timestamp && (
+                  <View style={styles.trackTimestamp}>
+                    <Clock size={10} color={Colors.dark.textMuted} />
+                    <Text style={styles.trackTimestampText}>
+                      {Math.floor(activity.metadata.timestamp / 60)}:{(activity.metadata.timestamp % 60).toString().padStart(2, '0')}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      )}
+
+      <View style={styles.activityActions}>
+        <Pressable
+          style={styles.actionButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            toggleLike();
+          }}
+        >
+          <Heart
+            size={18}
+            color={liked ? Colors.dark.error : Colors.dark.textMuted}
+            fill={liked ? Colors.dark.error : 'transparent'}
+          />
+        </Pressable>
+        <Pressable style={styles.actionButton}>
+          <MessageCircle size={18} color={Colors.dark.textMuted} />
+        </Pressable>
+        <Pressable style={styles.actionButton}>
+          <Share2 size={18} color={Colors.dark.textMuted} />
+        </Pressable>
+      </View>
+    </Pressable>
+  );
+}
 
 export default function SocialScreen() {
   const router = useRouter();
-  const [refreshing, setRefreshing] = useState(false);
-  const [likedActivities, setLikedActivities] = useState<Record<string, boolean>>({});
+  const { isAuthenticated, user } = useAuth();
+  const { feed, isLoading, isRefreshing, refresh } = useFeed();
+  const { followedUsers, followedArtists, isLoading: followingLoading } = useFollowing();
+  const { unreadCount } = useNotifications();
 
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-    }, 1000);
-  }, []);
+  const handleRefresh = useCallback(() => {
+    refresh();
+  }, [refresh]);
 
-  const toggleLike = (activityId: string) => {
+  const navigateToSet = (setId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setLikedActivities(prev => ({ ...prev, [activityId]: !prev[activityId] }));
+    router.push(`/(tabs)/(discover)/${setId}`);
   };
 
-  const formatTimeAgo = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
-  };
-
-  const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'liked_set':
-        return <Heart size={14} color={Colors.dark.error} fill={Colors.dark.error} />;
-      case 'contributed_track':
-        return <Music size={14} color={Colors.dark.primary} />;
-      case 'verified_track':
-        return <CheckCircle size={14} color={Colors.dark.success} />;
-      default:
-        return <MessageCircle size={14} color={Colors.dark.textSecondary} />;
-    }
-  };
-
-  const getActivityText = (activity: SocialActivity) => {
-    switch (activity.type) {
-      case 'liked_set':
-        return 'liked a set';
-      case 'contributed_track':
-        return 'contributed a track ID';
-      case 'verified_track':
-        return 'verified a track';
-      case 'commented':
-        return 'commented';
-      default:
-        return '';
-    }
-  };
+  // Not logged in view
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Social</Text>
+          </View>
+          <View style={styles.loginPromptContainer}>
+            <Users size={48} color={Colors.dark.textMuted} />
+            <Text style={styles.loginPromptTitle}>Connect with friends</Text>
+            <Text style={styles.loginPromptText}>
+              Log in to follow friends, see their activity, and share your contributions
+            </Text>
+            <Pressable
+              style={styles.loginButton}
+              onPress={() => router.push('/(auth)/login')}
+            >
+              <Text style={styles.loginButtonText}>Log In</Text>
+            </Pressable>
+            <Pressable
+              style={styles.signupButton}
+              onPress={() => router.push('/(auth)/signup')}
+            >
+              <Text style={styles.signupButtonText}>Create Account</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <Text style={styles.title}>Social</Text>
-          <Pressable style={styles.friendsButton}>
-            <Users size={22} color={Colors.dark.text} />
-          </Pressable>
+          <View style={styles.headerButtons}>
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => {
+                Haptics.selectionAsync();
+                // TODO: Navigate to notifications
+              }}
+            >
+              <Bell size={22} color={Colors.dark.text} />
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationCount}>
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable
+              style={styles.headerButton}
+              onPress={() => {
+                Haptics.selectionAsync();
+                // TODO: Navigate to find friends
+              }}
+            >
+              <Users size={22} color={Colors.dark.text} />
+            </Pressable>
+          </View>
         </View>
 
-        <ScrollView 
+        <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           refreshControl={
             <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
               tintColor={Colors.dark.primary}
             />
           }
         >
-          <View style={styles.friendsSection}>
+          {/* Following Section */}
+          <View style={styles.followingSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Friends</Text>
-              <Text style={styles.sectionCount}>{friends.length}</Text>
+              <Text style={styles.sectionTitle}>Following</Text>
+              <Text style={styles.sectionCount}>
+                {followedUsers.length + followedArtists.length}
+              </Text>
             </View>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.friendsContainer}
-            >
-              {friends.map((friend) => (
-                <Pressable 
-                  key={friend.id} 
-                  style={styles.friendItem}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                  }}
-                >
-                  <Image 
-                    source={{ uri: friend.avatar }} 
-                    style={styles.friendAvatar}
-                    contentFit="cover"
-                  />
-                  <View style={styles.friendOnline} />
-                  <Text style={styles.friendName} numberOfLines={1}>@{friend.username}</Text>
+            {followingLoading ? (
+              <ActivityIndicator color={Colors.dark.primary} style={styles.sectionLoader} />
+            ) : followedUsers.length === 0 && followedArtists.length === 0 ? (
+              <View style={styles.emptyFollowing}>
+                <Text style={styles.emptyFollowingText}>
+                  You're not following anyone yet
+                </Text>
+                <Pressable style={styles.findFriendsButton}>
+                  <UserPlus size={16} color={Colors.dark.primary} />
+                  <Text style={styles.findFriendsText}>Find Friends</Text>
                 </Pressable>
-              ))}
-              <Pressable style={styles.addFriendItem}>
-                <View style={styles.addFriendCircle}>
-                  <Users size={22} color={Colors.dark.primary} />
-                </View>
-                <Text style={styles.addFriendText}>Find</Text>
-              </Pressable>
-            </ScrollView>
-          </View>
-
-          <View style={styles.activitySection}>
-            <Text style={styles.activityTitle}>Activity</Text>
-            {socialActivities.map((activity) => (
-              <Pressable 
-                key={activity.id}
-                style={styles.activityCard}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  if (activity.set) {
-                    router.push(`/(tabs)/(discover)/${activity.set.id}`);
-                  }
-                }}
+              </View>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.followingContainer}
               >
-                <View style={styles.activityHeader}>
-                  <Image 
-                    source={{ uri: activity.friend.avatar }} 
-                    style={styles.activityAvatar}
-                    contentFit="cover"
-                  />
-                  <View style={styles.activityHeaderText}>
-                    <View style={styles.activityNameRow}>
-                      <Text style={styles.activityFriendName}>{activity.friend.name}</Text>
-                      {getActivityIcon(activity.type)}
-                    </View>
-                    <Text style={styles.activityAction}>{getActivityText(activity)}</Text>
-                  </View>
-                  <Text style={styles.activityTime}>{formatTimeAgo(activity.timestamp)}</Text>
-                </View>
-
-                {activity.set && (
-                  <View style={styles.activityContent}>
-                    <Image 
-                      source={{ uri: activity.set.image }} 
-                      style={styles.activitySetImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.activitySetInfo}>
-                      <Text style={styles.activitySetName} numberOfLines={1}>{activity.set.name}</Text>
-                      <Text style={styles.activitySetArtist}>{activity.set.artist}</Text>
-                      {activity.track && (
-                        <View style={styles.trackBadge}>
-                          <Music size={11} color={Colors.dark.primary} />
-                          <Text style={styles.trackBadgeText}>
-                            {activity.track.artist} - {activity.track.title}
-                          </Text>
-                          <View style={styles.trackTimestamp}>
-                            <Clock size={10} color={Colors.dark.textMuted} />
-                            <Text style={styles.trackTimestampText}>{activity.track.timestamp}</Text>
-                          </View>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                )}
-
-                <View style={styles.activityActions}>
-                  <Pressable 
-                    style={styles.actionButton}
-                    onPress={(e) => {
-                      e.stopPropagation();
-                      toggleLike(activity.id);
+                {followedUsers.map((follow) => (
+                  <Pressable
+                    key={follow.id}
+                    style={styles.followingItem}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      router.push(`/user/${follow.following_user?.username}`);
                     }}
                   >
-                    <Heart 
-                      size={18} 
-                      color={likedActivities[activity.id] ? Colors.dark.error : Colors.dark.textMuted}
-                      fill={likedActivities[activity.id] ? Colors.dark.error : 'transparent'}
+                    <Image
+                      source={{ uri: follow.following_user?.avatar_url || 'https://via.placeholder.com/56' }}
+                      style={styles.followingAvatar}
+                      contentFit="cover"
                     />
+                    <Text style={styles.followingName} numberOfLines={1}>
+                      @{follow.following_user?.username}
+                    </Text>
                   </Pressable>
-                  <Pressable style={styles.actionButton}>
-                    <MessageCircle size={18} color={Colors.dark.textMuted} />
+                ))}
+                {followedArtists.map((follow) => (
+                  <Pressable
+                    key={follow.id}
+                    style={styles.followingItem}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      if (follow.following_artist?.slug) {
+                        router.push(`/(tabs)/(discover)/artist/${follow.following_artist.slug}`);
+                      }
+                    }}
+                  >
+                    <Image
+                      source={{ uri: follow.following_artist?.image_url || 'https://via.placeholder.com/56' }}
+                      style={[styles.followingAvatar, styles.artistAvatar]}
+                      contentFit="cover"
+                    />
+                    <Text style={styles.followingName} numberOfLines={1}>
+                      {follow.following_artist?.name}
+                    </Text>
                   </Pressable>
-                  <Pressable style={styles.actionButton}>
-                    <Share2 size={18} color={Colors.dark.textMuted} />
-                  </Pressable>
-                </View>
-              </Pressable>
-            ))}
+                ))}
+                <Pressable style={styles.addFollowItem}>
+                  <View style={styles.addFollowCircle}>
+                    <UserPlus size={22} color={Colors.dark.primary} />
+                  </View>
+                  <Text style={styles.addFollowText}>Find</Text>
+                </Pressable>
+              </ScrollView>
+            )}
+          </View>
+
+          {/* Activity Feed */}
+          <View style={styles.activitySection}>
+            <Text style={styles.activityTitle}>Activity</Text>
+            {isLoading ? (
+              <ActivityIndicator color={Colors.dark.primary} style={styles.loader} />
+            ) : feed.length === 0 ? (
+              <View style={styles.emptyFeed}>
+                <Text style={styles.emptyFeedTitle}>No activity yet</Text>
+                <Text style={styles.emptyFeedText}>
+                  Follow users and artists to see their activity here
+                </Text>
+              </View>
+            ) : (
+              feed.map((activity) => (
+                <ActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  onPress={() => {
+                    if (activity.set?.id) {
+                      navigateToSet(activity.set.id);
+                    }
+                  }}
+                />
+              ))
+            )}
           </View>
         </ScrollView>
       </SafeAreaView>
@@ -353,11 +360,15 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.3,
   },
-  friendsButton: {
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  headerButton: {
     width: 38,
     height: 38,
     borderRadius: 19,
@@ -367,13 +378,70 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
+  notificationBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: Colors.dark.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  notificationCount: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingBottom: 100,
   },
-  friendsSection: {
+  loginPromptContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  loginPromptTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginTop: 8,
+  },
+  loginPromptText: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  loginButton: {
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  signupButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+  },
+  signupButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.dark.primary,
+  },
+  followingSection: {
     marginBottom: 24,
   },
   sectionHeader: {
@@ -385,7 +453,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 17,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   sectionCount: {
@@ -396,42 +464,64 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
   },
-  friendsContainer: {
+  sectionLoader: {
+    marginVertical: 20,
+  },
+  emptyFollowing: {
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  emptyFollowingText: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
+  },
+  findFriendsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: Colors.dark.surface,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+  },
+  findFriendsText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.dark.primary,
+  },
+  followingContainer: {
     paddingHorizontal: 16,
     gap: 14,
   },
-  friendItem: {
+  followingItem: {
     alignItems: 'center',
     width: 68,
   },
-  friendAvatar: {
+  followingAvatar: {
     width: 56,
     height: 56,
     borderRadius: 28,
     marginBottom: 6,
   },
-  friendOnline: {
-    position: 'absolute',
-    top: 40,
-    right: 8,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: Colors.dark.success,
+  artistAvatar: {
     borderWidth: 2,
-    borderColor: Colors.dark.background,
+    borderColor: Colors.dark.primary,
   },
-  friendName: {
+  followingName: {
     fontSize: 12,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: Colors.dark.text,
     textAlign: 'center',
   },
-  addFriendItem: {
+  addFollowItem: {
     alignItems: 'center',
     width: 68,
   },
-  addFriendCircle: {
+  addFollowCircle: {
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -443,9 +533,9 @@ const styles = StyleSheet.create({
     borderColor: Colors.dark.border,
     borderStyle: 'dashed',
   },
-  addFriendText: {
+  addFollowText: {
     fontSize: 12,
-    fontWeight: '500' as const,
+    fontWeight: '500',
     color: Colors.dark.primary,
   },
   activitySection: {
@@ -453,10 +543,28 @@ const styles = StyleSheet.create({
   },
   activityTitle: {
     fontSize: 17,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 14,
     paddingHorizontal: 4,
+  },
+  loader: {
+    marginTop: 40,
+  },
+  emptyFeed: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyFeedTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginBottom: 8,
+  },
+  emptyFeedText: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
+    textAlign: 'center',
   },
   activityCard: {
     backgroundColor: Colors.dark.surface,
@@ -487,7 +595,7 @@ const styles = StyleSheet.create({
   },
   activityFriendName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
   },
   activityAction: {
@@ -515,7 +623,7 @@ const styles = StyleSheet.create({
   },
   activitySetName: {
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 2,
   },
@@ -538,7 +646,7 @@ const styles = StyleSheet.create({
   trackBadgeText: {
     fontSize: 11,
     color: Colors.dark.text,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
   trackTimestamp: {
     flexDirection: 'row',

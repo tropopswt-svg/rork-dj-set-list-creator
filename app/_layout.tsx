@@ -8,6 +8,7 @@ import Colors from "@/constants/colors";
 import { trpc, trpcClient } from "@/lib/trpc";
 import { SetsProvider } from "@/contexts/SetsContext";
 import { UserProvider } from "@/contexts/UserContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,13 +16,14 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   return (
-    <Stack 
-      screenOptions={{ 
+    <Stack
+      screenOptions={{
         headerBackTitle: "Back",
         contentStyle: { backgroundColor: Colors.dark.background },
       }}
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="dev-tools" options={{ presentation: 'modal', headerShown: false }} />
     </Stack>
   );
@@ -36,12 +38,14 @@ export default function RootLayout() {
     <trpc.Provider client={trpcClient} queryClient={queryClient}>
       <QueryClientProvider client={queryClient}>
         <GestureHandlerRootView style={{ flex: 1 }}>
-          <UserProvider>
-            <SetsProvider>
-              <StatusBar style="light" />
-              <RootLayoutNav />
-            </SetsProvider>
-          </UserProvider>
+          <AuthProvider>
+            <UserProvider>
+              <SetsProvider>
+                <StatusBar style="light" />
+                <RootLayoutNav />
+              </SetsProvider>
+            </UserProvider>
+          </AuthProvider>
         </GestureHandlerRootView>
       </QueryClientProvider>
     </trpc.Provider>

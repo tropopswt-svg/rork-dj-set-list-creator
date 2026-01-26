@@ -1,7 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, ViewStyle } from 'react-native';
+import React from 'react';
+import { Animated, Dimensions, ViewStyle, StyleSheet } from 'react-native';
 import SetFeedCard from './SetFeedCard';
 import { SetList } from '@/types';
+import Colors from '@/constants/colors';
 
 interface AnimatedSetCardProps {
   setList: SetList;
@@ -13,7 +14,6 @@ interface AnimatedSetCardProps {
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const CARD_HEIGHT = 116; // Approximate height of SetFeedCard (80px image + padding + margins)
-const HEADER_HEIGHT = 180; // Space above the cards (header, search, filters)
 
 export default function AnimatedSetCard({
   setList,
@@ -22,47 +22,73 @@ export default function AnimatedSetCard({
   onPress,
   onArtistPress,
 }: AnimatedSetCardProps) {
-  // Calculate the Y position where this card starts
-  const cardStartY = HEADER_HEIGHT + (index * CARD_HEIGHT);
+  // The scroll value when this card should be perfectly centered
+  // Card is centered when: cardTopInList - scrollY = screenCenter - cardHeight/2
+  // Simplified: scrollY = index * CARD_HEIGHT (offset to put card at screen center)
+  const scrollYWhenCentered = index * CARD_HEIGHT;
 
-  // Center of the viewport (where we want max scale)
-  const viewportCenter = SCREEN_HEIGHT / 2;
-
-  // Input range: when card is above center, at center, below center
+  // Input range with a wider "plateau" for more weight/stickiness
+  // The card stays at peak scale for a larger scroll distance
   const inputRange = [
-    cardStartY - viewportCenter - CARD_HEIGHT,  // Card is well above viewport center
-    cardStartY - viewportCenter,                 // Card is at viewport center
-    cardStartY - viewportCenter + CARD_HEIGHT,  // Card is well below viewport center
+    scrollYWhenCentered - CARD_HEIGHT * 2,    // Card is below center - small
+    scrollYWhenCentered - CARD_HEIGHT * 0.5,  // Approaching center - start growing
+    scrollYWhenCentered + CARD_HEIGHT * 0.5,  // At center plateau - stay big
+    scrollYWhenCentered + CARD_HEIGHT * 2,    // Card is above center - small again
   ];
 
-  // Scale: slightly smaller when away from center, normal at center
+  // Scale: smaller when far from center, larger at center with plateau
   const scale = scrollY.interpolate({
     inputRange,
-    outputRange: [0.96, 1.02, 0.96],
+    outputRange: [0.88, 1.05, 1.05, 0.88],
     extrapolate: 'clamp',
   });
 
-  // Opacity: slightly dimmed when away from center
+  // Opacity: dimmed when away from center, with plateau at full opacity
   const opacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.85, 1, 0.85],
+    outputRange: [0.65, 1, 1, 0.65],
     extrapolate: 'clamp',
   });
 
-  // Elevation shadow (via translateZ simulation with shadow)
+  // Shadow/glow intensity for elevation effect
   const shadowOpacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.05, 0.15, 0.05],
+    outputRange: [0, 0.35, 0.35, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Shadow radius for glow spread
+  const shadowRadius = scrollY.interpolate({
+    inputRange,
+    outputRange: [0, 16, 16, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Slight lift effect (translateY)
+  const translateY = scrollY.interpolate({
+    inputRange,
+    outputRange: [0, -4, -4, 0],
     extrapolate: 'clamp',
   });
 
   const animatedStyle: Animated.WithAnimatedObject<ViewStyle> = {
-    transform: [{ scale }],
+    transform: [{ scale }, { translateY }],
     opacity,
+    // Glow effect - orange tinted shadow
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity,
+    shadowRadius,
+    // Android elevation
+    elevation: scrollY.interpolate({
+      inputRange,
+      outputRange: [0, 8, 8, 0],
+      extrapolate: 'clamp',
+    }),
   };
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[styles.container, animatedStyle]}>
       <SetFeedCard
         setList={setList}
         onPress={onPress}
@@ -71,3 +97,10 @@ export default function AnimatedSetCard({
     </Animated.View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: 14,
+    backgroundColor: 'transparent',
+  },
+});

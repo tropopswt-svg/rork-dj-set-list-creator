@@ -393,22 +393,27 @@ export async function getArtistTracks(artistId: string, limit: number = 50): Pro
 }
 
 /**
- * Get artist's sets
+ * Get artist's sets by artist name (sets table uses dj_name, not artist_id)
  */
 export async function getArtistSets(artistId: string, limit: number = 50): Promise<any[]> {
   if (!isSupabaseConfigured()) return [];
-  
+
+  // First get the artist to get their name
+  const artist = await getArtist(artistId);
+  if (!artist) return [];
+
+  // Query sets by dj_name (case insensitive)
   const { data, error } = await supabase
     .from('sets')
     .select('*')
-    .eq('artist_id', artistId)
-    .order('set_date', { ascending: false })
+    .ilike('dj_name', artist.name)
+    .order('created_at', { ascending: false })
     .limit(limit);
-  
+
   if (error) {
     console.error('[ArtistService] Error fetching artist sets:', error);
     return [];
   }
-  
+
   return data;
 }

@@ -23,7 +23,7 @@ interface Filters {
   artists: string[];
   years: string[];
   countries: string[];
-  identified: 'all' | 'identified' | 'unidentified';
+  identified: 'all' | 'identified' | 'unidentified' | 'needs-source';
 }
 
 // Extract country from location string (last part after comma)
@@ -59,6 +59,8 @@ export default function DiscoverScreen() {
   const [filterSearch, setFilterSearch] = useState('');
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
+  const lastCenteredIndex = useRef(-1);
+  const lastHapticTime = useRef(0);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
   const [refreshing, setRefreshing] = useState(false);
@@ -122,6 +124,34 @@ export default function DiscoverScreen() {
     setSetLists(combined);
   }, [dbSets]);
 
+  // Haptic feedback when scrolling through cards
+  useEffect(() => {
+    const CARD_HEIGHT = 116;
+    const HEADER_HEIGHT = 180;
+    const HAPTIC_THROTTLE_MS = 80; // Minimum time between haptics
+
+    const listenerId = scrollY.addListener(({ value }) => {
+      // Calculate which card is currently centered
+      const centeredIndex = Math.round((value + HEADER_HEIGHT) / CARD_HEIGHT);
+      const now = Date.now();
+
+      // Trigger haptic if centered card changed (with throttle for smooth feel)
+      if (
+        centeredIndex !== lastCenteredIndex.current &&
+        centeredIndex >= 0 &&
+        now - lastHapticTime.current > HAPTIC_THROTTLE_MS
+      ) {
+        lastCenteredIndex.current = centeredIndex;
+        lastHapticTime.current = now;
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+    });
+
+    return () => {
+      scrollY.removeListener(listenerId);
+    };
+  }, [scrollY]);
+
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await fetchSets();
@@ -174,6 +204,13 @@ export default function DiscoverScreen() {
     return hasAnalyzableSource && hasBeenAnalyzed;
   };
 
+  // Check if a set needs a source (no YouTube or SoundCloud)
+  const setNeedsSource = (set: SetList): boolean => {
+    return !set.sourceLinks?.some(
+      link => link.platform === 'youtube' || link.platform === 'soundcloud'
+    );
+  };
+
   const filteredSets = useMemo(() => {
     return setLists
       .filter(set => {
@@ -188,11 +225,15 @@ export default function DiscoverScreen() {
           if (!matchesSearch) return false;
         }
 
-        // IDentified filter
+        // IDentified / Source filter
         if (selectedFilters.identified !== 'all') {
-          const identified = isSetIdentified(set);
-          if (selectedFilters.identified === 'identified' && !identified) return false;
-          if (selectedFilters.identified === 'unidentified' && identified) return false;
+          if (selectedFilters.identified === 'needs-source') {
+            if (!setNeedsSource(set)) return false;
+          } else {
+            const identified = isSetIdentified(set);
+            if (selectedFilters.identified === 'identified' && !identified) return false;
+            if (selectedFilters.identified === 'unidentified' && identified) return false;
+          }
         }
 
         // Artist filter
@@ -383,6 +424,22 @@ export default function DiscoverScreen() {
                     styles.identifiedToggleText,
                     selectedFilters.identified === 'unidentified' && styles.identifiedToggleTextActive,
                   ]}>Unanalyzed</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.identifiedToggle,
+                    styles.needsSourceToggle,
+                    selectedFilters.identified === 'needs-source' && styles.needsSourceToggleActive,
+                  ]}
+                  onPress={() => {
+                    Haptics.selectionAsync();
+                    setSelectedFilters(prev => ({ ...prev, identified: 'needs-source' }));
+                  }}
+                >
+                  <Text style={[
+                    styles.identifiedToggleText,
+                    selectedFilters.identified === 'needs-source' && styles.needsSourceToggleTextActive,
+                  ]}>Needs Source</Text>
                 </Pressable>
               </View>
             </View>
@@ -739,6 +796,17 @@ const styles = StyleSheet.create({
   },
   identifiedToggleTextActive: {
     color: Colors.dark.background,
+  },
+  needsSourceToggle: {
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 53, 0.3)',
+  },
+  needsSourceToggleActive: {
+    backgroundColor: '#FF6B35',
+    borderColor: '#FF6B35',
+  },
+  needsSourceToggleTextActive: {
+    color: '#fff',
   },
   filterSectionButtons: {
     flexDirection: 'row',

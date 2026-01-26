@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,7 @@ import {
   Switch,
   Alert,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -31,20 +32,36 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { useAuth } from '@/contexts/AuthContext';
 
 type SettingSection = 'main' | 'edit-profile' | 'privacy' | 'notifications';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { user, profile: authProfile, signOut, updateProfile } = useAuth();
   const [currentSection, setCurrentSection] = useState<SettingSection>('main');
-  
+  const [isSaving, setIsSaving] = useState(false);
+
   const [profile, setProfile] = useState({
-    displayName: 'Alex Johnson',
-    username: 'alexj',
-    email: 'alex@example.com',
-    bio: 'House & techno enthusiast. Always chasing the perfect drop.',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+    displayName: authProfile?.display_name || '',
+    username: authProfile?.username || '',
+    email: user?.email || '',
+    bio: authProfile?.bio || '',
+    avatarUrl: authProfile?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
   });
+
+  // Update local state when authProfile changes
+  useEffect(() => {
+    if (authProfile) {
+      setProfile({
+        displayName: authProfile.display_name || '',
+        username: authProfile.username || '',
+        email: user?.email || '',
+        bio: authProfile.bio || '',
+        avatarUrl: authProfile.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+      });
+    }
+  }, [authProfile, user]);
 
   const [privacy, setPrivacy] = useState({
     profilePublic: true,
@@ -62,9 +79,19 @@ export default function SettingsScreen() {
     emailNotifications: false,
   });
 
-  const handleSaveProfile = () => {
-    Alert.alert('Success', 'Profile updated successfully!');
-    setCurrentSection('main');
+  const handleSaveProfile = async () => {
+    setIsSaving(true);
+    try {
+      await updateProfile({
+        display_name: profile.displayName,
+        bio: profile.bio,
+      });
+      Alert.alert('Success', 'Profile updated successfully!');
+      setCurrentSection('main');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update profile. Please try again.');
+    }
+    setIsSaving(false);
   };
 
   const handleLogout = () => {
@@ -73,7 +100,14 @@ export default function SettingsScreen() {
       'Are you sure you want to log out?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Log Out', style: 'destructive', onPress: () => console.log('Logged out') },
+        {
+          text: 'Log Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/(tabs)/(profile)');
+          },
+        },
       ]
     );
   };
@@ -210,8 +244,16 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        <Pressable style={styles.saveButton} onPress={handleSaveProfile}>
-          <Text style={styles.saveButtonText}>Save Changes</Text>
+        <Pressable
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={handleSaveProfile}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Save Changes</Text>
+          )}
         </Pressable>
       </ScrollView>
     </View>
@@ -632,6 +674,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700' as const,
     color: '#FFFFFF',
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   versionText: {
     textAlign: 'center',

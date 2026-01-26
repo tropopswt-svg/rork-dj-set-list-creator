@@ -7,17 +7,19 @@ import {
   Pressable,
   Modal,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music } from 'lucide-react-native';
+import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
+import { useAuth } from '@/contexts/AuthContext';
 
-const formatDate = (date: Date) => {
+const formatDate = (date: Date | string) => {
   return new Date(date).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -36,25 +38,45 @@ type ContributionFilter = 'all' | 'verified' | 'pending' | 'points';
 export default function ProfileScreen() {
   const router = useRouter();
   const { sets } = useSets();
+  const { isAuthenticated, isLoading, profile } = useAuth();
   const [contributionFilter, setContributionFilter] = useState<ContributionFilter>('all');
   const [genreModalVisible, setGenreModalVisible] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
-  
-  const user = {
-    ...mockCurrentUser,
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
-  };
+
+  // Use authenticated profile data if available, otherwise mock data
+  const user = useMemo(() => {
+    if (isAuthenticated && profile) {
+      return {
+        displayName: profile.display_name || profile.username || 'User',
+        username: profile.username || 'user',
+        avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+        bio: profile.bio,
+        favoriteGenres: profile.favorite_genres || [],
+        totalPoints: profile.points || 0,
+        verifiedTracks: profile.contributions_count || 0,
+        pendingTracks: 0,
+        contributions: [],
+        joinedAt: profile.created_at,
+        followersCount: profile.followers_count || 0,
+        followingCount: profile.following_count || 0,
+      };
+    }
+    return {
+      ...mockCurrentUser,
+      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+    };
+  }, [isAuthenticated, profile]);
 
   const filteredContributions = useMemo(() => {
-    if (contributionFilter === 'all') return user.contributions;
-    if (contributionFilter === 'points') return user.contributions.filter(c => c.points > 0);
-    return user.contributions.filter(c => c.status === contributionFilter);
+    if (contributionFilter === 'all') return user.contributions || [];
+    if (contributionFilter === 'points') return (user.contributions || []).filter((c: any) => c.points > 0);
+    return (user.contributions || []).filter((c: any) => c.status === contributionFilter);
   }, [user.contributions, contributionFilter]);
 
   const setsByGenre = useMemo(() => {
     if (!selectedGenre) return [];
     const genreLower = selectedGenre.toLowerCase();
-    return sets.filter(set => 
+    return sets.filter(set =>
       set.name.toLowerCase().includes(genreLower) ||
       set.artist.toLowerCase().includes(genreLower) ||
       set.venue?.toLowerCase().includes(genreLower)
@@ -107,6 +129,59 @@ export default function ProfileScreen() {
     }
   };
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={Colors.dark.primary} />
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
+  // Not authenticated - show login prompt
+  if (!isAuthenticated) {
+    return (
+      <View style={styles.container}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <View style={styles.headerBar}>
+            <Text style={styles.headerTitle}>Profile</Text>
+          </View>
+          <View style={styles.loginPromptContainer}>
+            <View style={styles.loginIconWrapper}>
+              <LogIn size={48} color={Colors.dark.textMuted} />
+            </View>
+            <Text style={styles.loginPromptTitle}>Join the community</Text>
+            <Text style={styles.loginPromptText}>
+              Create an account to track your contributions, earn points, and connect with other music lovers
+            </Text>
+            <Pressable
+              style={styles.loginButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/(auth)/login');
+              }}
+            >
+              <Text style={styles.loginButtonText}>Log In</Text>
+            </Pressable>
+            <Pressable
+              style={styles.signupButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push('/(auth)/signup');
+              }}
+            >
+              <Text style={styles.signupButtonText}>Create Account</Text>
+            </Pressable>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -122,25 +197,41 @@ export default function ProfileScreen() {
           <Text style={styles.displayName}>{user.displayName}</Text>
           <Text style={styles.username}>@{user.username}</Text>
           {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
-          <View style={styles.genresRow}>
-            {user.favoriteGenres?.map((genre, index) => (
-              <Pressable 
-                key={index} 
-                style={({ pressed }) => [
-                  styles.genreTag,
-                  pressed && styles.genreTagPressed
-                ]}
-                onPress={() => handleGenrePress(genre)}
-              >
-                <Text style={styles.genreText}>{genre}</Text>
-                <ChevronRight size={12} color={Colors.dark.textSecondary} />
-              </Pressable>
-            ))}
+
+          {/* Followers/Following Row */}
+          <View style={styles.followStatsRow}>
+            <Pressable style={styles.followStat}>
+              <Text style={styles.followStatNumber}>{user.followersCount}</Text>
+              <Text style={styles.followStatLabel}>Followers</Text>
+            </Pressable>
+            <View style={styles.followStatDivider} />
+            <Pressable style={styles.followStat}>
+              <Text style={styles.followStatNumber}>{user.followingCount}</Text>
+              <Text style={styles.followStatLabel}>Following</Text>
+            </Pressable>
           </View>
+
+          {user.favoriteGenres && user.favoriteGenres.length > 0 && (
+            <View style={styles.genresRow}>
+              {user.favoriteGenres.map((genre: string, index: number) => (
+                <Pressable
+                  key={index}
+                  style={({ pressed }) => [
+                    styles.genreTag,
+                    pressed && styles.genreTagPressed
+                  ]}
+                  onPress={() => handleGenrePress(genre)}
+                >
+                  <Text style={styles.genreText}>{genre}</Text>
+                  <ChevronRight size={12} color={Colors.dark.textSecondary} />
+                </Pressable>
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={styles.statsContainer}>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [
               styles.statCard,
               contributionFilter === 'points' && styles.statCardActive,
@@ -154,7 +245,7 @@ export default function ProfileScreen() {
             <Text style={styles.statValue}>{user.totalPoints}</Text>
             <Text style={styles.statLabel}>Points</Text>
           </Pressable>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [
               styles.statCard,
               contributionFilter === 'verified' && styles.statCardActive,
@@ -168,7 +259,7 @@ export default function ProfileScreen() {
             <Text style={styles.statValue}>{user.verifiedTracks}</Text>
             <Text style={styles.statLabel}>Verified</Text>
           </Pressable>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [
               styles.statCard,
               contributionFilter === 'pending' && styles.statCardActive,
@@ -189,14 +280,14 @@ export default function ProfileScreen() {
             <View>
               <Text style={styles.sectionTitle}>{getFilterLabel()}</Text>
               <Text style={styles.sectionSubtitle}>
-                {contributionFilter === 'all' 
+                {contributionFilter === 'all'
                   ? `Member since ${formatDate(user.joinedAt)}`
                   : `${filteredContributions.length} ${contributionFilter === 'points' ? 'submissions with points' : contributionFilter + ' submissions'}`
                 }
               </Text>
             </View>
             {contributionFilter !== 'all' && (
-              <Pressable 
+              <Pressable
                 style={styles.clearFilterButton}
                 onPress={() => setContributionFilter('all')}
               >
@@ -211,7 +302,7 @@ export default function ProfileScreen() {
                 {contributionFilter === 'all' ? 'No contributions yet' : `No ${contributionFilter} submissions`}
               </Text>
               <Text style={styles.emptySubtext}>
-                {contributionFilter === 'all' 
+                {contributionFilter === 'all'
                   ? 'Start adding tracks to sets to earn points!'
                   : 'Check back later or try a different filter'
                 }
@@ -219,7 +310,7 @@ export default function ProfileScreen() {
             </View>
           ) : (
             <View style={styles.contributionsList}>
-              {filteredContributions.map((contribution) => (
+              {filteredContributions.map((contribution: any) => (
                 <View key={contribution.id} style={styles.contributionCard}>
                   <View style={styles.contributionHeader}>
                     <View style={styles.contributionStatus}>
@@ -272,14 +363,14 @@ export default function ProfileScreen() {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{selectedGenre} Sets</Text>
-              <Pressable 
+              <Pressable
                 style={styles.modalCloseButton}
                 onPress={() => setGenreModalVisible(false)}
               >
                 <X size={24} color={Colors.dark.text} />
               </Pressable>
             </View>
-            
+
             {setsByGenre.length === 0 ? (
               <View style={styles.modalEmptyState}>
                 <Music size={48} color={Colors.dark.textMuted} />
@@ -292,7 +383,7 @@ export default function ProfileScreen() {
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={styles.modalList}
                 renderItem={({ item }) => (
-                  <Pressable 
+                  <Pressable
                     style={({ pressed }) => [
                       styles.genreSetCard,
                       pressed && styles.genreSetCardPressed
@@ -302,8 +393,8 @@ export default function ProfileScreen() {
                       router.push(`/(tabs)/(discover)/${item.id}`);
                     }}
                   >
-                    <Image 
-                      source={{ uri: item.coverUrl }} 
+                    <Image
+                      source={{ uri: item.coverUrl }}
                       style={styles.genreSetImage}
                       contentFit="cover"
                     />
@@ -334,6 +425,11 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -344,7 +440,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 28,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.3,
   },
@@ -357,6 +453,59 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
+  },
+  loginPromptContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 16,
+  },
+  loginIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: Colors.dark.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  loginPromptTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  loginPromptText: {
+    fontSize: 14,
+    color: Colors.dark.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    paddingHorizontal: 24,
+  },
+  loginButton: {
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 12,
+    marginTop: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  signupButton: {
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    width: '100%',
+    alignItems: 'center',
+  },
+  signupButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.dark.primary,
   },
   scrollContent: {
     paddingBottom: 100,
@@ -378,7 +527,7 @@ const styles = StyleSheet.create({
   },
   displayName: {
     fontSize: 22,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -393,6 +542,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 12,
     paddingHorizontal: 24,
+  },
+  followStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 24,
+  },
+  followStat: {
+    alignItems: 'center',
+  },
+  followStatNumber: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  followStatLabel: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginTop: 2,
+  },
+  followStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.dark.border,
   },
   genresRow: {
     flexDirection: 'row',
@@ -418,7 +591,7 @@ const styles = StyleSheet.create({
   genreText: {
     fontSize: 12,
     color: Colors.dark.textSecondary,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
   statsContainer: {
     flexDirection: 'row',
@@ -453,7 +626,7 @@ const styles = StyleSheet.create({
   },
   statValue: {
     fontSize: 24,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   statLabel: {
@@ -481,11 +654,11 @@ const styles = StyleSheet.create({
   clearFilterText: {
     fontSize: 12,
     color: Colors.dark.primary,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 4,
   },
@@ -500,7 +673,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.textSecondary,
     marginBottom: 4,
   },
@@ -532,8 +705,8 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600' as const,
-    textTransform: 'capitalize' as const,
+    fontWeight: '600',
+    textTransform: 'capitalize',
   },
   pointsBadge: {
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
@@ -543,12 +716,12 @@ const styles = StyleSheet.create({
   },
   pointsText: {
     fontSize: 12,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.primary,
   },
   trackTitle: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 2,
   },
@@ -571,7 +744,7 @@ const styles = StyleSheet.create({
   timestamp: {
     fontSize: 12,
     color: Colors.dark.primary,
-    fontWeight: '500' as const,
+    fontWeight: '500',
   },
   addedDate: {
     fontSize: 11,
@@ -592,7 +765,7 @@ const styles = StyleSheet.create({
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     color: Colors.dark.text,
   },
   modalCloseButton: {
@@ -614,7 +787,7 @@ const styles = StyleSheet.create({
   },
   modalEmptyText: {
     fontSize: 16,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.textSecondary,
     marginTop: 16,
   },
@@ -648,7 +821,7 @@ const styles = StyleSheet.create({
   },
   genreSetName: {
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 2,
   },

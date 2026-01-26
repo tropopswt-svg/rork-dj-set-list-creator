@@ -21,7 +21,7 @@ export interface Track {
   key?: string;
   coverUrl: string;
   addedAt: Date;
-  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link';
+  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database';
   timestamp?: number;
   contributedBy?: string;
   verified?: boolean;
