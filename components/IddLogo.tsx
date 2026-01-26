@@ -224,7 +224,7 @@ const DJWaveform = ({ width, height }: { width: number; height: number }) => {
 // The scanned [ID] with curved brackets, waveform, and pulse animation
 const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const glowAnim = useRef(new Animated.Value(0.5)).current;
 
   useEffect(() => {
     // Pulsing scale animation - like scanning/identifying
@@ -246,17 +246,17 @@ const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
       ])
     ).start();
 
-    // Glow animation synced with pulse
+    // Glow animation synced with pulse - more opaque
     Animated.loop(
       Animated.sequence([
         Animated.timing(glowAnim, {
-          toValue: 0.7,
+          toValue: 0.85,
           duration: 800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
         Animated.timing(glowAnim, {
-          toValue: 0.3,
+          toValue: 0.5,
           duration: 800,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
@@ -314,6 +314,52 @@ const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
   );
 };
 
+// Spinning D that rotates like a vinyl every 10 seconds
+const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Spin once every 10 seconds
+    const spinSequence = () => {
+      Animated.sequence([
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 2000, // 2 second spin
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.delay(8000), // Wait 8 seconds (total 10s cycle)
+        Animated.timing(spinAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ]).start(() => spinSequence());
+    };
+
+    spinSequence();
+  }, []);
+
+  const rotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Animated.Text
+      style={[
+        styles.vinylD,
+        {
+          fontSize,
+          transform: [{ rotate: rotation }],
+        },
+      ]}
+    >
+      D
+    </Animated.Text>
+  );
+};
+
 export default function IddLogo({ size = 'medium', showTagline = false }: IddLogoProps) {
   const sizeConfig = {
     small: { fontSize: 42, spacing: 2 },
@@ -327,18 +373,21 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
         {/* Scanned [ID] with waveform */}
         <ScannedID fontSize={sizeConfig.fontSize} />
 
-        {/* 'D - normal text */}
+        {/* Apostrophe */}
         <Text
           style={[
-            styles.apostropheD,
+            styles.apostrophe,
             {
               fontSize: sizeConfig.fontSize,
               marginLeft: sizeConfig.spacing,
             }
           ]}
         >
-          'D
+          '
         </Text>
+
+        {/* Spinning D */}
+        <VinylD fontSize={sizeConfig.fontSize} />
       </View>
 
       {showTagline && (
@@ -410,7 +459,11 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 4,
   },
-  apostropheD: {
+  apostrophe: {
+    fontWeight: '900',
+    color: Colors.dark.text,
+  },
+  vinylD: {
     fontWeight: '900',
     color: Colors.dark.text,
   },
