@@ -12,13 +12,17 @@ function createSignature(stringToSign, secretKey) {
 
 // Send to ACRCloud for identification
 async function identifyWithACRCloud(audioBase64, audioFormat) {
-  const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
-  const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
-  const host = process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com';
+  // Trim env vars in case of whitespace/newlines
+  const accessKey = (process.env.ACRCLOUD_ACCESS_KEY || '').trim();
+  const accessSecret = (process.env.ACRCLOUD_ACCESS_SECRET || '').trim();
+  const host = (process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com').trim();
 
   if (!accessKey || !accessSecret) {
     throw new Error('ACRCloud credentials not configured');
   }
+
+  console.log(`[Identify] Using host: ${host}`);
+  console.log(`[Identify] Key length: ${accessKey.length}, Secret length: ${accessSecret.length}`);
 
   const httpMethod = 'POST';
   const httpUri = '/v1/identify';
