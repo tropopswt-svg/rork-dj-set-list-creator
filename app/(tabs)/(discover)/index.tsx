@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
-import TrackdLogo from '@/components/TrackdLogo';
+import IddLogo from '@/components/IddLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
@@ -522,7 +522,7 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={Colors.dark.primary} />
             )}
           </Pressable>
-          <TrackdLogo />
+          <IddLogo />
           <View style={styles.headerSpacer}>
             <Pressable 
               style={styles.addButton}
