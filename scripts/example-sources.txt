@@ -1,0 +1,13 @@
+# SoundCloud Sources for Track Database
+# Add SoundCloud user profiles or playlist URLs below
+# Lines starting with # are comments
+
+# Example users (replace with real sources you find)
+# https://soundcloud.com/username
+# https://soundcloud.com/another-user/sets/edits-and-bootlegs
+
+# Tip: Search SoundCloud for:
+#   - "edit" or "bootleg" in track titles
+#   - "rip" or "ID" in descriptions
+#   - Users who post tracklists with timestamps
+#   - Promo channels that post unreleased tracks

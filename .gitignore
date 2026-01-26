@@ -51,3 +51,6 @@ yt-dlp-master/
 
 # 1001-tracklists-api submodule (removed, keep local copy if needed)
 1001-tracklists-api/
+
+# SoundCloud downloads for ACRCloud bucket (audio files)
+soundcloud-downloads/
