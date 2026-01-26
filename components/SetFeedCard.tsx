@@ -1318,13 +1318,19 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                 </View>
               </View>
 
-              {/* Right side: Location + Event badge + Status badges */}
+              {/* Right side: Location on top, Event + Status badges below */}
               <View style={styles.rightStats}>
-                {/* Location badge - blue box */}
+                {/* Location badge - blue box on top */}
                 {locationCity && (
-                  <View style={styles.locationBadgeBlue}>
+                  <View style={[
+                    styles.locationBadgeBlue,
+                    locationCity.length > 12 && styles.locationBadgeWrap,
+                  ]}>
                     <MapPin size={10} color="#fff" />
-                    <Text style={styles.locationBadgeBlueText} numberOfLines={1}>
+                    <Text
+                      style={styles.locationBadgeBlueText}
+                      numberOfLines={locationCity.length > 12 ? 2 : 1}
+                    >
                       {locationCity}
                     </Text>
                     {locationFlag && (
@@ -1333,25 +1339,28 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                   </View>
                 )}
 
-                {/* Event/Festival badge - clickable to filter by event */}
-                {detectedEvent && (
-                  <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
-                )}
+                {/* Bottom row: Event badge + Status badge */}
+                <View style={styles.rightStatsRow}>
+                  {/* Event/Festival badge - clickable to filter by event */}
+                  {detectedEvent && (
+                    <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
+                  )}
 
-                {/* TRACK'D status badge - pressable to show explanation */}
-                {isIdentified ? (
-                  <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
-                    <View style={styles.trackdBadge}>
-                      <Text style={styles.trackdBadgeText}>T'D</Text>
-                    </View>
-                  </Pressable>
-                ) : (
-                  <Pressable onPress={handleUnanalyzedBadgePress} hitSlop={4}>
-                    <View style={styles.unanalyzedBadge}>
-                      <Text style={styles.unanalyzedBadgeText}>?</Text>
-                    </View>
-                  </Pressable>
-                )}
+                  {/* TRACK'D status badge - pressable to show explanation */}
+                  {isIdentified ? (
+                    <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
+                      <View style={styles.trackdBadge}>
+                        <Text style={styles.trackdBadgeText}>T'D</Text>
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <Pressable onPress={handleUnanalyzedBadgePress} hitSlop={4}>
+                      <View style={styles.unanalyzedBadge}>
+                        <Text style={styles.unanalyzedBadgeText}>?</Text>
+                      </View>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             </View>
           </View>
@@ -1688,32 +1697,40 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rightStats: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 3,
+    justifyContent: 'flex-end',
+  },
+  rightStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     justifyContent: 'flex-end',
-    maxWidth: 180,
   },
-  // Blue location badge - clean rectangle matching other badges
+  // Blue location badge - rectangle on top, wraps if too long
   locationBadgeBlue: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: '#2563EB', // Blue color
-    paddingHorizontal: 6,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    height: 20,
-    maxWidth: 90,
+    minHeight: 20,
+  },
+  locationBadgeWrap: {
+    maxWidth: 80,
+    flexWrap: 'wrap',
   },
   locationBadgeBlueText: {
-    fontSize: 8,
+    fontSize: 9,
     color: '#fff',
     fontWeight: '700' as const,
     flexShrink: 1,
   },
   locationFlagSmall: {
-    fontSize: 10,
+    fontSize: 11,
   },
   statsRow: {
     flexDirection: 'row',
