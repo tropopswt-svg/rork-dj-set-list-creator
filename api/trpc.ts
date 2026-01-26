@@ -4,6 +4,7 @@ import { createContext } from '../backend/trpc/create-context';
 
 export const config = {
   maxDuration: 60,
+  runtime: 'nodejs',
 };
 
 export default async function handler(req: Request) {
