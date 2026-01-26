@@ -236,7 +236,7 @@ const progressRingStyles = StyleSheet.create({
   },
   backgroundRing: {
     position: 'absolute',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.06)', // Very subtle background
   },
   halfClip: {
     position: 'absolute',
@@ -245,8 +245,8 @@ const progressRingStyles = StyleSheet.create({
   halfCircle: {
     position: 'absolute',
     borderColor: 'transparent',
-    borderTopColor: Colors.dark.primary,
-    borderRightColor: Colors.dark.primary,
+    borderTopColor: 'rgba(255, 255, 255, 0.2)', // Dim white - stealth mode
+    borderRightColor: 'rgba(255, 255, 255, 0.2)',
   },
 });
 
@@ -1064,7 +1064,7 @@ const styles = StyleSheet.create({
   listeningText: {
     fontSize: 24,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.3)', // Dim text - stealth mode
     marginBottom: 40,
   },
   // Recording button styles - rounded square box
@@ -1079,21 +1079,23 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 36,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(30, 30, 30, 0.5)', // Subtle dark glow - stealth mode
   },
   recordingButton: {
     width: 160,
     height: 160,
     borderRadius: 28,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#0a0a0a', // Near black - stealth mode
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.dark.primary,
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.8,
     shadowRadius: 25,
     elevation: 20,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)', // Very subtle border
   },
   recordingWaveContainer: {
     position: 'absolute',
@@ -1101,11 +1103,12 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    opacity: 0.15, // More subtle waveform in stealth mode
   },
   recordingIdText: {
     fontSize: 64,
     fontWeight: '900',
-    color: '#fff',
+    color: 'rgba(255, 255, 255, 0.25)', // Dim text - hard to see from distance
     letterSpacing: -2,
     zIndex: 2,
   },
