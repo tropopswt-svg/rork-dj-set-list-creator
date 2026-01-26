@@ -66,7 +66,9 @@ const generateBars = (barCount: number) => {
   });
 };
 
-// Animated Waveform Component for scanning visualization
+const { height: screenHeight } = Dimensions.get('window');
+
+// Animated Waveform Component for button
 const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const pulseAnims = useRef(
@@ -150,6 +152,107 @@ const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
                 {
                   height: barHeight * 60,
                   transform: [{ scaleY: scale }],
+                },
+              ]}
+            />
+          );
+        })}
+      </Animated.View>
+    </View>
+  );
+};
+
+// Full-screen vertical background waveform
+const BackgroundWaveform = ({ isActive }: { isActive: boolean }) => {
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnims = useRef(
+    Array.from({ length: 40 }, () => new Animated.Value(0))
+  ).current;
+
+  // Generate more bars for full screen coverage
+  const bars = generateBars(40);
+
+  useEffect(() => {
+    if (isActive) {
+      // Vertical scrolling animation - smooth continuous flow
+      Animated.loop(
+        Animated.timing(scrollAnim, {
+          toValue: 1,
+          duration: 8000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+
+      // Staggered pulse animations for each bar
+      pulseAnims.forEach((anim, index) => {
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(index * 80),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      });
+    } else {
+      scrollAnim.stopAnimation();
+      scrollAnim.setValue(0);
+      pulseAnims.forEach(anim => {
+        anim.stopAnimation();
+        anim.setValue(0);
+      });
+    }
+
+    return () => {
+      scrollAnim.stopAnimation();
+      pulseAnims.forEach(anim => anim.stopAnimation());
+    };
+  }, [isActive]);
+
+  // Vertical scroll translation
+  const translateY = scrollAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -screenHeight * 0.5],
+  });
+
+  return (
+    <View style={styles.backgroundWaveformContainer}>
+      <Animated.View
+        style={[
+          styles.backgroundWaveformInner,
+          { transform: [{ translateY }] },
+        ]}
+      >
+        {[...bars, ...bars, ...bars].map((barHeight, idx) => {
+          const pulseIndex = idx % pulseAnims.length;
+          const scale = pulseAnims[pulseIndex].interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1.5],
+          });
+          const opacity = pulseAnims[pulseIndex].interpolate({
+            inputRange: [0, 1],
+            outputRange: [0.08, 0.2],
+          });
+
+          return (
+            <Animated.View
+              key={idx}
+              style={[
+                styles.backgroundWaveformBar,
+                {
+                  width: barHeight * width * 0.6,
+                  opacity,
+                  transform: [{ scaleX: scale }],
                 },
               ]}
             />
@@ -578,9 +681,14 @@ export default function LiveIdentifyModal({
     }
   };
 
+  const isScanning = state === 'recording' || state === 'analyzing';
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <View style={styles.container}>
+        {/* Background waveform - only visible during scanning */}
+        {isScanning && <BackgroundWaveform isActive={isScanning} />}
+
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {/* Close button */}
           <Pressable style={styles.closeButton} onPress={handleClose}>
@@ -752,6 +860,27 @@ const styles = StyleSheet.create({
     width: 4,
     backgroundColor: 'rgba(255,255,255,0.6)',
     borderRadius: 2,
+  },
+  // Background waveform (vertical, full-screen)
+  backgroundWaveformContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    zIndex: 0,
+  },
+  backgroundWaveformInner: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  backgroundWaveformBar: {
+    height: 6,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 3,
   },
   // Analyzing styles
   analyzingOuter: {
