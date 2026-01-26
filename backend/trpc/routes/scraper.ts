@@ -5,6 +5,7 @@ import * as fs from "fs";
 import { spawnSync } from "child_process";
 import { createTRPCRouter, publicProcedure } from "../create-context.js";
 import { tmpdir } from "os";
+import { logACRCloudCall, logSoundCloudCall, logYouTubeCall } from "../../lib/apiLogger.js";
 
 const ScrapedTrack = z.object({
   title: z.string(),
@@ -372,12 +373,18 @@ async function resolveSoundCloudToStreamUrl(soundcloudUrl: string): Promise<stri
 
   try {
     const resolveUrl = `https://api-widget.soundcloud.com/resolve?url=${encodeURIComponent(soundcloudUrl)}&format=json&client_id=${clientId}`;
+    const scStartTime = Date.now();
     const resolveRes = await fetch(resolveUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; RorkSetList/1.0)",
         Accept: "application/json",
       },
     });
+    const scResponseTime = Date.now() - scStartTime;
+
+    // Log SoundCloud API call
+    logSoundCloudCall('/resolve', resolveRes.status, scResponseTime, { url: soundcloudUrl }).catch(() => {});
+
     if (!resolveRes.ok) {
       const errorText = await resolveRes.text();
       console.error(`[Scraper] ❌ SoundCloud resolve failed: ${resolveRes.status}`);
@@ -1523,13 +1530,22 @@ async function identifyTrackFromUrlInternal(
     console.log(`  - rec_length: ${durationSeconds} (type: ${typeof durationSeconds})`);
     console.log(`  - data_type: ${dataType}`);
     console.log(`  - signature_version: ${signatureVersion}`);
-    
+
+    const acrStartTime = Date.now();
     const response = await fetch(`https://${host}${httpUri}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: formData.toString(),
     });
-    
+    const acrResponseTime = Date.now() - acrStartTime;
+
+    // Log ACRCloud API call
+    logACRCloudCall('/v1/identify', response.status, acrResponseTime, {
+      method: 'url',
+      startSeconds,
+      durationSeconds,
+    }).catch(() => {});
+
     console.log(`[ACRCloud] ACRCloud response status: ${response.status}`);
     const result = await response.json();
     console.log(`[ACRCloud] ACRCloud full response:`, JSON.stringify(result, null, 2));
@@ -2037,9 +2053,10 @@ export const scraperRouter = createTRPCRouter({
         body.set(audioBytes, offset);
         offset += audioBytes.length;
         body.set(endBytes, offset);
-        
+
         console.log(`[ACRCloud] Sending request to ${host}`);
-        
+
+        const acrStartTime = Date.now();
         const response = await fetch(`https://${host}${httpUri}`, {
           method: 'POST',
           headers: {
@@ -2047,7 +2064,14 @@ export const scraperRouter = createTRPCRouter({
           },
           body,
         });
-        
+        const acrResponseTime = Date.now() - acrStartTime;
+
+        // Log ACRCloud API call
+        logACRCloudCall('/v1/identify', response.status, acrResponseTime, {
+          method: 'audio_upload',
+          timestamp: input.timestamp,
+        }).catch(() => {});
+
         const result = await response.json();
         console.log('[ACRCloud] Response:', JSON.stringify(result, null, 2));
         
