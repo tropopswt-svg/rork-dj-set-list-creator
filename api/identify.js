@@ -92,14 +92,24 @@ async function identifyWithACRCloud(audioBase64, audioFormat) {
 
 // Parse ACRCloud response
 function parseACRCloudResponse(response) {
+  console.log('[Identify] ACRCloud status code:', response.status?.code);
+  console.log('[Identify] ACRCloud status msg:', response.status?.msg);
+
   if (response.status?.code !== 0) {
     if (response.status?.code === 1001) {
       return { success: true, result: null }; // No match found
     }
+    // Return more debug info for troubleshooting
     return {
       success: false,
       error: response.status?.msg || 'Unknown error',
       result: null,
+      debug: {
+        code: response.status?.code,
+        msg: response.status?.msg,
+        keyPresent: !!process.env.ACRCLOUD_ACCESS_KEY,
+        keyPrefix: process.env.ACRCLOUD_ACCESS_KEY?.substring(0, 4) + '...',
+      }
     };
   }
 
