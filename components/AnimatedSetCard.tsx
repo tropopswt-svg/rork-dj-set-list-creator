@@ -28,16 +28,15 @@ export default function AnimatedSetCard({
   // centerOffset shifts the "center point" down to account for header elements
   const scrollYWhenCentered = index * CARD_HEIGHT - centerOffset;
 
-  // WIDER input range for stronger stickiness - takes more scroll to transition
-  // This creates more "drag resistance" so user has to scroll more before
-  // the next card becomes the elevated one
+  // EXTRA STICKY input range - card stays "locked" at full size much longer
+  // Wide center plateau creates a "snap" feel - requires more scroll to transition
   const inputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 3,    // Card is far below - very small
-    scrollYWhenCentered - CARD_HEIGHT * 1.5,  // Approaching - start growing slowly
-    scrollYWhenCentered - CARD_HEIGHT * 0.3,  // Nearly centered - accelerate
-    scrollYWhenCentered + CARD_HEIGHT * 0.3,  // At center plateau - stay BIG
-    scrollYWhenCentered + CARD_HEIGHT * 1.5,  // Moving away - start shrinking
-    scrollYWhenCentered + CARD_HEIGHT * 3,    // Card is far above - very small
+    scrollYWhenCentered - CARD_HEIGHT * 4,    // Card is far below - very small
+    scrollYWhenCentered - CARD_HEIGHT * 2,    // Approaching - start growing slowly
+    scrollYWhenCentered - CARD_HEIGHT * 0.6,  // Nearly centered - accelerate
+    scrollYWhenCentered + CARD_HEIGHT * 0.6,  // At center plateau - stay BIG (wider = stickier)
+    scrollYWhenCentered + CARD_HEIGHT * 2,    // Moving away - start shrinking
+    scrollYWhenCentered + CARD_HEIGHT * 4,    // Card is far above - very small
   ];
 
   // STRONGER scale difference - much clearer which card is selected
