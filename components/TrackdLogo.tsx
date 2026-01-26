@@ -1,6 +1,8 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import Colors from '@/constants/colors';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // TRACK'D Logo with spinning vinyl grooves inside the C and tonearm needle
 
@@ -48,7 +50,7 @@ const VinylC = ({
   });
 
   const fontSize = size * 0.85;
-  const centerSize = size * 0.28; // Vinyl center label size
+  const centerSize = size * 0.32; // Vinyl center label size
 
   return (
     <View style={[styles.vinylCContainer, { width: size, height: size }]}>
@@ -117,7 +119,7 @@ const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height
 
   const translateX = waveAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-width * 0.5, width * 0.3],
+    outputRange: [-width * 0.3, width * 0.1],
   });
 
   // Generate wave bars - taller
@@ -145,7 +147,7 @@ const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height
                 height: bar.height,
                 width: 2,
                 marginHorizontal: 1,
-                backgroundColor: `rgba(226, 29, 72, ${0.2 + (bar.height / height) * 0.25})`,
+                backgroundColor: `rgba(226, 29, 72, ${0.08 + (bar.height / height) * 0.1})`,
               },
             ]}
           />
@@ -159,9 +161,9 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const sizeConfig = {
-    small: { fontSize: 22, letterSpacing: 3, vinylSize: 24, waveWidth: 140, waveHeight: 10 },
-    medium: { fontSize: 30, letterSpacing: 4, vinylSize: 32, waveWidth: 180, waveHeight: 14 },
-    large: { fontSize: 40, letterSpacing: 6, vinylSize: 42, waveWidth: 240, waveHeight: 18 },
+    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 8 },
+    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 10 },
+    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 14 },
   }[size];
 
   useEffect(() => {
@@ -175,9 +177,9 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
 
   return (
     <Animated.View style={[styles.container, { transform: [{ scale: pulseAnim }] }]}>
-      {/* Waveform underlay - appears every few seconds */}
+      {/* Waveform underlay - full width, very subtle */}
       <View style={styles.waveformUnderlayWrapper}>
-        <WaveformUnderlay width={sizeConfig.waveWidth} height={sizeConfig.waveHeight} />
+        <WaveformUnderlay width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
       </View>
 
       <View style={styles.logoWrapper}>
@@ -229,7 +231,7 @@ const styles = StyleSheet.create({
   waveformUnderlayWrapper: {
     position: 'absolute',
     bottom: '35%',
-    opacity: 0.5,
+    opacity: 0.4,
   },
   waveformContainer: {
     flexDirection: 'row',
