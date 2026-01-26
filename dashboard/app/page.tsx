@@ -3,24 +3,17 @@
 import { useEffect, useState, useCallback } from 'react';
 
 interface Stats {
-  totals: {
+  users: {
+    total: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+    dailySignups: Array<{ date: string; day: string; count: number }>;
+  };
+  content: {
+    sets: number;
     tracks: number;
     artists: number;
-    sets: number;
-    users: number;
-    contributions: number;
-    comments: number;
-    likes: number;
-  };
-  bySource: {
-    beatport: { tracks: number; artists: number };
-    soundcloud: { tracks: number };
-  };
-  contributions: {
-    verified: number;
-    pending: number;
-  };
-  activity: {
     tracksToday: number;
     tracksThisWeek: number;
   };
@@ -31,11 +24,26 @@ interface Stats {
     label: string | null;
     created_at: string;
   }>;
+  engagement: {
+    likes: number;
+    comments: number;
+    contributions: number;
+    likesToday: number;
+    commentsToday: number;
+  };
   recentUsers: Array<{
     id: string;
     username: string | null;
     display_name: string | null;
+    email?: string;
     created_at: string;
+  }>;
+  recentComments: Array<{
+    id: string;
+    content: string;
+    created_at: string;
+    user_id: string;
+    set_id: string;
   }>;
 }
 
@@ -64,11 +72,11 @@ export default function Dashboard() {
       setLoading(true);
       const res = await fetch('/api/stats');
       const data = await res.json();
-      
+
       if (!data.success) {
         throw new Error(data.error || 'Failed to fetch stats');
       }
-      
+
       setStats(data.stats);
       setLastUpdated(new Date().toLocaleTimeString());
       setError(null);
@@ -81,7 +89,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetchStats();
-    const interval = setInterval(fetchStats, 60000); // Refresh every minute
+    const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
   }, [fetchStats]);
 
@@ -102,13 +110,15 @@ export default function Dashboard() {
     );
   }
 
+  const maxSignups = Math.max(...(stats?.users.dailySignups.map(d => d.count) || [1]), 1);
+
   return (
     <div className="container">
       <header>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h1>DJ Setlist Dashboard</h1>
-            <p>Real-time stats for your music database</p>
+            <h1>IDentified Admin</h1>
+            <p>Monitor users, engagement, and system health</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             {lastUpdated && <span className="timestamp">Updated {lastUpdated}</span>}
@@ -119,73 +129,75 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main Stats */}
-      <div className="grid grid-4">
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon purple">🎵</div>
-            <span className="card-title">Total Tracks</span>
+      {/* User Growth */}
+      <div className="section">
+        <h2 className="section-title">User Growth</h2>
+        <div className="grid grid-4">
+          <div className="card highlight">
+            <div className="card-header">
+              <div className="card-icon blue">👥</div>
+              <span className="card-title">Total Users</span>
+            </div>
+            <div className="card-value">{formatNumber(stats?.users.total || 0)}</div>
           </div>
-          <div className="card-value">{formatNumber(stats?.totals.tracks || 0)}</div>
-          <div className="card-subtitle">+{stats?.activity.tracksThisWeek || 0} this week</div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon green">📈</div>
+              <span className="card-title">Today</span>
+            </div>
+            <div className="card-value">{stats?.users.today || 0}</div>
+            <div className="card-subtitle">new signups</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon purple">📊</div>
+              <span className="card-title">This Week</span>
+            </div>
+            <div className="card-value">{stats?.users.thisWeek || 0}</div>
+            <div className="card-subtitle">new signups</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon orange">📆</div>
+              <span className="card-title">This Month</span>
+            </div>
+            <div className="card-value">{stats?.users.thisMonth || 0}</div>
+            <div className="card-subtitle">new signups</div>
+          </div>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon green">🎤</div>
-            <span className="card-title">Artists</span>
+        {/* Signup Chart */}
+        <div className="chart-card">
+          <div className="chart-header">Daily Signups (Last 7 Days)</div>
+          <div className="chart-bars">
+            {stats?.users.dailySignups.map((day, i) => (
+              <div key={i} className="chart-bar-container">
+                <div className="chart-bar-value">{day.count}</div>
+                <div
+                  className="chart-bar"
+                  style={{ height: `${Math.max((day.count / maxSignups) * 100, 5)}%` }}
+                />
+                <div className="chart-bar-label">{day.day}</div>
+              </div>
+            ))}
           </div>
-          <div className="card-value">{formatNumber(stats?.totals.artists || 0)}</div>
-          <div className="card-subtitle">{stats?.bySource.beatport.artists || 0} from Beatport</div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon blue">📀</div>
-            <span className="card-title">Sets</span>
-          </div>
-          <div className="card-value">{formatNumber(stats?.totals.sets || 0)}</div>
-        </div>
-
-        <div className="card">
-          <div className="card-header">
-            <div className="card-icon orange">👥</div>
-            <span className="card-title">Users</span>
-          </div>
-          <div className="card-value">{formatNumber(stats?.totals.users || 0)}</div>
         </div>
       </div>
 
-      {/* Secondary Stats */}
+      {/* Engagement */}
       <div className="section">
-        <h2 className="section-title">Activity & Engagement</h2>
-        <div className="grid grid-4">
+        <h2 className="section-title">Engagement</h2>
+        <div className="grid grid-3">
           <div className="card">
             <div className="card-header">
-              <div className="card-icon yellow">⚡</div>
-              <span className="card-title">Tracks Today</span>
+              <div className="card-icon red">❤️</div>
+              <span className="card-title">Total Likes</span>
             </div>
-            <div className="card-value">{stats?.activity.tracksToday || 0}</div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <div className="card-icon green">✓</div>
-              <span className="card-title">Contributions</span>
-            </div>
-            <div className="card-value">{formatNumber(stats?.totals.contributions || 0)}</div>
-            <div className="card-subtitle">
-              <span className="badge green">{stats?.contributions.verified || 0} verified</span>{' '}
-              <span className="badge yellow">{stats?.contributions.pending || 0} pending</span>
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="card-header">
-              <div className="card-icon purple">❤️</div>
-              <span className="card-title">Likes</span>
-            </div>
-            <div className="card-value">{formatNumber(stats?.totals.likes || 0)}</div>
+            <div className="card-value">{formatNumber(stats?.engagement.likes || 0)}</div>
+            <div className="card-subtitle">+{stats?.engagement.likesToday || 0} today</div>
           </div>
 
           <div className="card">
@@ -193,46 +205,56 @@ export default function Dashboard() {
               <div className="card-icon blue">💬</div>
               <span className="card-title">Comments</span>
             </div>
-            <div className="card-value">{formatNumber(stats?.totals.comments || 0)}</div>
+            <div className="card-value">{formatNumber(stats?.engagement.comments || 0)}</div>
+            <div className="card-subtitle">+{stats?.engagement.commentsToday || 0} today</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon green">✨</div>
+              <span className="card-title">Contributions</span>
+            </div>
+            <div className="card-value">{formatNumber(stats?.engagement.contributions || 0)}</div>
           </div>
         </div>
       </div>
 
-      {/* Source Breakdown */}
+      {/* Content Overview */}
       <div className="section">
-        <h2 className="section-title">By Source</h2>
-        <div className="grid grid-3">
+        <h2 className="section-title">Content Overview</h2>
+        <div className="grid grid-4">
           <div className="card">
             <div className="card-header">
-              <div className="card-icon orange">🔶</div>
-              <span className="card-title">Beatport Tracks</span>
+              <div className="card-icon orange">🎵</div>
+              <span className="card-title">Total Tracks</span>
             </div>
-            <div className="card-value">{formatNumber(stats?.bySource.beatport.tracks || 0)}</div>
-            <div className="card-subtitle">
-              {((stats?.bySource.beatport.tracks || 0) / (stats?.totals.tracks || 1) * 100).toFixed(1)}% of total
-            </div>
+            <div className="card-value">{formatNumber(stats?.content.tracks || 0)}</div>
+            <div className="card-subtitle">+{stats?.content.tracksThisWeek || 0} this week</div>
           </div>
 
           <div className="card">
             <div className="card-header">
-              <div className="card-icon orange">🔷</div>
-              <span className="card-title">SoundCloud Tracks</span>
+              <div className="card-icon green">📥</div>
+              <span className="card-title">Tracks Today</span>
             </div>
-            <div className="card-value">{formatNumber(stats?.bySource.soundcloud.tracks || 0)}</div>
-            <div className="card-subtitle">
-              {((stats?.bySource.soundcloud.tracks || 0) / (stats?.totals.tracks || 1) * 100).toFixed(1)}% of total
-            </div>
+            <div className="card-value">{stats?.content.tracksToday || 0}</div>
+            <div className="card-subtitle">new tracks added</div>
           </div>
 
           <div className="card">
             <div className="card-header">
-              <div className="card-icon green">🎤</div>
-              <span className="card-title">Beatport Artists</span>
+              <div className="card-icon purple">📀</div>
+              <span className="card-title">Sets</span>
             </div>
-            <div className="card-value">{formatNumber(stats?.bySource.beatport.artists || 0)}</div>
-            <div className="card-subtitle">
-              {((stats?.bySource.beatport.artists || 0) / (stats?.totals.artists || 1) * 100).toFixed(1)}% of total
+            <div className="card-value">{formatNumber(stats?.content.sets || 0)}</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon blue">🎤</div>
+              <span className="card-title">Artists</span>
             </div>
+            <div className="card-value">{formatNumber(stats?.content.artists || 0)}</div>
           </div>
         </div>
       </div>
@@ -240,29 +262,9 @@ export default function Dashboard() {
       {/* Recent Activity */}
       <div className="section">
         <h2 className="section-title">Recent Activity</h2>
-        <div className="grid grid-2">
+        <div className="grid grid-3">
           <div className="list-card">
-            <div className="list-card-header">Recent Tracks</div>
-            {stats?.recentTracks.map((track) => (
-              <div key={track.id} className="list-item">
-                <div>
-                  <div className="list-item-title">{track.title}</div>
-                  <div className="list-item-subtitle">
-                    {track.artist_name} {track.label && `• ${track.label}`}
-                  </div>
-                </div>
-                <span className="list-item-time">{timeAgo(track.created_at)}</span>
-              </div>
-            ))}
-            {(!stats?.recentTracks || stats.recentTracks.length === 0) && (
-              <div className="list-item">
-                <span className="list-item-subtitle">No recent tracks</span>
-              </div>
-            )}
-          </div>
-
-          <div className="list-card">
-            <div className="list-card-header">Recent Users</div>
+            <div className="list-card-header">New Users</div>
             {stats?.recentUsers.map((user) => (
               <div key={user.id} className="list-item">
                 <div>
@@ -282,8 +284,71 @@ export default function Dashboard() {
               </div>
             )}
           </div>
+
+          <div className="list-card">
+            <div className="list-card-header">Recent Tracks</div>
+            {stats?.recentTracks?.map((track) => (
+              <div key={track.id} className="list-item">
+                <div>
+                  <div className="list-item-title" style={{
+                    maxWidth: '180px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {track.title}
+                  </div>
+                  <div className="list-item-subtitle">
+                    {track.artist_name}{track.label && ` • ${track.label}`}
+                  </div>
+                </div>
+                <span className="list-item-time">{timeAgo(track.created_at)}</span>
+              </div>
+            ))}
+            {(!stats?.recentTracks || stats.recentTracks.length === 0) && (
+              <div className="list-item">
+                <span className="list-item-subtitle">No recent tracks</span>
+              </div>
+            )}
+          </div>
+
+          <div className="list-card">
+            <div className="list-card-header">Recent Comments</div>
+            {stats?.recentComments.map((comment) => (
+              <div key={comment.id} className="list-item">
+                <div>
+                  <div className="list-item-title" style={{
+                    maxWidth: '180px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {comment.content}
+                  </div>
+                  <div className="list-item-subtitle">Set: {comment.set_id.slice(0, 8)}...</div>
+                </div>
+                <span className="list-item-time">{timeAgo(comment.created_at)}</span>
+              </div>
+            ))}
+            {(!stats?.recentComments || stats.recentComments.length === 0) && (
+              <div className="list-item">
+                <span className="list-item-subtitle">No recent comments</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Footer */}
+      <footer style={{
+        marginTop: '2rem',
+        padding: '1rem',
+        textAlign: 'center',
+        color: '#666',
+        fontSize: '0.875rem'
+      }}>
+        IDentified Admin Dashboard • Auto-refreshes every 60s
+      </footer>
     </div>
   );
 }

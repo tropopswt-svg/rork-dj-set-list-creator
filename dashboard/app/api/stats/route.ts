@@ -29,39 +29,68 @@ export async function GET() {
   }
 
   try {
-    // Core counts
+    const now = new Date();
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+
+    const weekAgo = new Date(now);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const monthAgo = new Date(now);
+    monthAgo.setMonth(monthAgo.getMonth() - 1);
+
+    // User stats
     const [
-      { count: trackCount },
-      { count: artistCount },
-      { count: setCount },
-      { count: userCount },
-      { count: contributionCount },
-      { count: commentCount },
-      { count: likeCount },
+      { count: totalUsers },
+      { count: usersToday },
+      { count: usersThisWeek },
+      { count: usersThisMonth },
     ] = await Promise.all([
-      supabase.from('tracks').select('*', { count: 'exact', head: true }),
-      supabase.from('artists').select('*', { count: 'exact', head: true }),
-      supabase.from('sets').select('*', { count: 'exact', head: true }),
       supabase.from('profiles').select('*', { count: 'exact', head: true }),
-      supabase.from('contributions').select('*', { count: 'exact', head: true }),
-      supabase.from('comments').select('*', { count: 'exact', head: true }),
-      supabase.from('likes').select('*', { count: 'exact', head: true }),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', weekAgo.toISOString()),
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).gte('created_at', monthAgo.toISOString()),
     ]);
 
-    // Source-specific counts
+    // Content stats
     const [
-      { count: beatportTracks },
-      { count: beatportArtists },
-      { count: soundcloudTracks },
-      { count: verifiedContributions },
-      { count: pendingContributions },
+      { count: totalSets },
+      { count: totalTracks },
+      { count: totalArtists },
     ] = await Promise.all([
-      supabase.from('tracks').select('*', { count: 'exact', head: true }).not('beatport_url', 'is', null),
-      supabase.from('artists').select('*', { count: 'exact', head: true }).not('beatport_url', 'is', null),
-      supabase.from('tracks').select('*', { count: 'exact', head: true }).not('soundcloud_url', 'is', null),
-      supabase.from('contributions').select('*', { count: 'exact', head: true }).eq('status', 'verified'),
-      supabase.from('contributions').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('sets').select('*', { count: 'exact', head: true }),
+      supabase.from('tracks').select('*', { count: 'exact', head: true }),
+      supabase.from('artists').select('*', { count: 'exact', head: true }),
     ]);
+
+    // Engagement stats
+    const [
+      { count: totalLikes },
+      { count: totalComments },
+      { count: totalContributions },
+      { count: likesToday },
+      { count: commentsToday },
+    ] = await Promise.all([
+      supabase.from('likes').select('*', { count: 'exact', head: true }),
+      supabase.from('comments').select('*', { count: 'exact', head: true }),
+      supabase.from('contributions').select('*', { count: 'exact', head: true }),
+      supabase.from('likes').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+      supabase.from('comments').select('*', { count: 'exact', head: true }).gte('created_at', today.toISOString()),
+    ]);
+
+    // Recent users (last 10)
+    const { data: recentUsers } = await supabase
+      .from('profiles')
+      .select('id, username, display_name, email, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    // Recent activity (comments, likes combined view)
+    const { data: recentComments } = await supabase
+      .from('comments')
+      .select('id, content, created_at, user_id, set_id')
+      .order('created_at', { ascending: false })
+      .limit(5);
 
     // Recent tracks
     const { data: recentTracks } = await supabase
@@ -70,66 +99,76 @@ export async function GET() {
       .order('created_at', { ascending: false })
       .limit(10);
 
-    // Recent users
-    const { data: recentUsers } = await supabase
-      .from('profiles')
-      .select('id, username, display_name, created_at')
-      .order('created_at', { ascending: false })
-      .limit(10);
-
-    // Tracks added today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Tracks added today/this week
     const { count: tracksToday } = await supabase
       .from('tracks')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', today.toISOString());
 
-    // Tracks added this week
-    const weekAgo = new Date();
-    weekAgo.setDate(weekAgo.getDate() - 7);
     const { count: tracksThisWeek } = await supabase
       .from('tracks')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', weekAgo.toISOString());
 
+    // Daily user signups for the past 7 days
+    const dailySignups = [];
+    for (let i = 6; i >= 0; i--) {
+      const dayStart = new Date(now);
+      dayStart.setDate(dayStart.getDate() - i);
+      dayStart.setHours(0, 0, 0, 0);
+
+      const dayEnd = new Date(dayStart);
+      dayEnd.setHours(23, 59, 59, 999);
+
+      const { count } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', dayStart.toISOString())
+        .lte('created_at', dayEnd.toISOString());
+
+      dailySignups.push({
+        date: dayStart.toISOString().split('T')[0],
+        day: dayStart.toLocaleDateString('en-US', { weekday: 'short' }),
+        count: count || 0,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       stats: {
-        totals: {
-          tracks: trackCount || 0,
-          artists: artistCount || 0,
-          sets: setCount || 0,
-          users: userCount || 0,
-          contributions: contributionCount || 0,
-          comments: commentCount || 0,
-          likes: likeCount || 0,
+        users: {
+          total: totalUsers || 0,
+          today: usersToday || 0,
+          thisWeek: usersThisWeek || 0,
+          thisMonth: usersThisMonth || 0,
+          dailySignups,
         },
-        bySource: {
-          beatport: {
-            tracks: beatportTracks || 0,
-            artists: beatportArtists || 0,
-          },
-          soundcloud: {
-            tracks: soundcloudTracks || 0,
-          },
-        },
-        contributions: {
-          verified: verifiedContributions || 0,
-          pending: pendingContributions || 0,
-        },
-        activity: {
+        content: {
+          sets: totalSets || 0,
+          tracks: totalTracks || 0,
+          artists: totalArtists || 0,
           tracksToday: tracksToday || 0,
           tracksThisWeek: tracksThisWeek || 0,
         },
-        recentTracks: recentTracks || [],
+        engagement: {
+          likes: totalLikes || 0,
+          comments: totalComments || 0,
+          contributions: totalContributions || 0,
+          likesToday: likesToday || 0,
+          commentsToday: commentsToday || 0,
+        },
         recentUsers: recentUsers || [],
+        recentComments: recentComments || [],
+        recentTracks: recentTracks || [],
       },
       timestamp: new Date().toISOString(),
     });
 
   } catch (error) {
     console.error('Stats error:', error);
-    return NextResponse.json({ error: 'Failed to fetch stats' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Failed to fetch stats',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 }
