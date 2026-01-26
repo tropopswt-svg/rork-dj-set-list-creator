@@ -84,40 +84,85 @@ const generateWaveformData = (count: number) => {
   return data;
 };
 
-// Corner brackets - L shapes at each corner
-const CornerBrackets = ({ width, height, thickness = 2, length = 8 }: {
+// Curved corner brackets
+const CurvedBrackets = ({ width, height, thickness = 2, radius = 12 }: {
   width: number;
   height: number;
   thickness?: number;
-  length?: number;
+  radius?: number;
 }) => {
   const bracketColor = Colors.dark.textMuted;
+  const arcLength = radius * 1.2;
 
   return (
     <>
       {/* Top Left */}
-      <View style={[styles.corner, { top: 0, left: 0 }]}>
-        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
-        <View style={{ width: thickness, height: length, backgroundColor: bracketColor }} />
-      </View>
+      <View
+        style={[
+          styles.curvedCorner,
+          {
+            top: 0,
+            left: 0,
+            width: arcLength,
+            height: arcLength,
+            borderTopWidth: thickness,
+            borderLeftWidth: thickness,
+            borderTopLeftRadius: radius,
+            borderColor: bracketColor,
+          },
+        ]}
+      />
 
       {/* Top Right */}
-      <View style={[styles.corner, { top: 0, right: 0, alignItems: 'flex-end' }]}>
-        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
-        <View style={{ width: thickness, height: length, backgroundColor: bracketColor, alignSelf: 'flex-end' }} />
-      </View>
+      <View
+        style={[
+          styles.curvedCorner,
+          {
+            top: 0,
+            right: 0,
+            width: arcLength,
+            height: arcLength,
+            borderTopWidth: thickness,
+            borderRightWidth: thickness,
+            borderTopRightRadius: radius,
+            borderColor: bracketColor,
+          },
+        ]}
+      />
 
       {/* Bottom Left */}
-      <View style={[styles.corner, { bottom: 0, left: 0, justifyContent: 'flex-end' }]}>
-        <View style={{ width: thickness, height: length, backgroundColor: bracketColor }} />
-        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
-      </View>
+      <View
+        style={[
+          styles.curvedCorner,
+          {
+            bottom: 0,
+            left: 0,
+            width: arcLength,
+            height: arcLength,
+            borderBottomWidth: thickness,
+            borderLeftWidth: thickness,
+            borderBottomLeftRadius: radius,
+            borderColor: bracketColor,
+          },
+        ]}
+      />
 
       {/* Bottom Right */}
-      <View style={[styles.corner, { bottom: 0, right: 0, alignItems: 'flex-end', justifyContent: 'flex-end' }]}>
-        <View style={{ width: thickness, height: length, backgroundColor: bracketColor, alignSelf: 'flex-end' }} />
-        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
-      </View>
+      <View
+        style={[
+          styles.curvedCorner,
+          {
+            bottom: 0,
+            right: 0,
+            width: arcLength,
+            height: arcLength,
+            borderBottomWidth: thickness,
+            borderRightWidth: thickness,
+            borderBottomRightRadius: radius,
+            borderColor: bracketColor,
+          },
+        ]}
+      />
     </>
   );
 };
@@ -176,21 +221,86 @@ const DJWaveform = ({ width, height }: { width: number; height: number }) => {
   );
 };
 
-// The scanned [ID] with corner brackets and waveform
+// The scanned [ID] with curved brackets, waveform, and pulse animation
 const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    // Pulsing scale animation - like scanning/identifying
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.03,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.delay(1500),
+      ])
+    ).start();
+
+    // Glow animation synced with pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 0.7,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.3,
+          duration: 800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.delay(1500),
+      ])
+    ).start();
+  }, []);
+
   const containerWidth = fontSize * 1.6;
   const containerHeight = fontSize * 1.1;
-  const bracketLength = fontSize * 0.2;
+  const bracketRadius = fontSize * 0.18;
   const bracketThickness = 2;
 
   return (
-    <View style={[styles.scannedContainer, { width: containerWidth, height: containerHeight }]}>
-      {/* Corner brackets */}
-      <CornerBrackets
+    <Animated.View
+      style={[
+        styles.scannedContainer,
+        {
+          width: containerWidth,
+          height: containerHeight,
+          transform: [{ scale: pulseAnim }],
+        },
+      ]}
+    >
+      {/* Glow effect behind */}
+      <Animated.View
+        style={[
+          styles.scanGlow,
+          {
+            width: containerWidth * 0.9,
+            height: containerHeight * 0.8,
+            borderRadius: bracketRadius,
+            opacity: glowAnim,
+          },
+        ]}
+      />
+
+      {/* Curved corner brackets */}
+      <CurvedBrackets
         width={containerWidth}
         height={containerHeight}
         thickness={bracketThickness}
-        length={bracketLength}
+        radius={bracketRadius}
       />
 
       {/* Waveform behind text */}
@@ -200,7 +310,7 @@ const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
 
       {/* ID text on top */}
       <Text style={[styles.idText, { fontSize }]}>ID</Text>
-    </View>
+    </Animated.View>
   );
 };
 
@@ -266,8 +376,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  corner: {
+  curvedCorner: {
     position: 'absolute',
+    borderColor: 'transparent',
+  },
+  scanGlow: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.primary,
   },
   waveformWrapper: {
     position: 'absolute',
