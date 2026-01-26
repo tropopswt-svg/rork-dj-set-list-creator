@@ -164,6 +164,92 @@ const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
   );
 };
 
+// Circular Progress Ring Component - 15 second timer
+// Uses two animated half-circles to create smooth progress effect
+const ProgressRing = ({ progress, size = 200, strokeWidth = 4 }: { progress: Animated.Value; size?: number; strokeWidth?: number }) => {
+  const halfSize = size / 2;
+
+  // First half: rotates from -180 to 0 (covers right side, 0-50%)
+  const firstHalfRotation = progress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['-180deg', '0deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+
+  // Second half: rotates from -180 to 0 (covers left side, 50-100%)
+  const secondHalfRotation = progress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ['-180deg', '-180deg', '0deg'],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={[progressRingStyles.container, { width: size, height: size }]}>
+      {/* Background ring (subtle) */}
+      <View style={[progressRingStyles.backgroundRing, {
+        width: size,
+        height: size,
+        borderRadius: halfSize,
+        borderWidth: strokeWidth,
+      }]} />
+
+      {/* Right half container (clips to right side) */}
+      <View style={[progressRingStyles.halfClip, {
+        width: halfSize,
+        height: size,
+        left: halfSize,
+      }]}>
+        <Animated.View style={[progressRingStyles.halfCircle, {
+          width: size,
+          height: size,
+          borderRadius: halfSize,
+          borderWidth: strokeWidth,
+          left: -halfSize,
+          transform: [{ rotate: firstHalfRotation }],
+        }]} />
+      </View>
+
+      {/* Left half container (clips to left side) */}
+      <View style={[progressRingStyles.halfClip, {
+        width: halfSize,
+        height: size,
+        left: 0,
+      }]}>
+        <Animated.View style={[progressRingStyles.halfCircle, {
+          width: size,
+          height: size,
+          borderRadius: halfSize,
+          borderWidth: strokeWidth,
+          left: 0,
+          transform: [{ rotate: secondHalfRotation }],
+        }]} />
+      </View>
+    </View>
+  );
+};
+
+const progressRingStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backgroundRing: {
+    position: 'absolute',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  halfClip: {
+    position: 'absolute',
+    overflow: 'hidden',
+  },
+  halfCircle: {
+    position: 'absolute',
+    borderColor: 'transparent',
+    borderTopColor: Colors.dark.primary,
+    borderRightColor: Colors.dark.primary,
+  },
+});
+
 // Full-screen vertical background waveform - slow and subtle
 const BackgroundWaveform = ({ isActive }: { isActive: boolean }) => {
   const scrollAnim = useRef(new Animated.Value(0)).current;
@@ -283,6 +369,8 @@ export default function LiveIdentifyModal({
   const glowAnim = useRef(new Animated.Value(0.3)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const floatAnim = useRef(new Animated.Value(0)).current;
+  const overlayAnim = useRef(new Animated.Value(0)).current; // Dark overlay
+  const progressAnim = useRef(new Animated.Value(0)).current; // Ring progress (0-1)
 
   // Request microphone permission
   useEffect(() => {
@@ -304,6 +392,8 @@ export default function LiveIdentifyModal({
       setState('idle');
       setIdentifiedTrack(null);
       setError(null);
+      overlayAnim.setValue(0);
+      progressAnim.setValue(0);
 
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -312,6 +402,8 @@ export default function LiveIdentifyModal({
       }).start();
     } else {
       fadeAnim.setValue(0);
+      overlayAnim.setValue(0);
+      progressAnim.setValue(0);
       stopRecording();
     }
   }, [visible]);
@@ -398,6 +490,9 @@ export default function LiveIdentifyModal({
       }
       recordingRef.current = null;
     }
+
+    // Reset overlay and progress
+    progressAnim.stopAnimation();
   }, []);
 
   const startRecording = async () => {
@@ -418,6 +513,23 @@ export default function LiveIdentifyModal({
       setState('recording');
       setError(null);
       setIdentifiedTrack(null);
+
+      // Animate dark overlay in (screen locker effect)
+      Animated.timing(overlayAnim, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start();
+
+      // Start progress ring animation (15 seconds)
+      progressAnim.setValue(0);
+      Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: RECORDING_DURATION_MS,
+        easing: Easing.linear,
+        useNativeDriver: false, // Can't use native driver for interpolated rotation
+      }).start();
 
       // Configure audio mode for optimal recording
       await Audio.setAudioModeAsync({
@@ -491,6 +603,13 @@ export default function LiveIdentifyModal({
 
       const result = await response.json();
 
+      // Fade out overlay when showing results
+      Animated.timing(overlayAnim, {
+        toValue: 0,
+        duration: 400,
+        useNativeDriver: true,
+      }).start();
+
       if (result.success && result.result) {
         console.log('[LiveIdentify] Track identified:', result.result);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -528,6 +647,14 @@ export default function LiveIdentifyModal({
     setState('idle');
     setIdentifiedTrack(null);
     setError(null);
+
+    // Fade out overlay
+    Animated.timing(overlayAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+    progressAnim.setValue(0);
   };
 
   const handleClose = () => {
@@ -581,6 +708,8 @@ export default function LiveIdentifyModal({
           <View style={styles.centerContent}>
             <Text style={styles.listeningText}>Listening...</Text>
             <View style={styles.recordingOuter}>
+              {/* Progress Ring Timer */}
+              <ProgressRing progress={progressAnim} size={200} strokeWidth={4} />
               <Animated.View
                 style={[
                   styles.recordingGlow,
@@ -615,6 +744,10 @@ export default function LiveIdentifyModal({
             </View>
             <Text style={styles.hintText}>
               Scanning audio...
+            </Text>
+            {/* Secret message */}
+            <Text style={styles.secretMessage}>
+              Shhh... We Won't Let Anyone Know You Don't Know Ball 😏
             </Text>
           </View>
         );
@@ -745,6 +878,20 @@ export default function LiveIdentifyModal({
         {/* Background waveform - only visible during scanning */}
         {isScanning && <BackgroundWaveform isActive={isScanning} />}
 
+        {/* Dark overlay - screen locker effect during scanning */}
+        <Animated.View
+          style={[
+            styles.darkOverlay,
+            {
+              opacity: overlayAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 0.85],
+              }),
+            },
+          ]}
+          pointerEvents={isScanning ? 'auto' : 'none'}
+        />
+
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           {/* Close button */}
           <Pressable style={styles.closeButton} onPress={handleClose}>
@@ -769,10 +916,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.dark.background,
   },
+  darkOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    zIndex: 5,
+  },
   content: {
     flex: 1,
     paddingTop: 60,
     paddingHorizontal: 24,
+    zIndex: 10,
   },
   closeButton: {
     position: 'absolute',
@@ -849,6 +1002,17 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     marginTop: 32,
     textAlign: 'center',
+  },
+  secretMessage: {
+    position: 'absolute',
+    bottom: 60,
+    left: 24,
+    right: 24,
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.5)',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    letterSpacing: 0.3,
   },
   listeningText: {
     fontSize: 24,

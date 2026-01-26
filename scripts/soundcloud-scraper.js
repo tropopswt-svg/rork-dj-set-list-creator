@@ -27,6 +27,14 @@ const path = require('path');
 
 const BASE_OUTPUT_DIR = './soundcloud-downloads';
 
+// Use local binaries from ./bin if available, otherwise system-wide
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const LOCAL_YTDLP = path.join(PROJECT_ROOT, 'bin', 'yt-dlp');
+const LOCAL_FFMPEG = path.join(PROJECT_ROOT, 'bin', 'ffmpeg');
+
+const YTDLP_PATH = fs.existsSync(LOCAL_YTDLP) ? LOCAL_YTDLP : 'yt-dlp';
+const FFMPEG_PATH = fs.existsSync(LOCAL_FFMPEG) ? LOCAL_FFMPEG : 'ffmpeg';
+
 // Parse command line args
 const args = process.argv.slice(2);
 if (args.length === 0) {
@@ -55,22 +63,34 @@ function extractUsername(url) {
   return match ? match[1] : 'unknown';
 }
 
-// Check if yt-dlp is installed
+// Check if yt-dlp and ffmpeg are available
 function checkDependencies() {
-  try {
-    execSync('which yt-dlp', { stdio: 'ignore' });
-  } catch {
-    console.error('Error: yt-dlp is not installed.');
-    console.error('Install it with: brew install yt-dlp');
-    process.exit(1);
+  // Check yt-dlp
+  if (fs.existsSync(LOCAL_YTDLP)) {
+    console.log(`Using local yt-dlp: ${LOCAL_YTDLP}`);
+  } else {
+    try {
+      execSync('which yt-dlp', { stdio: 'ignore' });
+      console.log('Using system yt-dlp');
+    } catch {
+      console.error('Error: yt-dlp not found.');
+      console.error('Run the setup or install with: brew install yt-dlp');
+      process.exit(1);
+    }
   }
 
-  try {
-    execSync('which ffmpeg', { stdio: 'ignore' });
-  } catch {
-    console.error('Error: ffmpeg is not installed.');
-    console.error('Install it with: brew install ffmpeg');
-    process.exit(1);
+  // Check ffmpeg
+  if (fs.existsSync(LOCAL_FFMPEG)) {
+    console.log(`Using local ffmpeg: ${LOCAL_FFMPEG}`);
+  } else {
+    try {
+      execSync('which ffmpeg', { stdio: 'ignore' });
+      console.log('Using system ffmpeg');
+    } catch {
+      console.error('Error: ffmpeg not found.');
+      console.error('Run the setup or install with: brew install ffmpeg');
+      process.exit(1);
+    }
   }
 }
 
@@ -94,10 +114,11 @@ async function downloadTracks(url, outputDir) {
     '--ignore-errors',       // Continue on errors
     '--no-overwrites',       // Don't re-download existing
     '--restrict-filenames',  // Safe filenames
+    '--ffmpeg-location', path.dirname(FFMPEG_PATH), // Point to ffmpeg
   ];
 
   return new Promise((resolve, reject) => {
-    const proc = spawn('yt-dlp', ytdlpArgs, { stdio: 'inherit' });
+    const proc = spawn(YTDLP_PATH, ytdlpArgs, { stdio: 'inherit' });
 
     proc.on('close', (code) => {
       if (code === 0) {
