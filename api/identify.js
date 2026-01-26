@@ -159,6 +159,20 @@ export default async function handler(req, res) {
     console.log(`[Identify] Audio format: ${audioFormat}`);
     console.log(`[Identify] Audio size: ${Math.round(audioBase64.length / 1024)} KB`);
 
+    // Debug: Check if env vars are set (don't log actual values)
+    const hasKey = !!process.env.ACRCLOUD_ACCESS_KEY;
+    const hasSecret = !!process.env.ACRCLOUD_ACCESS_SECRET;
+    const keyLength = process.env.ACRCLOUD_ACCESS_KEY?.length || 0;
+    console.log(`[Identify] ACRCloud config - hasKey: ${hasKey}, hasSecret: ${hasSecret}, keyLength: ${keyLength}`);
+
+    if (!hasKey || !hasSecret) {
+      return res.status(500).json({
+        success: false,
+        error: 'ACRCloud credentials not configured on server',
+        debug: { hasKey, hasSecret }
+      });
+    }
+
     const acrResponse = await identifyWithACRCloud(audioBase64, audioFormat);
     console.log('[Identify] ACRCloud response:', JSON.stringify(acrResponse).substring(0, 500));
 
