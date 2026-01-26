@@ -110,6 +110,63 @@ export async function GET() {
       .select('*', { count: 'exact', head: true })
       .gte('created_at', weekAgo.toISOString());
 
+    // API Usage stats
+    const { data: apiUsageByService } = await supabase
+      .from('api_usage')
+      .select('service, status_code, response_time_ms, tokens_used, cost_estimate, created_at')
+      .gte('created_at', weekAgo.toISOString())
+      .order('created_at', { ascending: false });
+
+    // Aggregate API usage
+    const apiUsageMap: Record<string, {
+      calls: number;
+      errors: number;
+      avgResponseTime: number;
+      totalTokens: number;
+      totalCost: number;
+      responseTimes: number[];
+    }> = {};
+
+    (apiUsageByService || []).forEach((log: any) => {
+      if (!apiUsageMap[log.service]) {
+        apiUsageMap[log.service] = {
+          calls: 0,
+          errors: 0,
+          avgResponseTime: 0,
+          totalTokens: 0,
+          totalCost: 0,
+          responseTimes: [],
+        };
+      }
+      apiUsageMap[log.service].calls++;
+      if (log.status_code >= 400) apiUsageMap[log.service].errors++;
+      if (log.response_time_ms) apiUsageMap[log.service].responseTimes.push(log.response_time_ms);
+      if (log.tokens_used) apiUsageMap[log.service].totalTokens += log.tokens_used;
+      if (log.cost_estimate) apiUsageMap[log.service].totalCost += parseFloat(log.cost_estimate);
+    });
+
+    // Calculate averages
+    const apiUsageStats = Object.entries(apiUsageMap).map(([service, data]) => ({
+      service,
+      calls: data.calls,
+      errors: data.errors,
+      errorRate: data.calls > 0 ? ((data.errors / data.calls) * 100).toFixed(1) : '0',
+      avgResponseTime: data.responseTimes.length > 0
+        ? Math.round(data.responseTimes.reduce((a, b) => a + b, 0) / data.responseTimes.length)
+        : 0,
+      totalTokens: data.totalTokens,
+      totalCost: data.totalCost.toFixed(4),
+    })).sort((a, b) => b.calls - a.calls);
+
+    // Today's API usage
+    const { count: apiCallsToday } = await supabase
+      .from('api_usage')
+      .select('*', { count: 'exact', head: true })
+      .gte('created_at', today.toISOString());
+
+    // Total API cost this week
+    const totalApiCostThisWeek = apiUsageStats.reduce((sum, s) => sum + parseFloat(s.totalCost), 0);
+
     // Daily user signups for the past 7 days
     const dailySignups = [];
     for (let i = 6; i >= 0; i--) {
@@ -160,6 +217,11 @@ export async function GET() {
         recentUsers: recentUsers || [],
         recentComments: recentComments || [],
         recentTracks: recentTracks || [],
+        apiUsage: {
+          byService: apiUsageStats,
+          callsToday: apiCallsToday || 0,
+          totalCostThisWeek: totalApiCostThisWeek.toFixed(4),
+        },
       },
       timestamp: new Date().toISOString(),
     });

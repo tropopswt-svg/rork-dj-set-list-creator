@@ -24,6 +24,19 @@ interface Stats {
     label: string | null;
     created_at: string;
   }>;
+  apiUsage: {
+    byService: Array<{
+      service: string;
+      calls: number;
+      errors: number;
+      errorRate: string;
+      avgResponseTime: number;
+      totalTokens: number;
+      totalCost: string;
+    }>;
+    callsToday: number;
+    totalCostThisWeek: string;
+  };
   engagement: {
     likes: number;
     comments: number;
@@ -128,6 +141,81 @@ export default function Dashboard() {
           </div>
         </div>
       </header>
+
+      {/* API Usage - Most Important */}
+      <div className="section">
+        <h2 className="section-title">API Usage (Last 7 Days)</h2>
+        <div className="grid grid-3">
+          <div className="card highlight">
+            <div className="card-header">
+              <div className="card-icon orange">⚡</div>
+              <span className="card-title">Calls Today</span>
+            </div>
+            <div className="card-value">{formatNumber(stats?.apiUsage?.callsToday || 0)}</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon green">💰</div>
+              <span className="card-title">Est. Cost This Week</span>
+            </div>
+            <div className="card-value">${stats?.apiUsage?.totalCostThisWeek || '0.00'}</div>
+          </div>
+
+          <div className="card">
+            <div className="card-header">
+              <div className="card-icon purple">🔌</div>
+              <span className="card-title">Active Services</span>
+            </div>
+            <div className="card-value">{stats?.apiUsage?.byService?.length || 0}</div>
+          </div>
+        </div>
+
+        {/* API Usage Table */}
+        {stats?.apiUsage?.byService && stats.apiUsage.byService.length > 0 && (
+          <div className="list-card" style={{ marginTop: '1rem' }}>
+            <div className="list-card-header">Usage by Service</div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="api-table">
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Calls</th>
+                    <th>Errors</th>
+                    <th>Error Rate</th>
+                    <th>Avg Response</th>
+                    <th>Tokens</th>
+                    <th>Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.apiUsage.byService.map((service) => (
+                    <tr key={service.service}>
+                      <td>
+                        <span className="service-badge">{service.service}</span>
+                      </td>
+                      <td>{formatNumber(service.calls)}</td>
+                      <td className={service.errors > 0 ? 'error-text' : ''}>{service.errors}</td>
+                      <td className={parseFloat(service.errorRate) > 5 ? 'warning-text' : ''}>
+                        {service.errorRate}%
+                      </td>
+                      <td>{service.avgResponseTime}ms</td>
+                      <td>{service.totalTokens > 0 ? formatNumber(service.totalTokens) : '-'}</td>
+                      <td>${service.totalCost}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {(!stats?.apiUsage?.byService || stats.apiUsage.byService.length === 0) && (
+          <div className="list-card" style={{ marginTop: '1rem', padding: '2rem', textAlign: 'center' }}>
+            <p style={{ color: 'var(--text-muted)' }}>No API usage data yet. Usage will appear here once API calls are logged.</p>
+          </div>
+        )}
+      </div>
 
       {/* User Growth */}
       <div className="section">
