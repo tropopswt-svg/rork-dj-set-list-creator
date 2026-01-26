@@ -733,7 +733,6 @@ export default function LiveIdentifyModal({
       case 'recording':
         return (
           <View style={styles.centerContent}>
-            <Text style={styles.listeningText}>Listening...</Text>
             <View style={styles.recordingOuter}>
               {/* Progress Ring Timer */}
               <ProgressRing progress={progressAnim} size={200} strokeWidth={4} />
@@ -769,9 +768,8 @@ export default function LiveIdentifyModal({
                 </Animated.Text>
               </Animated.View>
             </View>
-            <Text style={styles.hintText}>
-              Scanning audio...
-            </Text>
+            {/* Stealth status text - above secret message */}
+            <Text style={styles.stealthListeningText}>Listening...</Text>
             {/* Secret message */}
             <Text style={styles.secretMessage}>
               Shhh... We Won't Let Anyone Know You Don't Know Ball 😏
@@ -1049,6 +1047,16 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     marginTop: 32,
     textAlign: 'center',
+  },
+  stealthListeningText: {
+    position: 'absolute',
+    bottom: 100,
+    left: 24,
+    right: 24,
+    fontSize: 12,
+    color: 'rgba(255, 255, 255, 0.15)', // Very dim - barely visible
+    textAlign: 'center',
+    letterSpacing: 1,
   },
   secretMessage: {
     position: 'absolute',
