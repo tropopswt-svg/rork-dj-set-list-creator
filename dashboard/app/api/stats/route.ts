@@ -14,9 +14,15 @@ function getSupabaseClient() {
 
 export async function GET() {
   const supabase = getSupabaseClient();
-  
+
   if (!supabase) {
-    return NextResponse.json({ error: 'Database not configured' }, { status: 500 });
+    return NextResponse.json({
+      error: 'Database not configured',
+      debug: {
+        hasUrl: !!process.env.SUPABASE_URL,
+        hasKey: !!process.env.SUPABASE_SERVICE_KEY,
+      }
+    }, { status: 500 });
   }
 
   try {
