@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, Sparkles, FileQuestion } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -528,16 +528,14 @@ export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeed
                   </View>
                 )}
 
-                {/* IDentified status badge */}
+                {/* IDentified status badge - square logo style */}
                 {isIdentified ? (
                   <View style={styles.identifiedBadge}>
-                    <Sparkles size={9} color="#fff" />
-                    <Text style={styles.identifiedBadgeText}>IDentified</Text>
+                    <Text style={styles.identifiedBadgeText}>ID</Text>
                   </View>
                 ) : (
                   <View style={styles.unanalyzedBadge}>
-                    <FileQuestion size={9} color={Colors.dark.textMuted} />
-                    <Text style={styles.unanalyzedBadgeText}>Unanalyzed</Text>
+                    <Text style={styles.unanalyzedBadgeText}>?</Text>
                   </View>
                 )}
               </View>
@@ -817,34 +815,34 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700' as const,
   },
-  // IDentified badge - prominent orange
+  // IDentified badge - square "ID" logo style
   identifiedBadge: {
-    flexDirection: 'row',
+    width: 22,
+    height: 22,
     alignItems: 'center',
-    gap: 3,
+    justifyContent: 'center',
     backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: 5,
   },
   identifiedBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     color: '#fff',
-    fontWeight: '700' as const,
+    fontWeight: '900' as const,
+    letterSpacing: -0.5,
   },
+  // Unanalyzed badge - smaller square with "?"
   unanalyzedBadge: {
-    flexDirection: 'row',
+    width: 18,
+    height: 18,
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(107, 114, 128, 0.25)',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    justifyContent: 'center',
+    backgroundColor: 'rgba(107, 114, 128, 0.3)',
+    borderRadius: 4,
   },
   unanalyzedBadgeText: {
-    fontSize: 9,
+    fontSize: 11,
     color: Colors.dark.textMuted,
-    fontWeight: '600' as const,
+    fontWeight: '700' as const,
   },
   needsSourceBadge: {
     flexDirection: 'row',
