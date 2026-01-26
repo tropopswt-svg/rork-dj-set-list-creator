@@ -187,6 +187,13 @@ export default function LiveIdentifyModal({
   }, []);
 
   const startRecording = async () => {
+    // Check if we're on web - audio recording doesn't work there
+    if (Platform.OS === 'web') {
+      setError('Audio recording is not available on web. Please use the Expo Go app on your phone to test this feature.');
+      setState('error');
+      return;
+    }
+
     if (!hasPermission) {
       Alert.alert('Permission Required', 'Please grant microphone permission to identify tracks.');
       return;
