@@ -3,15 +3,10 @@
   "buildCommand": "echo 'Skipping build for serverless functions'",
   "functions": {
     "api/**/*.{js,ts}": {
-      "maxDuration": 60,
-      "includeFiles": "backend/**/*.{ts,js},lib/**/*.{ts,js}"
+      "maxDuration": 60
     }
   },
   "rewrites": [
-    {
-      "source": "/api/trpc/:path*",
-      "destination": "/api/trpc/:path*"
-    },
     {
       "source": "/",
       "destination": "/api/index"
