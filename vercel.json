@@ -3,7 +3,8 @@
   "buildCommand": "echo 'Skipping build for serverless functions'",
   "functions": {
     "api/**/*.{js,ts}": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "backend/**/*.{ts,js},lib/**/*.{ts,js}"
     }
   },
   "rewrites": [
