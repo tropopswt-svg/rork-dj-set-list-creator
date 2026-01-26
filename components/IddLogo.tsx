@@ -1,266 +1,234 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import Colors from '@/constants/colors';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 // ID'D Logo
-// [ID] with scanner waveform + 'D where D is filled with spinning vinyl grooves
+// Corner-bracketed [ID] with scrolling DJ waveform + 'D
 
 interface IddLogoProps {
   size?: 'small' | 'medium' | 'large';
   showTagline?: boolean;
 }
 
-// [ID] with scanning waveform effect
-const BracketedID = ({ fontSize = 56 }: { fontSize?: number }) => {
-  const scanAnim = useRef(new Animated.Value(0)).current;
+// Generate realistic waveform data - mimics actual track dynamics
+const generateWaveformData = (count: number) => {
+  const data: { height: number; color: string }[] = [];
 
-  useEffect(() => {
-    // Scanning waveform sweeps across
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(scanAnim, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.delay(3000),
-        Animated.timing(scanAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
+  // Simulate a real track with intro, buildup, drop, breakdown, outro
+  for (let i = 0; i < count; i++) {
+    const progress = i / count;
 
-  const containerWidth = fontSize * 1.8;
+    // Base amplitude varies by "section" of the track
+    let baseAmp = 0.3;
+    let colorPhase = 0;
 
-  const translateX = scanAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-containerWidth * 0.3, containerWidth * 1.1],
-  });
+    // Intro (quiet)
+    if (progress < 0.1) {
+      baseAmp = 0.15 + Math.random() * 0.15;
+      colorPhase = 0;
+    }
+    // Buildup
+    else if (progress < 0.2) {
+      baseAmp = 0.3 + (progress - 0.1) * 4 + Math.random() * 0.2;
+      colorPhase = 1;
+    }
+    // Drop (loud)
+    else if (progress < 0.35) {
+      baseAmp = 0.7 + Math.random() * 0.3;
+      colorPhase = 2;
+    }
+    // Breakdown (quieter)
+    else if (progress < 0.45) {
+      baseAmp = 0.25 + Math.random() * 0.2;
+      colorPhase = 3;
+    }
+    // Buildup 2
+    else if (progress < 0.55) {
+      baseAmp = 0.35 + (progress - 0.45) * 5 + Math.random() * 0.2;
+      colorPhase = 1;
+    }
+    // Drop 2 (loud)
+    else if (progress < 0.75) {
+      baseAmp = 0.75 + Math.random() * 0.25;
+      colorPhase = 2;
+    }
+    // Breakdown 2
+    else if (progress < 0.85) {
+      baseAmp = 0.3 + Math.random() * 0.25;
+      colorPhase = 4;
+    }
+    // Outro (fading)
+    else {
+      baseAmp = 0.4 - (progress - 0.85) * 2 + Math.random() * 0.15;
+      colorPhase = 0;
+    }
 
-  const opacity = scanAnim.interpolate({
-    inputRange: [0, 0.1, 0.9, 1],
-    outputRange: [0, 1, 1, 0],
-  });
+    // Add some randomness for realism
+    const height = Math.max(0.08, Math.min(1, baseAmp + (Math.random() - 0.5) * 0.15));
+
+    // Color based on section (like Rekordbox)
+    const colors = [
+      'rgba(100, 180, 255, 0.9)',  // Blue - intro/outro
+      'rgba(255, 150, 200, 0.9)',  // Pink - buildup
+      'rgba(255, 100, 80, 0.9)',   // Red/Orange - drop
+      'rgba(150, 220, 255, 0.9)',  // Cyan - breakdown
+      'rgba(180, 255, 180, 0.9)',  // Green - breakdown 2
+    ];
+
+    data.push({
+      height,
+      color: colors[colorPhase],
+    });
+  }
+
+  return data;
+};
+
+// Corner brackets - L shapes at each corner
+const CornerBrackets = ({ width, height, thickness = 2, length = 8 }: {
+  width: number;
+  height: number;
+  thickness?: number;
+  length?: number;
+}) => {
+  const bracketColor = Colors.dark.textMuted;
 
   return (
-    <View style={[styles.bracketedContainer, { height: fontSize * 1.1 }]}>
-      {/* Left bracket */}
-      <Text style={[styles.bracket, { fontSize }]}>[</Text>
-
-      {/* ID text with scanner overlay */}
-      <View style={[styles.idContainer, { width: containerWidth, overflow: 'hidden' }]}>
-        <Text style={[styles.idText, { fontSize }]}>ID</Text>
-
-        {/* Scanning waveform line */}
-        <Animated.View
-          style={[
-            styles.scanLine,
-            {
-              height: fontSize * 0.9,
-              transform: [{ translateX }],
-              opacity,
-            },
-          ]}
-        >
-          {/* Waveform bars */}
-          {Array.from({ length: 8 }, (_, i) => {
-            const h = Math.sin((i / 8) * Math.PI) * 0.7 + 0.3;
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.waveBar,
-                  {
-                    height: fontSize * 0.8 * h,
-                    backgroundColor: Colors.dark.primary,
-                  },
-                ]}
-              />
-            );
-          })}
-        </Animated.View>
+    <>
+      {/* Top Left */}
+      <View style={[styles.corner, { top: 0, left: 0 }]}>
+        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
+        <View style={{ width: thickness, height: length, backgroundColor: bracketColor }} />
       </View>
 
-      {/* Right bracket */}
-      <Text style={[styles.bracket, { fontSize }]}>]</Text>
-    </View>
+      {/* Top Right */}
+      <View style={[styles.corner, { top: 0, right: 0, alignItems: 'flex-end' }]}>
+        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
+        <View style={{ width: thickness, height: length, backgroundColor: bracketColor, alignSelf: 'flex-end' }} />
+      </View>
+
+      {/* Bottom Left */}
+      <View style={[styles.corner, { bottom: 0, left: 0, justifyContent: 'flex-end' }]}>
+        <View style={{ width: thickness, height: length, backgroundColor: bracketColor }} />
+        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
+      </View>
+
+      {/* Bottom Right */}
+      <View style={[styles.corner, { bottom: 0, right: 0, alignItems: 'flex-end', justifyContent: 'flex-end' }]}>
+        <View style={{ width: thickness, height: length, backgroundColor: bracketColor, alignSelf: 'flex-end' }} />
+        <View style={{ width: length, height: thickness, backgroundColor: bracketColor }} />
+      </View>
+    </>
   );
 };
 
-// Vinyl D - the D shape filled with spinning vinyl grooves
-const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
-  const spinAnim = useRef(new Animated.Value(0)).current;
+// Scrolling DJ waveform
+const DJWaveform = ({ width, height }: { width: number; height: number }) => {
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+
+  // Generate waveform data once
+  const waveformData = useRef(generateWaveformData(200)).current;
 
   useEffect(() => {
-    // Continuous vinyl spin
+    // Continuous slow scroll
     Animated.loop(
-      Animated.timing(spinAnim, {
+      Animated.timing(scrollAnim, {
         toValue: 1,
-        duration: 3000,
+        duration: 20000, // Very slow - 20 seconds for full scroll
         easing: Easing.linear,
         useNativeDriver: true,
       })
     ).start();
   }, []);
 
-  const rotation = spinAnim.interpolate({
+  const totalWidth = waveformData.length * 3; // Each bar is 2px + 1px gap
+
+  const translateX = scrollAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: [0, -totalWidth / 2],
   });
 
-  const dWidth = fontSize * 0.75;
-  const dHeight = fontSize;
-  const vinylSize = fontSize * 1.4; // Vinyl larger than D to ensure coverage
+  return (
+    <View style={[styles.waveformContainer, { width, height, overflow: 'hidden' }]}>
+      <Animated.View
+        style={[
+          styles.waveformBars,
+          {
+            transform: [{ translateX }],
+          },
+        ]}
+      >
+        {/* Render waveform twice for seamless loop */}
+        {[...waveformData, ...waveformData].map((bar, i) => (
+          <View
+            key={i}
+            style={[
+              styles.waveformBar,
+              {
+                height: height * bar.height,
+                backgroundColor: bar.color,
+              },
+            ]}
+          />
+        ))}
+      </Animated.View>
+    </View>
+  );
+};
+
+// The scanned [ID] with corner brackets and waveform
+const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
+  const containerWidth = fontSize * 1.6;
+  const containerHeight = fontSize * 1.1;
+  const bracketLength = fontSize * 0.2;
+  const bracketThickness = 2;
 
   return (
-    <View style={[styles.vinylDWrapper, { width: dWidth, height: dHeight }]}>
-      {/* The D-shaped mask container */}
-      <View style={[styles.vinylDMask, { width: dWidth, height: dHeight }]}>
-        {/* Spinning vinyl underneath */}
-        <Animated.View
-          style={[
-            styles.vinylDisc,
-            {
-              width: vinylSize,
-              height: vinylSize,
-              borderRadius: vinylSize / 2,
-              transform: [{ rotate: rotation }],
-            },
-          ]}
-        >
-          {/* Vinyl grooves - concentric rings */}
-          {Array.from({ length: 12 }, (_, i) => {
-            const ringSize = vinylSize * (1 - i * 0.07);
-            return (
-              <View
-                key={i}
-                style={[
-                  styles.vinylGroove,
-                  {
-                    width: ringSize,
-                    height: ringSize,
-                    borderRadius: ringSize / 2,
-                    borderWidth: i % 2 === 0 ? 1.5 : 0.5,
-                    borderColor: i % 3 === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
-                  },
-                ]}
-              />
-            );
-          })}
-          {/* Center label */}
-          <View
-            style={[
-              styles.vinylLabel,
-              {
-                width: vinylSize * 0.25,
-                height: vinylSize * 0.25,
-                borderRadius: vinylSize * 0.125,
-              },
-            ]}
-          />
-          {/* Center hole */}
-          <View
-            style={[
-              styles.vinylHole,
-              {
-                width: vinylSize * 0.06,
-                height: vinylSize * 0.06,
-                borderRadius: vinylSize * 0.03,
-              },
-            ]}
-          />
-        </Animated.View>
+    <View style={[styles.scannedContainer, { width: containerWidth, height: containerHeight }]}>
+      {/* Corner brackets */}
+      <CornerBrackets
+        width={containerWidth}
+        height={containerHeight}
+        thickness={bracketThickness}
+        length={bracketLength}
+      />
+
+      {/* Waveform behind text */}
+      <View style={styles.waveformWrapper}>
+        <DJWaveform width={containerWidth * 0.85} height={fontSize * 0.7} />
       </View>
 
-      {/* D letter outline on top - acts as the "cookie cutter" mask */}
-      <View style={[styles.dOverlay, { width: dWidth, height: dHeight }]}>
-        {/* Left side cutout (the inside of D) */}
-        <View
-          style={[
-            styles.dCutout,
-            {
-              width: dWidth * 0.35,
-              height: dHeight * 0.5,
-              borderTopRightRadius: dHeight * 0.25,
-              borderBottomRightRadius: dHeight * 0.25,
-              left: dWidth * 0.22,
-            },
-          ]}
-        />
-        {/* Top cutout */}
-        <View
-          style={[
-            styles.dCutoutTop,
-            {
-              width: dWidth,
-              height: dHeight * 0.12,
-              top: 0,
-            },
-          ]}
-        />
-        {/* Bottom cutout */}
-        <View
-          style={[
-            styles.dCutoutTop,
-            {
-              width: dWidth,
-              height: dHeight * 0.12,
-              bottom: 0,
-            },
-          ]}
-        />
-        {/* Right side - round off */}
-        <View
-          style={[
-            styles.dCutoutRight,
-            {
-              width: dWidth * 0.15,
-              height: dHeight,
-              right: 0,
-              borderTopLeftRadius: dHeight * 0.5,
-              borderBottomLeftRadius: dHeight * 0.5,
-            },
-          ]}
-        />
-      </View>
+      {/* ID text on top */}
+      <Text style={[styles.idText, { fontSize }]}>ID</Text>
     </View>
   );
 };
 
 export default function IddLogo({ size = 'medium', showTagline = false }: IddLogoProps) {
   const sizeConfig = {
-    small: { fontSize: 42, spacing: 4 },
-    medium: { fontSize: 56, spacing: 6 },
-    large: { fontSize: 72, spacing: 8 },
+    small: { fontSize: 42, spacing: 2 },
+    medium: { fontSize: 56, spacing: 3 },
+    large: { fontSize: 72, spacing: 4 },
   }[size];
 
   return (
     <View style={styles.container}>
       <View style={styles.logoWrapper}>
-        {/* [ID] with scanner */}
-        <BracketedID fontSize={sizeConfig.fontSize} />
+        {/* Scanned [ID] with waveform */}
+        <ScannedID fontSize={sizeConfig.fontSize} />
 
-        {/* Apostrophe */}
+        {/* 'D - normal text */}
         <Text
           style={[
-            styles.apostrophe,
+            styles.apostropheD,
             {
               fontSize: sizeConfig.fontSize,
               marginLeft: sizeConfig.spacing,
             }
           ]}
         >
-          '
+          'D
         </Text>
-
-        {/* Vinyl D */}
-        <VinylD fontSize={sizeConfig.fontSize} />
       </View>
 
       {showTagline && (
@@ -293,83 +261,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  bracketedContainer: {
+  scannedContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  corner: {
+    position: 'absolute',
+  },
+  waveformWrapper: {
+    position: 'absolute',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  waveformContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
-  bracket: {
-    fontWeight: '300',
-    color: Colors.dark.textMuted,
-  },
-  idContainer: {
-    justifyContent: 'center',
+  waveformBars: {
+    flexDirection: 'row',
     alignItems: 'center',
-    position: 'relative',
+  },
+  waveformBar: {
+    width: 2,
+    marginHorizontal: 0.5,
+    borderRadius: 1,
   },
   idText: {
     fontWeight: '900',
     color: Colors.dark.text,
-    letterSpacing: 2,
+    letterSpacing: 4,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
-  scanLine: {
-    position: 'absolute',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  waveBar: {
-    width: 3,
-    borderRadius: 1.5,
-  },
-  apostrophe: {
+  apostropheD: {
     fontWeight: '900',
     color: Colors.dark.text,
-  },
-  vinylDWrapper: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  vinylDMask: {
-    position: 'absolute',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vinylDisc: {
-    backgroundColor: '#1a1a1a',
-    justifyContent: 'center',
-    alignItems: 'center',
-    position: 'absolute',
-  },
-  vinylGroove: {
-    position: 'absolute',
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  vinylLabel: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.primary,
-  },
-  vinylHole: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.background,
-  },
-  dOverlay: {
-    position: 'absolute',
-    backgroundColor: 'transparent',
-  },
-  dCutout: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.background,
-    top: '25%',
-  },
-  dCutoutTop: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.background,
-    left: 0,
-  },
-  dCutoutRight: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.background,
   },
   tagline: {
     marginTop: 12,
