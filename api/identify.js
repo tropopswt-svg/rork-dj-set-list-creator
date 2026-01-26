@@ -12,10 +12,12 @@ function createSignature(stringToSign, secretKey) {
 
 // Send to ACRCloud for identification
 async function identifyWithACRCloud(audioBase64, audioFormat) {
-  // Trim env vars in case of whitespace/newlines
-  const accessKey = (process.env.ACRCLOUD_ACCESS_KEY || '').trim();
-  const accessSecret = (process.env.ACRCLOUD_ACCESS_SECRET || '').trim();
-  const host = (process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com').trim();
+  // Clean env vars - remove whitespace, newlines, and literal \n strings
+  const cleanEnvVar = (val) => (val || '').replace(/\\n/g, '').replace(/\n/g, '').trim();
+
+  const accessKey = cleanEnvVar(process.env.ACRCLOUD_ACCESS_KEY);
+  const accessSecret = cleanEnvVar(process.env.ACRCLOUD_ACCESS_SECRET);
+  const host = cleanEnvVar(process.env.ACRCLOUD_HOST) || 'identify-us-west-2.acrcloud.com';
 
   if (!accessKey || !accessSecret) {
     throw new Error('ACRCloud credentials not configured');
