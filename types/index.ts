@@ -53,6 +53,7 @@ export interface SetList {
   name: string;
   artist: string;
   venue?: string;
+  location?: string;
   date: Date;
   tracks: Track[];
   coverUrl?: string;

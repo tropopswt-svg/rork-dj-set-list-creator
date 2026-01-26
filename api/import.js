@@ -128,33 +128,80 @@ async function fetchVideoInfo(videoId, apiKey) {
 }
 
 async function fetchVideoComments(videoId, apiKey, maxResults = 500) {
-  const comments = [];
-  let nextPageToken;
-  while (comments.length < maxResults) {
-    const pageSize = Math.min(100, maxResults - comments.length);
-    let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet&videoId=${videoId}&maxResults=${pageSize}&order=relevance&key=${apiKey}`;
-    if (nextPageToken) url += `&pageToken=${nextPageToken}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      const error = await response.json();
-      if (error.error?.errors?.[0]?.reason === 'commentsDisabled') break;
-      throw new Error(`YouTube API error: ${error.error?.message || response.statusText}`);
+  const allComments = [];
+  const seenIds = new Set();
+
+  // Helper to fetch comments with a specific order
+  async function fetchWithOrder(order, limit) {
+    const comments = [];
+    let nextPageToken;
+    while (comments.length < limit) {
+      const pageSize = Math.min(100, limit - comments.length);
+      let url = `${YOUTUBE_API_BASE}/commentThreads?part=snippet,replies&videoId=${videoId}&maxResults=${pageSize}&order=${order}&key=${apiKey}`;
+      if (nextPageToken) url += `&pageToken=${nextPageToken}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        const error = await response.json();
+        if (error.error?.errors?.[0]?.reason === 'commentsDisabled') break;
+        throw new Error(`YouTube API error: ${error.error?.message || response.statusText}`);
+      }
+      const data = await response.json();
+      if (!data.items || data.items.length === 0) break;
+      for (const item of data.items) {
+        // Skip if already seen
+        if (seenIds.has(item.id)) continue;
+        seenIds.add(item.id);
+
+        const c = item.snippet.topLevelComment.snippet;
+        const topComment = {
+          id: item.id,
+          authorName: c.authorDisplayName,
+          text: c.textOriginal || c.textDisplay,
+          likeCount: c.likeCount,
+          isReply: false,
+        };
+        comments.push(topComment);
+
+        // Process replies - these often contain track IDs
+        if (item.replies && item.replies.comments) {
+          const parentTimestamps = extractTimestamps(topComment.text);
+          const parentTimestamp = parentTimestamps.length > 0 ? parentTimestamps[0] : null;
+
+          for (const reply of item.replies.comments) {
+            if (seenIds.has(reply.id)) continue;
+            seenIds.add(reply.id);
+
+            const r = reply.snippet;
+            comments.push({
+              id: reply.id,
+              authorName: r.authorDisplayName,
+              text: r.textOriginal || r.textDisplay,
+              likeCount: r.likeCount,
+              isReply: true,
+              parentId: item.id,
+              parentTimestamp: parentTimestamp,
+            });
+          }
+        }
+      }
+      nextPageToken = data.nextPageToken;
+      if (!nextPageToken) break;
     }
-    const data = await response.json();
-    if (!data.items || data.items.length === 0) break;
-    for (const item of data.items) {
-      const c = item.snippet.topLevelComment.snippet;
-      comments.push({
-        id: item.id,
-        authorName: c.authorDisplayName,
-        text: c.textOriginal || c.textDisplay,
-        likeCount: c.likeCount,
-      });
-    }
-    nextPageToken = data.nextPageToken;
-    if (!nextPageToken) break;
+    return comments;
   }
-  return comments;
+
+  // Fetch by relevance (most liked/engaged comments - often have good tracklists)
+  const relevanceComments = await fetchWithOrder('relevance', maxResults);
+  allComments.push(...relevanceComments);
+  console.log(`Fetched ${relevanceComments.length} comments by relevance`);
+
+  // Also fetch by time (recent comments - catch new comprehensive tracklists)
+  const timeComments = await fetchWithOrder('time', Math.floor(maxResults / 2));
+  allComments.push(...timeComments);
+  console.log(`Fetched ${timeComments.length} additional comments by time`);
+
+  console.log(`Total: ${allComments.length} YouTube comments (including replies)`);
+  return allComments;
 }
 
 function cleanText(text) {
@@ -380,6 +427,7 @@ function parseComments(comments, djName = null) {
   const tracks = [];
   const seen = new Set();
 
+  // Sort: prioritize comments with many timestamps (full tracklists), then by likes
   const sorted = [...comments].sort((a, b) => {
     const aTs = extractTimestamps(a.text).length;
     const bTs = extractTimestamps(b.text).length;
@@ -388,50 +436,87 @@ function parseComments(comments, djName = null) {
     return b.likeCount - a.likeCount;
   });
 
+  // Helper to add a track if valid
+  const addTrack = (ts, info, comment, isMultiLine) => {
+    // If the parsed "artist" is actually the DJ name, fix it
+    if (djName && areNamesSimilar(info.artist, djName)) {
+      const reparsed = parseTrackInfo(info.title);
+      if (reparsed) {
+        info = reparsed;
+      } else {
+        info = { title: info.title, artist: 'Unknown Artist' };
+      }
+    }
+
+    const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      let conf = 0.5;
+      if (isMultiLine) conf += 0.2; // Full tracklist comments are more reliable
+      if (comment.likeCount > 100) conf += 0.15;
+      else if (comment.likeCount > 10) conf += 0.05;
+      tracks.push({
+        timestamp: ts.timestamp,
+        timestampFormatted: ts.formatted,
+        title: info.title,
+        artist: info.artist,
+        confidence: Math.min(conf, 1),
+        sourceAuthor: comment.authorName,
+        likes: comment.likeCount,
+      });
+    }
+  };
+
   for (const comment of sorted) {
     const text = cleanText(comment.text);
     const timestamps = extractTimestamps(text);
-    if (timestamps.length === 0) continue;
+    const lines = text.split(/[\n\r]+/).filter(l => l.trim());
 
-    const lines = text.split(/[\n\r]+/);
-    if (lines.length >= 3) {
+    // CASE 1: Multi-line tracklist (5+ timestamps = someone posted full tracklist)
+    if (timestamps.length >= 3 && lines.length >= 3) {
       for (const line of lines) {
         const lineTs = extractTimestamps(line);
         if (lineTs.length === 0) continue;
         const ts = lineTs[0];
         let afterText = line.slice(ts.position + ts.formatted.length).trim();
         afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
-        let info = parseTrackInfo(afterText);
-
+        const info = parseTrackInfo(afterText);
         if (info) {
-          // If the parsed "artist" is actually the DJ name, it's likely the track title
-          // In DJ set tracklists, people often write "DJ Name - Track Title" meaning the DJ played it
-          if (djName && areNamesSimilar(info.artist, djName)) {
-            // The "title" field likely contains the real track info
-            // Try to re-parse the title to extract actual artist - track
-            const reparsed = parseTrackInfo(info.title);
-            if (reparsed) {
-              // Found nested artist - title in what we thought was just title
-              info = reparsed;
-            } else {
-              // Just the track title, artist unknown
-              info = { title: info.title, artist: 'Unknown Artist' };
-            }
-          }
-
-          const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            let conf = 0.5;
-            if (timestamps.length >= 5) conf += 0.2;
-            if (comment.likeCount > 100) conf += 0.15;
-            else if (comment.likeCount > 10) conf += 0.05;
-            tracks.push({ timestamp: ts.timestamp, timestampFormatted: ts.formatted, title: info.title, artist: info.artist, confidence: Math.min(conf, 1), sourceAuthor: comment.authorName, likes: comment.likeCount });
-          }
+          addTrack(ts, info, comment, true);
         }
       }
     }
+    // CASE 2: Single/few line comment with timestamp(s) - like "45:30 Fisher - Losing It"
+    else if (timestamps.length > 0) {
+      for (const ts of timestamps) {
+        // Get text after this timestamp
+        const afterIndex = ts.position + ts.formatted.length;
+        let afterText = text.slice(afterIndex);
+        // If there's another timestamp, only take text up to it
+        const nextTs = timestamps.find(t => t.position > ts.position);
+        if (nextTs) {
+          afterText = text.slice(afterIndex, nextTs.position);
+        }
+        afterText = afterText.split(/[\n\r]/)[0]; // Take first line only
+        afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
+
+        const info = parseTrackInfo(afterText);
+        if (info) {
+          addTrack(ts, info, comment, false);
+        }
+      }
+    }
+    // CASE 3: Reply comment inheriting timestamp from parent
+    // "What's this track at 45:30?" -> Reply: "It's Fisher - Losing It"
+    else if (comment.isReply && comment.parentTimestamp) {
+      const info = parseTrackInfo(text);
+      if (info) {
+        addTrack(comment.parentTimestamp, info, comment, false);
+      }
+    }
   }
+
+  console.log(`Parsed ${tracks.length} tracks from comments`);
   return tracks.sort((a, b) => a.timestamp - b.timestamp);
 }
 
@@ -476,6 +561,272 @@ function parseArtistFromTitle(title) {
     if (match) return { artist: match[1].trim(), name: title };
   }
   return { name: title, artist: 'Unknown Artist' };
+}
+
+/**
+ * Canonical venue database - maps variations to standard venue names with locations
+ */
+const VENUE_DATABASE = {
+  // Ibiza
+  'ushuaia': { name: 'Ushuaïa', location: 'Ibiza, Spain', aliases: ['ushuaïa', 'ushuaia ibiza'] },
+  'hi ibiza': { name: 'Hï Ibiza', location: 'Ibiza, Spain', aliases: ['hï ibiza', 'hi-ibiza'] },
+  'pacha': { name: 'Pacha', location: 'Ibiza, Spain', aliases: ['pacha ibiza'] },
+  'amnesia': { name: 'Amnesia', location: 'Ibiza, Spain', aliases: ['amnesia ibiza'] },
+  'dc10': { name: 'DC-10', location: 'Ibiza, Spain', aliases: ['dc-10', 'dc 10'] },
+  'privilege': { name: 'Privilege', location: 'Ibiza, Spain', aliases: ['privilege ibiza'] },
+
+  // Berlin
+  'berghain': { name: 'Berghain', location: 'Berlin, Germany', aliases: ['berghain berlin'] },
+  'tresor': { name: 'Tresor', location: 'Berlin, Germany', aliases: ['tresor berlin'] },
+  'watergate': { name: 'Watergate', location: 'Berlin, Germany', aliases: [] },
+
+  // London/UK
+  'fabric': { name: 'Fabric', location: 'London, UK', aliases: ['fabric london'] },
+  'printworks': { name: 'Printworks', location: 'London, UK', aliases: ['printworks london'] },
+  'warehouse project': { name: 'The Warehouse Project', location: 'Manchester, UK', aliases: ['twp', 'whp'] },
+  'depot': { name: 'Depot', location: 'UK', aliases: ['depot mayfield'] },
+  'motion': { name: 'Motion', location: 'Bristol, UK', aliases: [] },
+
+  // New York
+  'brooklyn mirage': { name: 'Brooklyn Mirage', location: 'New York, USA', aliases: ['the brooklyn mirage', 'mirage'] },
+  'avant gardner': { name: 'Avant Gardner', location: 'New York, USA', aliases: ['avant gardener'] },
+  'output': { name: 'Output', location: 'Brooklyn, USA', aliases: ['output brooklyn'] },
+  'nowadays': { name: 'Nowadays', location: 'New York, USA', aliases: [] },
+
+  // Miami
+  'space miami': { name: 'Club Space', location: 'Miami, USA', aliases: ['club space', 'space'] },
+  'e11even': { name: 'E11EVEN', location: 'Miami, USA', aliases: ['eleven', 'e11even miami'] },
+
+  // LA
+  'exchange la': { name: 'Exchange LA', location: 'Los Angeles, USA', aliases: ['exchange'] },
+  'sound nightclub': { name: 'Sound Nightclub', location: 'Los Angeles, USA', aliases: ['sound la'] },
+
+  // Amsterdam
+  'de school': { name: 'De School', location: 'Amsterdam, Netherlands', aliases: [] },
+  'shelter': { name: 'Shelter', location: 'Amsterdam, Netherlands', aliases: ['shelter amsterdam'] },
+
+  // Festivals
+  'tomorrowland': { name: 'Tomorrowland', location: 'Belgium', aliases: ['tomorrowland belgium'] },
+  'coachella': { name: 'Coachella', location: 'California, USA', aliases: ['coachella festival'] },
+  'awakenings': { name: 'Awakenings', location: 'Amsterdam, Netherlands', aliases: ['awakenings festival'] },
+  'time warp': { name: 'Time Warp', location: 'Germany', aliases: ['timewarp'] },
+  'movement': { name: 'Movement', location: 'Detroit, USA', aliases: ['movement detroit', 'demf'] },
+  'ultra': { name: 'Ultra Music Festival', location: 'Miami, USA', aliases: ['ultra miami', 'umf'] },
+  'edc': { name: 'EDC', location: 'Las Vegas, USA', aliases: ['electric daisy carnival', 'edc vegas', 'edc las vegas'] },
+  'creamfields': { name: 'Creamfields', location: 'UK', aliases: ['creamfields uk'] },
+  'mysteryland': { name: 'Mysteryland', location: 'Netherlands', aliases: [] },
+  'sonar': { name: 'Sónar', location: 'Barcelona, Spain', aliases: ['sonar barcelona', 'sonar festival'] },
+  'bpm festival': { name: 'BPM Festival', location: 'Various', aliases: ['bpm'] },
+
+  // Radio/Online
+  'bbc radio 1': { name: 'BBC Radio 1', location: 'UK', aliases: ['radio 1', 'bbc r1', 'radio one'] },
+  'essential mix': { name: 'Essential Mix', location: 'BBC Radio 1', aliases: [] },
+  'boiler room': { name: 'Boiler Room', location: 'Various', aliases: ['br'] },
+  'cercle': { name: 'Cercle', location: 'Various', aliases: [] },
+  'resident advisor': { name: 'Resident Advisor', location: 'Various', aliases: ['ra'] },
+
+  // Events/Brands
+  'circoloco': { name: 'Circoloco', location: 'Various', aliases: ['circo loco'] },
+  'defected': { name: 'Defected', location: 'Various', aliases: ['defected records'] },
+  'drumcode': { name: 'Drumcode', location: 'Various', aliases: ['drum code'] },
+  'afterlife': { name: 'Afterlife', location: 'Various', aliases: [] },
+  'ants': { name: 'ANTS', location: 'Ushuaïa Ibiza', aliases: ['ants ibiza'] },
+  'resistance': { name: 'Resistance', location: 'Various', aliases: ['ultra resistance'] },
+  'elrow': { name: 'elrow', location: 'Various', aliases: ['el row'] },
+};
+
+// Countries and states to strip from set names
+const COUNTRIES_AND_STATES = [
+  'usa', 'united states', 'uk', 'united kingdom', 'spain', 'germany', 'netherlands',
+  'belgium', 'france', 'italy', 'portugal', 'croatia', 'mexico', 'brazil', 'australia',
+  'japan', 'china', 'canada', 'argentina', 'colombia', 'chile', 'peru',
+  'california', 'new york', 'florida', 'texas', 'nevada', 'colorado', 'arizona',
+  'illinois', 'michigan', 'georgia', 'massachusetts', 'washington', 'oregon'
+];
+
+/**
+ * Normalize venue name to canonical form
+ */
+function normalizeVenue(venueName) {
+  if (!venueName) return null;
+
+  const lower = venueName.toLowerCase().trim();
+
+  // Check exact matches and aliases
+  for (const [key, data] of Object.entries(VENUE_DATABASE)) {
+    if (lower === key || lower.includes(key)) {
+      return { venue: data.name, location: data.location };
+    }
+    for (const alias of data.aliases) {
+      if (lower === alias || lower.includes(alias)) {
+        return { venue: data.name, location: data.location };
+      }
+    }
+  }
+
+  // Return original if no match, cleaned up
+  return { venue: venueName.trim(), location: null };
+}
+
+/**
+ * Enhanced parsing to extract artist, event name, venue, and location from title
+ * Handles formats like:
+ * - "John Summit @ BBC Radio 1 Presents ANTS Metalworks, Ushuaïa Ibiza"
+ * - "Chris Stussy @ Hudson River Boat Party, New York for Teksupport"
+ * - "Amelie Lens | Awakenings Festival 2024"
+ * - "Fisher - Live at Tomorrowland 2024"
+ */
+function parseSetInfo(title) {
+  const result = {
+    name: title,
+    artist: 'Unknown Artist',
+    venue: null,
+    location: null,
+  };
+
+  const lowerTitle = title.toLowerCase();
+
+  // Step 1: Extract artist (before @ | - or "at"/"live at")
+  const artistPatterns = [
+    /^(.+?)\s*[@]\s*(.+)$/i,
+    /^(.+?)\s*[|]\s*(.+)$/i,
+    /^(.+?)\s*[-–—]\s*(?:live\s+)?(?:at\s+)?(.+)$/i,
+    /^(.+?)\s+live\s+(?:at\s+)?(.+)$/i,
+    /^(.+?)\s+at\s+(.+)$/i,
+  ];
+
+  let artistPart = null;
+  let restPart = title;
+
+  for (const pattern of artistPatterns) {
+    const match = title.match(pattern);
+    if (match) {
+      artistPart = match[1].trim();
+      restPart = match[2].trim();
+      break;
+    }
+  }
+
+  if (artistPart) {
+    result.artist = artistPart;
+  }
+
+  // Step 2: Check for known venues in the VENUE_DATABASE
+  for (const [key, data] of Object.entries(VENUE_DATABASE)) {
+    const allTerms = [key, ...data.aliases];
+    for (const term of allTerms) {
+      if (lowerTitle.includes(term)) {
+        result.venue = data.name;
+        result.location = data.location;
+        break;
+      }
+    }
+    if (result.venue) break;
+  }
+
+  // Step 3: Check for "for [event organizer]" pattern (e.g., "for Teksupport")
+  const forMatch = restPart.match(/^(.+?)\s+for\s+(.+)$/i);
+  let eventOrganizer = null;
+  if (forMatch) {
+    restPart = forMatch[1].trim();
+    eventOrganizer = forMatch[2].trim();
+  }
+
+  // Step 4: Parse comma-separated parts for venue/location
+  const commaParts = restPart.split(/[,]/);
+
+  if (commaParts.length >= 2) {
+    const lastPart = commaParts[commaParts.length - 1].trim();
+    const lastPartLower = lastPart.toLowerCase();
+
+    // Check if last part is a country/state (should go to location, not name)
+    const isCountryOrState = COUNTRIES_AND_STATES.some(cs =>
+      lastPartLower === cs || lastPartLower.includes(cs)
+    );
+
+    if (isCountryOrState) {
+      // This should be the location
+      if (!result.location) {
+        result.location = lastPart;
+      }
+
+      // Check if second-to-last is the venue
+      if (commaParts.length > 2) {
+        const secondLastPart = commaParts[commaParts.length - 2].trim();
+        const normalized = normalizeVenue(secondLastPart);
+        if (!result.venue) {
+          result.venue = normalized.venue;
+        }
+        result.name = commaParts.slice(0, -2).join(', ').trim();
+      } else {
+        result.name = commaParts.slice(0, -1).join(', ').trim();
+      }
+    } else {
+      // Last part might be a city/venue
+      const normalized = normalizeVenue(lastPart);
+      if (!result.venue && normalized.venue) {
+        result.venue = normalized.venue;
+        if (normalized.location && !result.location) {
+          result.location = normalized.location;
+        }
+      }
+      result.name = commaParts.slice(0, -1).join(', ').trim();
+    }
+  }
+
+  // Step 5: If no name extracted yet, build from restPart
+  if (!result.name || result.name === title) {
+    if (artistPart && restPart) {
+      let eventName = restPart;
+
+      // Remove venue and location from name if they appear
+      if (result.venue) {
+        eventName = eventName.replace(new RegExp(result.venue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '');
+      }
+      if (result.location) {
+        eventName = eventName.replace(new RegExp(result.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), '');
+      }
+
+      // Remove country/state names from the event name
+      for (const cs of COUNTRIES_AND_STATES) {
+        eventName = eventName.replace(new RegExp(`\\b${cs}\\b`, 'gi'), '');
+      }
+
+      // Clean up
+      eventName = eventName
+        .replace(/^[,\s@|\\-–—]+|[,\s@|\\-–—]+$/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (eventName && eventName.length > 2) {
+        result.name = eventName;
+      } else if (result.venue) {
+        // Use venue as the name if nothing else
+        result.name = result.venue;
+      } else {
+        result.name = restPart;
+      }
+    }
+  }
+
+  // Step 6: If name still equals full title and we have artist, clean it up
+  if (result.name === title && result.artist !== 'Unknown Artist') {
+    result.name = title.replace(new RegExp(`^${result.artist.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[@|\\-–—]\\s*`, 'i'), '').trim();
+  }
+
+  // Step 7: Include event organizer in name if found
+  if (eventOrganizer && !result.name.toLowerCase().includes(eventOrganizer.toLowerCase())) {
+    result.name = `${result.name} for ${eventOrganizer}`;
+  }
+
+  // Step 8: Final cleanup - remove any trailing country/state from name
+  for (const cs of COUNTRIES_AND_STATES) {
+    result.name = result.name.replace(new RegExp(`[,\\s]+${cs}[,\\s]*$`, 'gi'), '').trim();
+  }
+
+  console.log(`[parseSetInfo] "${title}" -> artist: "${result.artist}", name: "${result.name}", venue: "${result.venue}", location: "${result.location}"`);
+
+  return result;
 }
 
 function parseDuration(isoDuration) {
@@ -981,10 +1332,12 @@ async function importFromSoundCloud(url) {
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
   
-  // Parse artist/title 
-  const { name, artist } = parseArtistFromTitle(title);
-  const finalArtist = artist !== 'Unknown Artist' ? artist : artistFromPage;
-  const finalName = name || title;
+  // Parse artist/title/venue/location
+  const setInfo = parseSetInfo(title);
+  const finalArtist = setInfo.artist !== 'Unknown Artist' ? setInfo.artist : artistFromPage;
+  const finalName = setInfo.name || title;
+  const finalVenue = setInfo.venue || null;
+  const finalLocation = setInfo.location || null;
   const setId = `sc-${oembedInfo.id}-${Date.now()}`;
   
   // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
@@ -999,6 +1352,8 @@ async function importFromSoundCloud(url) {
     id: setId,
     name: finalName,
     artist: finalArtist,
+    venue: finalVenue,
+    location: finalLocation,
     date: pageInfo?.createdAt || new Date().toISOString(),
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,
@@ -1326,15 +1681,30 @@ async function importFromYouTube(url, apiKey) {
     fetchVideoComments(videoId, apiKey, 500),
   ]);
 
-  // Extract DJ/artist name from video title FIRST so we can filter it from tracks
-  const { name, artist } = parseArtistFromTitle(video.title);
+  // Extract DJ/artist name, event name, venue, location from video title
+  const setInfo = parseSetInfo(video.title);
+  const { name, artist, venue, location } = setInfo;
   const djName = artist !== 'Unknown Artist' ? artist : video.channelTitle;
 
   const descTracks = parseDescription(video.description, djName);
+  console.log(`[YouTube Import] Description tracks: ${descTracks.length}`);
+
   const commentTracks = parseComments(comments, djName);
+  console.log(`[YouTube Import] Comment tracks: ${commentTracks.length}`);
+
+  // Log sample of found tracks
+  if (commentTracks.length > 0) {
+    console.log(`[YouTube Import] Sample comment tracks:`, commentTracks.slice(0, 5).map(t => ({
+      timestamp: t.timestampFormatted,
+      artist: t.artist,
+      title: t.title,
+      author: t.sourceAuthor,
+    })));
+  }
 
   // Combine description and comment tracks
   const allTracks = [...descTracks, ...commentTracks];
+  console.log(`[YouTube Import] Total tracks before dedup: ${allTracks.length}`);
   const setId = `yt-${video.id}-${Date.now()}`;
   
   // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
@@ -1349,6 +1719,8 @@ async function importFromYouTube(url, apiKey) {
     id: setId,
     name,
     artist: djName,
+    venue: venue || null,
+    location: location || null,
     date: video.publishedAt,
     tracks: tracks.map((pt, i) => ({
       id: `imported-${Date.now()}-${i}`,

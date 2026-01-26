@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, MessageSquare, AlertCircle, Calendar, MapPin, Ticket } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, Sparkles, FileQuestion } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -9,6 +9,7 @@ import { SetList } from '@/types';
 interface SetFeedCardProps {
   setList: SetList;
   onPress?: () => void;
+  onArtistPress?: (artist: string) => void;
 }
 
 const coverImages = [
@@ -20,11 +21,103 @@ const coverImages = [
   'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
 ];
 
-export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
+// Venue to location mapping for deriving location from venue
+const VENUE_LOCATIONS: Record<string, string> = {
+  'Ushuaïa': 'Ibiza, Spain',
+  'Hï Ibiza': 'Ibiza, Spain',
+  'Pacha': 'Ibiza, Spain',
+  'Amnesia': 'Ibiza, Spain',
+  'DC-10': 'Ibiza, Spain',
+  'Privilege': 'Ibiza, Spain',
+  'Berghain': 'Berlin, Germany',
+  'Tresor': 'Berlin, Germany',
+  'Watergate': 'Berlin, Germany',
+  'Fabric': 'London, UK',
+  'Printworks': 'London, UK',
+  'The Warehouse Project': 'Manchester, UK',
+  'Motion': 'Bristol, UK',
+  'Brooklyn Mirage': 'New York, USA',
+  'Avant Gardner': 'New York, USA',
+  'Nowadays': 'New York, USA',
+  'Hudson River': 'New York, USA',
+  'Club Space': 'Miami, USA',
+  'E11EVEN': 'Miami, USA',
+  'Exchange LA': 'Los Angeles, USA',
+  'Sound Nightclub': 'Los Angeles, USA',
+  'De School': 'Amsterdam, Netherlands',
+  'Shelter': 'Amsterdam, Netherlands',
+  'Tomorrowland': 'Belgium',
+  'Coachella': 'California, USA',
+  'Awakenings': 'Amsterdam, Netherlands',
+  'Time Warp': 'Germany',
+  'Movement': 'Detroit, USA',
+  'Ultra Music Festival': 'Miami, USA',
+  'EDC': 'Las Vegas, USA',
+  'Creamfields': 'UK',
+  'Sónar': 'Barcelona, Spain',
+  'BPM Festival': 'Various',
+  'BBC Radio 1': 'UK',
+  'Essential Mix': 'BBC Radio 1',
+  'Boiler Room': 'Various',
+  'Cercle': 'Various',
+  'Circoloco': 'Various',
+  'Defected': 'Various',
+  'Drumcode': 'Various',
+  'Afterlife': 'Various',
+  'ANTS': 'Ibiza, Spain',
+  'Resistance': 'Various',
+  'elrow': 'Various',
+  'Music On': 'Various',
+  'Teksupport': 'New York, USA',
+};
+
+export default function SetFeedCard({ setList, onPress, onArtistPress }: SetFeedCardProps) {
+  const [showArtistPicker, setShowArtistPicker] = useState(false);
+
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress?.();
   };
+
+  const handleArtistPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // If multiple artists, show picker popup
+    if (artists.length > 1) {
+      setShowArtistPicker(true);
+    } else if (artists.length === 1) {
+      onArtistPress?.(artists[0]);
+    }
+  };
+
+  const handleSelectArtist = (artistName: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowArtistPicker(false);
+    onArtistPress?.(artistName);
+  };
+
+  // Parse multiple artists from name (handles &, and, vs, b2b, b3b patterns)
+  const parseArtists = (artistString: string): string[] => {
+    // Split on common separators: &, " and ", " vs ", " b2b ", " b3b ", " B2B ", " B3B "
+    const separatorPattern = /\s*(?:&|,|\s+and\s+|\s+vs\.?\s+|\s+[bB]2[bB]\s+|\s+[bB]3[bB]\s+)\s*/;
+    return artistString.split(separatorPattern).map(a => a.trim()).filter(a => a.length > 0);
+  };
+
+  // Extract artists - check if set name contains more artists than the artist field
+  const getArtists = (): string[] => {
+    // First check if the set name starts with multiple artists before " - " or " @ "
+    const nameMatch = setList.name.match(/^(.+?)\s*[-–@]\s*/);
+    if (nameMatch) {
+      const potentialArtists = parseArtists(nameMatch[1]);
+      // If set name has more artists than the artist field, use those
+      if (potentialArtists.length > 1) {
+        return potentialArtists;
+      }
+    }
+    // Otherwise parse the artist field
+    return parseArtists(setList.artist);
+  };
+
+  const artists = getArtists();
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -33,28 +126,12 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${mins}m`;
   };
 
-  const formatPlays = (plays: number) => {
-    if (plays >= 1000000) return `${(plays / 1000000).toFixed(1)}M`;
-    if (plays >= 1000) return `${(plays / 1000).toFixed(0)}K`;
-    return plays.toString();
-  };
-
-  const formatDate = (date: Date) => {
-    const now = new Date();
-    const diff = now.getTime() - new Date(date).getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days}d ago`;
-    if (days < 30) return `${Math.floor(days / 7)}w ago`;
-    if (days < 365) return `${Math.floor(days / 30)}mo ago`;
-    return `${Math.floor(days / 365)}y ago`;
-  };
+  // Helper to escape regex special characters
+  const escapeRegex = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
   // Parse set name to extract venue, location, and date
-  // Format: "Artist @ Venue/Event, Location YYYY-MM-DD" or "Event Name YYYY-MM-DD"
-  const parseSetName = (name: string) => {
+  // Remove artist name(s) if they appear at the start (since they're shown separately)
+  const parseSetName = (name: string, artistNames: string[]) => {
     let workingName = name;
     let eventDate: Date | null = null;
     let venue: string | null = null;
@@ -86,32 +163,45 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
       }
     }
 
-    // Now parse venue and location from the remaining name
-    // Pattern: "Artist @ Venue, City, Country" or "Venue, City, Country" or "Event - Venue"
+    // Try to remove artist name(s) from the beginning and extract the set/event name
+    // Pattern 1: "Artist @ Venue, Location" -> extract "Venue, Location"
     const atMatch = workingName.match(/@\s*(.+)$/);
     if (atMatch) {
       const afterAt = atMatch[1].trim();
-      // Split by comma to get venue and location parts
       const parts = afterAt.split(',').map(p => p.trim());
 
       if (parts.length >= 2) {
-        // First part is venue, rest is location
         venue = parts[0];
         location = parts.slice(1).join(', ');
       } else if (parts.length === 1) {
-        // Just venue, no separate location
         venue = parts[0];
       }
 
-      // Clean name is everything before @
-      workingName = workingName.replace(/@\s*.+$/, '').trim();
+      // Display the full venue/event string
+      workingName = afterAt;
     } else {
-      // No @ symbol - try splitting by comma for radio shows etc
-      // e.g., "Marsolo - Circoloco Radio 429"
-      const dashMatch = workingName.match(/^(.+?)\s*-\s*(.+)$/);
+      // Pattern 2: "Artist1 & Artist2 & Artist3 - Set Name" -> extract "Set Name"
+      // Match everything before " - " or " – " and check if it contains our artists
+      const dashMatch = workingName.match(/^(.+?)\s*[-–]\s*(.+)$/);
       if (dashMatch) {
-        venue = dashMatch[2].trim();
-        workingName = dashMatch[1].trim();
+        const beforeDash = dashMatch[1].trim();
+        const afterDash = dashMatch[2].trim();
+
+        // Check if the part before dash contains any of our artists
+        const containsArtist = artistNames.some(artist =>
+          beforeDash.toLowerCase().includes(artist.toLowerCase())
+        );
+
+        if (containsArtist) {
+          workingName = afterDash;
+        }
+      } else {
+        // Pattern 3: Check if name starts with single artist and has colon/pipe separator
+        const artistName = artistNames[0] || '';
+        const colonMatch = workingName.match(new RegExp(`^${escapeRegex(artistName)}\\s*[:\\|]\\s*(.+)$`, 'i'));
+        if (colonMatch) {
+          workingName = colonMatch[1].trim();
+        }
       }
     }
 
@@ -124,7 +214,11 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   };
 
-  const { cleanName, eventDate, venue, location } = parseSetName(setList.name);
+  const { cleanName, eventDate, venue: parsedVenue, location: parsedLocation } = parseSetName(setList.name, artists);
+
+  // Use database fields if available, fall back to parsed values, then venue lookup
+  const venue = setList.venue || parsedVenue;
+  const location = setList.location || parsedLocation || (venue ? VENUE_LOCATIONS[venue] : null);
 
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
@@ -167,7 +261,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
     const unique = [...new Set(platforms)];
 
     return unique.slice(0, 3).map((platform, index) => {
-      const iconProps = { size: 12 };
+      const iconProps = { size: 16 };
       switch (platform) {
         case 'youtube':
           return <Youtube key={index} {...iconProps} color="#FF0000" />;
@@ -182,19 +276,29 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
   };
 
   // Check if set needs analyzable sources (YouTube or SoundCloud)
-  const needsSource = !setList.sourceLinks.some(
+  const hasAnalyzableSource = setList.sourceLinks.some(
     l => l.platform === 'youtube' || l.platform === 'soundcloud'
   );
+  const needsSource = !hasAnalyzableSource;
+
+  // Check if set has been IDentified (analyzed via YouTube/SoundCloud)
+  const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
+  const isIdentified = hasAnalyzableSource && (setList.aiProcessed || trackCount > 0);
+  const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
+
+  // Keep full name for search indexing
+  const searchableText = `${setList.name} ${setList.artist} ${venue || ''} ${location || ''}`.trim();
 
   return (
-    <Pressable 
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]} 
+    <Pressable
+      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
+      accessibilityLabel={searchableText}
     >
       <View style={styles.row}>
         <View style={styles.coverContainer}>
-          <Image 
-            source={{ uri: getCoverImage() }} 
+          <Image
+            source={{ uri: getCoverImage() }}
             style={styles.cover}
             contentFit="cover"
             onError={handleImageError}
@@ -202,7 +306,7 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
           />
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
-              <Play size={18} color="#fff" fill="#fff" />
+              <Play size={14} color="#fff" fill="#fff" />
             </View>
           </View>
           {(setList.totalDuration || 0) > 0 && (
@@ -210,47 +314,54 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
               <Text style={styles.durationText}>{formatDuration(setList.totalDuration)}</Text>
             </View>
           )}
+          {isFullyIdentified && (
+            <View style={styles.completeBadge}>
+              <Star size={10} color="#FFD700" fill="#FFD700" />
+            </View>
+          )}
         </View>
 
         <View style={styles.content}>
-          <Text style={styles.artist}>{setList.artist}</Text>
+          {/* Top section: Artists on left, Location badges on right */}
+          <View style={styles.topRow}>
+            <Pressable style={styles.artistSection} onPress={handleArtistPress} hitSlop={4}>
+              <View style={styles.artistRow}>
+                {artists.slice(0, 2).map((artist, index) => (
+                  <View key={index} style={styles.artistItem}>
+                    <Text style={styles.artist} numberOfLines={1}>{artist}</Text>
+                    {index < Math.min(artists.length, 2) - 1 && (
+                      <Text style={styles.artistSeparator}>|</Text>
+                    )}
+                  </View>
+                ))}
+                {artists.length > 2 && (
+                  <View style={styles.artistMoreBadge}>
+                    <Text style={styles.artistMoreText}>+{artists.length - 2}</Text>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+            {(venue || location) && (
+              <View style={styles.badgeSection}>
+                {venue && (
+                  <View style={styles.venueBadge}>
+                    <Ticket size={8} color={Colors.dark.primary} />
+                    <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
+                  </View>
+                )}
+                {location && (
+                  <View style={styles.locationBadge}>
+                    <MapPin size={8} color="#6B7280" />
+                    <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+
           <Text style={styles.name} numberOfLines={2}>{cleanName || setList.name}</Text>
 
           <View style={styles.footer}>
-            {/* Venue and Location badges row */}
-            <View style={styles.badgesRow}>
-              {venue && (
-                <View style={styles.venueBadge}>
-                  <Ticket size={9} color={Colors.dark.primary} />
-                  <Text style={styles.venueBadgeText} numberOfLines={1}>{venue}</Text>
-                </View>
-              )}
-              {location && (
-                <View style={styles.locationBadge}>
-                  <MapPin size={9} color="#6B7280" />
-                  <Text style={styles.locationBadgeText} numberOfLines={1}>{location}</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={styles.stats}>
-              {eventDate && (
-                <View style={styles.eventDateBadge}>
-                  <Calendar size={10} color={Colors.dark.primary} />
-                  <Text style={styles.eventDateText}>{formatEventDate(eventDate)}</Text>
-                </View>
-              )}
-              <View style={styles.tracksStat}>
-                <Music size={11} color={Colors.dark.textMuted} />
-                <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
-              </View>
-              {setList.commentsScraped && setList.commentsScraped > 0 && (
-                <View style={styles.tracksStat}>
-                  <MessageSquare size={11} color={Colors.dark.textMuted} />
-                  <Text style={styles.statText}>{setList.commentsScraped}</Text>
-                </View>
-              )}
-            </View>
             <View style={styles.metaRow}>
               <View style={styles.platforms}>
                 {needsSource ? (
@@ -262,11 +373,60 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
                   getPlatformIcons()
                 )}
               </View>
-              <Text style={styles.date}>{formatDate(setList.date)}</Text>
+              <View style={styles.statsRow}>
+                {/* IDentified status badge */}
+                {isIdentified ? (
+                  <View style={styles.identifiedBadge}>
+                    <Sparkles size={8} color={Colors.dark.primary} />
+                    <Text style={styles.identifiedBadgeText}>IDentified</Text>
+                  </View>
+                ) : (
+                  <View style={styles.unanalyzedBadge}>
+                    <FileQuestion size={8} color={Colors.dark.textMuted} />
+                    <Text style={styles.unanalyzedBadgeText}>Unanalyzed</Text>
+                  </View>
+                )}
+                <View style={styles.tracksStat}>
+                  <Music size={10} color={Colors.dark.textMuted} />
+                  <Text style={styles.statText}>{setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0}</Text>
+                </View>
+              </View>
             </View>
           </View>
         </View>
       </View>
+
+      {/* Artist Picker Modal */}
+      <Modal
+        visible={showArtistPicker}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowArtistPicker(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setShowArtistPicker(false)}
+        >
+          <View style={styles.artistPickerContainer}>
+            <View style={styles.artistPickerHeader}>
+              <Text style={styles.artistPickerTitle}>Select Artist</Text>
+              <Pressable onPress={() => setShowArtistPicker(false)} hitSlop={8}>
+                <X size={18} color={Colors.dark.textMuted} />
+              </Pressable>
+            </View>
+            {artists.map((artist, index) => (
+              <Pressable
+                key={index}
+                style={styles.artistPickerItem}
+                onPress={() => handleSelectArtist(artist)}
+              >
+                <User size={14} color={Colors.dark.primary} />
+                <Text style={styles.artistPickerItemText}>{artist}</Text>
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </Pressable>
   );
 }
@@ -274,30 +434,49 @@ export default function SetFeedCard({ setList, onPress }: SetFeedCardProps) {
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginBottom: 12,
     backgroundColor: Colors.dark.surface,
     borderRadius: 14,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 2,
+    elevation: 3,
     borderWidth: 1,
     borderColor: Colors.dark.border,
+    position: 'relative',
   },
   pressed: {
     opacity: 0.95,
     transform: [{ scale: 0.99 }],
   },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 2,
+  },
+  artistSection: {
+    flex: 1,
+    marginRight: 8,
+    maxWidth: '55%',
+  },
+  badgeSection: {
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: 2,
+    flexShrink: 1,
+    maxWidth: '50%',
+  },
   row: {
     flexDirection: 'row',
-    padding: 10,
+    padding: 12,
   },
   coverContainer: {
     position: 'relative',
-    width: 85,
-    height: 85,
+    width: 80,
+    height: 80,
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -316,9 +495,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -326,46 +505,125 @@ const styles = StyleSheet.create({
   },
   durationBadge: {
     position: 'absolute',
-    bottom: 5,
-    right: 5,
+    bottom: 3,
+    right: 3,
     backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 5,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
   },
   durationText: {
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '600' as const,
     color: '#fff',
   },
+  completeBadge: {
+    position: 'absolute',
+    top: 3,
+    left: 3,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 3,
+    borderRadius: 10,
+  },
   content: {
     flex: 1,
-    marginLeft: 12,
-    justifyContent: 'space-between',
+    marginLeft: 10,
+    justifyContent: 'center',
+  },
+  artistRow: {
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    marginBottom: 1,
+    overflow: 'hidden',
+  },
+  artistItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   artist: {
     fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.dark.primary,
-    marginBottom: 1,
+    textShadowColor: `${Colors.dark.primary}60`,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
+  },
+  artistSeparator: {
+    fontSize: 11,
+    fontWeight: '400' as const,
+    color: Colors.dark.primary,
+    opacity: 0.4,
+    marginHorizontal: 6,
+  },
+  artistMoreBadge: {
+    backgroundColor: `${Colors.dark.primary}25`,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  artistMoreText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
   },
   name: {
     fontSize: 14,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 18,
-    marginBottom: 1,
+    lineHeight: 19,
+    marginBottom: 6,
   },
   footer: {
     marginTop: 'auto',
   },
-  badgesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginBottom: 4,
-  },
   venueBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: `${Colors.dark.primary}18`,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 120,
+  },
+  venueBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.primary,
+    fontWeight: '600' as const,
+  },
+  locationBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(107, 114, 128, 0.15)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
+    maxWidth: 120,
+  },
+  locationBadgeText: {
+    fontSize: 8,
+    color: '#6B7280',
+    fontWeight: '500' as const,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  tracksStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  statText: {
+    fontSize: 9,
+    color: Colors.dark.textMuted,
+    fontWeight: '500' as const,
+  },
+  eventDateBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
@@ -373,57 +631,39 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    maxWidth: '60%',
   },
-  venueBadgeText: {
+  eventDateText: {
     fontSize: 9,
     color: Colors.dark.primary,
-    fontWeight: '600' as const,
+    fontWeight: '500' as const,
   },
-  locationBadge: {
+  identifiedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(107, 114, 128, 0.1)',
+    gap: 2,
+    backgroundColor: `${Colors.dark.primary}15`,
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
-    maxWidth: '50%',
   },
-  locationBadgeText: {
-    fontSize: 9,
-    color: '#6B7280',
-    fontWeight: '500' as const,
+  identifiedBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.primary,
+    fontWeight: '600' as const,
   },
-  stats: {
+  unanalyzedBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 4,
-  },
-  tracksStat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  statText: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: '500' as const,
-  },
-  eventDateBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: `${Colors.dark.primary}15`,
-    paddingHorizontal: 6,
+    gap: 2,
+    backgroundColor: 'rgba(107, 114, 128, 0.12)',
+    paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
-  eventDateText: {
-    fontSize: 10,
-    color: Colors.dark.primary,
-    fontWeight: '600' as const,
+  unanalyzedBadgeText: {
+    fontSize: 8,
+    color: Colors.dark.textMuted,
+    fontWeight: '500' as const,
   },
   metaRow: {
     flexDirection: 'row',
@@ -433,12 +673,7 @@ const styles = StyleSheet.create({
   platforms: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-  },
-  date: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: '500' as const,
+    gap: 6,
   },
   needsSourceBadge: {
     flexDirection: 'row',
@@ -446,12 +681,56 @@ const styles = StyleSheet.create({
     gap: 3,
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    paddingVertical: 3,
     borderRadius: 6,
   },
   needsSourceText: {
     fontSize: 9,
     color: Colors.dark.primary,
     fontWeight: '600' as const,
+  },
+  // Artist Picker Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  artistPickerContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 220,
+    maxWidth: 280,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  artistPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  artistPickerTitle: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+  },
+  artistPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+  },
+  artistPickerItemText: {
+    fontSize: 14,
+    color: Colors.dark.text,
+    fontWeight: '500' as const,
   },
 });

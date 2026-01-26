@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle, CircleDot, Sparkles, Volume2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -17,6 +17,7 @@ interface TrackCardProps {
   onUpvote?: () => void;
   onContributorPress?: (username: string) => void;
   onIdentify?: () => void;
+  onListen?: () => void; // Play audio preview to help identify
 }
 
 export default function TrackCard({
@@ -29,6 +30,7 @@ export default function TrackCard({
   onUpvote,
   onContributorPress,
   onIdentify,
+  onListen,
 }: TrackCardProps) {
   const router = useRouter();
   const [showFeaturedModal, setShowFeaturedModal] = useState(false);
@@ -69,7 +71,7 @@ export default function TrackCard({
 
     // Only count actual identification sources/platforms, not flags
     if (track.source === '1001tracklists' || track.source === 'database') {
-      sources.push('1001');
+      sources.push('unverified');
     }
     if (track.source === 'youtube') {
       sources.push('youtube');
@@ -122,7 +124,7 @@ export default function TrackCard({
 
     // BASELINE: From 1001Tracklists - not yet confirmed by comments
     if (track.source === '1001tracklists' || track.source === 'database') {
-      return { icon: '1001', color: '#06B6D4', label: '1001' };
+      return { icon: 'unverified', color: Colors.dark.textMuted, label: 'Unverified' };
     }
 
     // Fallback for ID tracks (unidentified)
@@ -131,7 +133,7 @@ export default function TrackCard({
     }
 
     // Default: baseline data
-    return { icon: '1001', color: '#06B6D4', label: '1001' };
+    return { icon: 'unverified', color: Colors.dark.textMuted, label: 'Unverified' };
   };
 
   const renderSourceIcon = () => {
@@ -146,9 +148,9 @@ export default function TrackCard({
         // Confirmed by YouTube or SoundCloud analysis - show checkmark with platform indicator
         IconComponent = <CheckCircle size={iconSize} color={info.color} />;
         break;
-      case '1001':
-        // Baseline from 1001Tracklists - not yet confirmed
-        IconComponent = <Wand2 size={iconSize} color={info.color} />;
+      case 'unverified':
+        // Baseline data - not yet confirmed by comments
+        IconComponent = <AlertCircle size={iconSize} color={info.color} />;
         break;
       case 'youtube':
         IconComponent = <Youtube size={iconSize} color={info.color} />;
@@ -208,15 +210,6 @@ export default function TrackCard({
     );
   };
 
-  const getSourceBadge = () => {
-    if (track.isUnreleased) {
-      return { label: 'Unreleased', color: '#EC4899' };
-    }
-    // Don't show text badge if we're showing icon
-    return null;
-  };
-
-  const sourceBadge = getSourceBadge();
   const featuredCount = track.featuredIn?.length || 0;
 
   if (compact) {
@@ -234,6 +227,24 @@ export default function TrackCard({
   // Check if this is an unidentified track that needs to be filled in
   const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
 
+  // Check if this is a partial ID - we have the artist but the title is unknown
+  // These should be treated as unreleased since we have some info to work with
+  const isPartialId = isUnidentified &&
+    track.artist &&
+    track.artist.toLowerCase() !== 'id' &&
+    track.artist.toLowerCase() !== 'unknown' &&
+    track.artist.toLowerCase() !== 'unknown artist';
+
+  // Determine if we should show unreleased badge
+  // Show for: explicitly marked unreleased OR partial IDs (we have artist but not title)
+  const showUnreleasedBadge = !isUnidentified && track.isUnreleased;
+  const showPartialIdBadge = isPartialId;
+
+  // Only show "Released" when we have explicit database confirmation
+  // For now, we don't have this matching, so we'll use a placeholder check
+  // This could be: track.isReleased, track.matchedToDatabase, etc.
+  const hasConfirmedRelease = (track as any).isReleased === true || (track as any).matchedToDatabase === true;
+
   return (
     <>
       <Pressable style={[styles.container, isUnidentified && styles.unidentifiedContainer]} onPress={handlePress}>
@@ -249,17 +260,14 @@ export default function TrackCard({
         <View style={styles.info}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, isUnidentified && styles.unidentifiedTitle]} numberOfLines={1}>
-              {isUnidentified ? 'Unknown Track' : track.title}
+              {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : track.title)}
             </Text>
             {isUnidentified && (
               <HelpCircle size={14} color="#cd6a6f" />
             )}
-            {track.isUnreleased && !isUnidentified && (
-              <AlertCircle size={14} color="#EC4899" />
-            )}
           </View>
           <Text style={[styles.artist, isUnidentified && styles.unidentifiedArtist]} numberOfLines={1}>
-            {isUnidentified ? 'Help identify this track' : track.artist}
+            {isPartialId ? track.artist : (isUnidentified ? 'Help identify this track' : track.artist)}
           </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
@@ -272,11 +280,24 @@ export default function TrackCard({
           <View style={styles.meta}>
             {renderSourceIcon()}
             {renderVerificationBadge()}
-            {sourceBadge && (
-              <View style={[styles.sourceBadge, { backgroundColor: `${sourceBadge.color}20` }]}>
-                <Text style={[styles.sourceBadgeText, { color: sourceBadge.color }]}>
-                  {sourceBadge.label}
-                </Text>
+            {/* Release status badges */}
+            {showUnreleasedBadge && (
+              <View style={styles.unreleasedBadge}>
+                <Sparkles size={9} color="#EC4899" />
+                <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+              </View>
+            )}
+            {showPartialIdBadge && (
+              <View style={styles.unreleasedBadge}>
+                <Sparkles size={9} color="#EC4899" />
+                <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+              </View>
+            )}
+            {/* Only show Released badge when we have confirmed database match */}
+            {!isUnidentified && !showUnreleasedBadge && !showPartialIdBadge && hasConfirmedRelease && (
+              <View style={styles.releasedBadge}>
+                <CircleDot size={9} color="#22C55E" />
+                <Text style={styles.releasedBadgeText}>Released</Text>
               </View>
             )}
             {track.trackLinks && track.trackLinks.length > 0 && (
@@ -285,7 +306,7 @@ export default function TrackCard({
               </View>
             )}
             {track.contributedBy && (
-              <Pressable 
+              <Pressable
                 style={styles.contributorTag}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -296,12 +317,24 @@ export default function TrackCard({
                 <Text style={styles.contributorText}>{track.contributedBy}</Text>
               </Pressable>
             )}
-
           </View>
         </View>
         <View style={styles.actions}>
+          {/* Show listen button for unidentified tracks when source is available */}
+          {isUnidentified && onListen && (
+            <Pressable
+              style={styles.listenButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onListen();
+              }}
+            >
+              <Volume2 size={14} color="#FFF" />
+              <Text style={styles.listenButtonText}>Listen</Text>
+            </Pressable>
+          )}
           {/* Show identify button for unidentified tracks */}
-          {isUnidentified && onIdentify && (
+          {isUnidentified && onIdentify && !onListen && (
             <Pressable
               style={styles.identifyButton}
               onPress={() => {
@@ -499,14 +532,35 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#22C55E',
   },
-  sourceBadge: {
+  unreleasedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
+    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(236, 72, 153, 0.3)',
   },
-  sourceBadgeText: {
-    fontSize: 10,
+  unreleasedBadgeText: {
+    fontSize: 9,
     fontWeight: '600' as const,
+    color: '#EC4899',
+  },
+  releasedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+  },
+  releasedBadgeText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    color: '#22C55E',
   },
   linkBadge: {
     backgroundColor: 'rgba(59, 130, 246, 0.15)',
@@ -566,6 +620,20 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   identifyButtonText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: '#FFF',
+  },
+  listenButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  listenButtonText: {
     fontSize: 12,
     fontWeight: '700' as const,
     color: '#FFF',
