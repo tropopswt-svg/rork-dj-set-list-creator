@@ -28,71 +28,61 @@ export default function AnimatedSetCard({
   // centerOffset shifts the "center point" down to account for header elements
   const scrollYWhenCentered = index * CARD_HEIGHT - centerOffset;
 
-  // EXTRA STICKY input range - card stays "locked" at full size much longer
-  // Wide center plateau creates a "snap" feel - requires more scroll to transition
+  // Simple 3-point input range - ONE card is clearly selected at a time
+  // Sharp transitions mean only the centered card is fully elevated
   const inputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 4,    // Card is far below - very small
-    scrollYWhenCentered - CARD_HEIGHT * 2,    // Approaching - start growing slowly
-    scrollYWhenCentered - CARD_HEIGHT * 0.6,  // Nearly centered - accelerate
-    scrollYWhenCentered + CARD_HEIGHT * 0.6,  // At center plateau - stay BIG (wider = stickier)
-    scrollYWhenCentered + CARD_HEIGHT * 2,    // Moving away - start shrinking
-    scrollYWhenCentered + CARD_HEIGHT * 4,    // Card is far above - very small
+    scrollYWhenCentered - CARD_HEIGHT,  // One card away - small
+    scrollYWhenCentered,                 // Perfectly centered - BIG
+    scrollYWhenCentered + CARD_HEIGHT,  // One card away - small
   ];
 
-  // STRONGER scale difference - much clearer which card is selected
+  // Clear scale difference - selected card pops out
   const scale = scrollY.interpolate({
     inputRange,
-    outputRange: [0.78, 0.85, 1.08, 1.08, 0.85, 0.78],
+    outputRange: [0.88, 1.05, 0.88],
     extrapolate: 'clamp',
   });
 
-  // STRONGER opacity contrast
+  // Strong opacity contrast - selected card is bright, others faded
   const opacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.4, 0.6, 1, 1, 0.6, 0.4],
+    outputRange: [0.5, 1, 0.5],
     extrapolate: 'clamp',
   });
 
-  // STRONGER shadow/glow intensity
+  // Glow only on selected card
   const shadowOpacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 0.1, 0.5, 0.5, 0.1, 0],
+    outputRange: [0, 0.4, 0],
     extrapolate: 'clamp',
   });
 
-  // Larger shadow spread for elevated card
+  // Shadow spread
   const shadowRadius = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 4, 24, 24, 4, 0],
+    outputRange: [0, 16, 0],
     extrapolate: 'clamp',
   });
 
-  // More pronounced lift effect
+  // Subtle lift - no bouncing
   const translateY = scrollY.interpolate({
     inputRange,
-    outputRange: [4, 2, -8, -8, 2, 4],
-    extrapolate: 'clamp',
-  });
-
-  // Add horizontal translateX for depth effect (cards offset slightly when not centered)
-  const translateX = scrollY.interpolate({
-    inputRange,
-    outputRange: [8, 4, 0, 0, 4, 8],
+    outputRange: [0, -4, 0],
     extrapolate: 'clamp',
   });
 
   const animatedStyle: Animated.WithAnimatedObject<ViewStyle> = {
-    transform: [{ scale }, { translateY }, { translateX }],
+    transform: [{ scale }, { translateY }],
     opacity,
-    // Strong glow effect - orange tinted shadow for elevated card
+    // Glow effect on selected card
     shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity,
     shadowRadius,
-    // Android elevation - stronger for centered card
+    // Android elevation
     elevation: scrollY.interpolate({
       inputRange,
-      outputRange: [0, 2, 12, 12, 2, 0],
+      outputRange: [1, 8, 1],
       extrapolate: 'clamp',
     }),
   };
