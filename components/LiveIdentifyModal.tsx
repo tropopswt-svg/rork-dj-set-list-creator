@@ -9,11 +9,11 @@ import {
   Dimensions,
   Alert,
   Platform,
+  Easing,
 } from 'react-native';
 import { Audio } from 'expo-av';
 import {
   X,
-  Radio,
   CheckCircle,
   AlertCircle,
   Disc3,
@@ -51,7 +51,114 @@ interface LiveIdentifyModalProps {
 
 type IdentifyState = 'idle' | 'recording' | 'analyzing' | 'success' | 'no_match' | 'error';
 
-const RECORDING_DURATION_MS = 10000; // 10 seconds recording
+// 15 seconds is optimal for ACRCloud - gives enough audio for accurate fingerprinting
+// especially for tracks with long intros or ambient sections
+const RECORDING_DURATION_MS = 15000;
+
+// Generate waveform bars similar to IDentifiedLogo
+const generateBars = (barCount: number) => {
+  return Array.from({ length: barCount }, (_, i) => {
+    const noise1 = Math.sin(i * 0.8) * 0.3;
+    const noise2 = Math.sin(i * 1.7) * 0.2;
+    const noise3 = Math.sin(i * 0.3) * 0.25;
+    const baseHeight = 0.35 + Math.abs(noise1 + noise2 + noise3);
+    return Math.min(1, baseHeight);
+  });
+};
+
+// Animated Waveform Component for scanning visualization
+const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
+  const scrollAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnims = useRef(
+    Array.from({ length: 24 }, () => new Animated.Value(0))
+  ).current;
+
+  const bars = generateBars(24);
+
+  useEffect(() => {
+    if (isActive) {
+      // Scrolling animation at 128 BPM
+      Animated.loop(
+        Animated.timing(scrollAnim, {
+          toValue: 1,
+          duration: 3750,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      ).start();
+
+      // Individual bar pulse animations with staggered delays
+      pulseAnims.forEach((anim, index) => {
+        Animated.loop(
+          Animated.sequence([
+            Animated.delay(index * 50),
+            Animated.timing(anim, {
+              toValue: 1,
+              duration: 300,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(anim, {
+              toValue: 0,
+              duration: 300,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ])
+        ).start();
+      });
+    } else {
+      scrollAnim.stopAnimation();
+      scrollAnim.setValue(0);
+      pulseAnims.forEach(anim => {
+        anim.stopAnimation();
+        anim.setValue(0);
+      });
+    }
+
+    return () => {
+      scrollAnim.stopAnimation();
+      pulseAnims.forEach(anim => anim.stopAnimation());
+    };
+  }, [isActive]);
+
+  const translateX = scrollAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -100],
+  });
+
+  return (
+    <View style={styles.waveformContainer}>
+      <Animated.View
+        style={[
+          styles.waveformInner,
+          { transform: [{ translateX }] },
+        ]}
+      >
+        {[...bars, ...bars].map((barHeight, idx) => {
+          const pulseIndex = idx % pulseAnims.length;
+          const scale = pulseAnims[pulseIndex].interpolate({
+            inputRange: [0, 1],
+            outputRange: [1, 1.4],
+          });
+
+          return (
+            <Animated.View
+              key={idx}
+              style={[
+                styles.waveformBar,
+                {
+                  height: barHeight * 60,
+                  transform: [{ scaleY: scale }],
+                },
+              ]}
+            />
+          );
+        })}
+      </Animated.View>
+    </View>
+  );
+};
 
 export default function LiveIdentifyModal({
   visible,
@@ -59,19 +166,16 @@ export default function LiveIdentifyModal({
   onTrackIdentified,
 }: LiveIdentifyModalProps) {
   const [state, setState] = useState<IdentifyState>('idle');
-  const [progress, setProgress] = useState(0);
   const [identifiedTrack, setIdentifiedTrack] = useState<IdentifiedTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
-  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const waveAnim1 = useRef(new Animated.Value(0)).current;
-  const waveAnim2 = useRef(new Animated.Value(0)).current;
-  const waveAnim3 = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   const identifyMutation = trpc.scraper.identifyTrackFromAudio.useMutation();
@@ -94,11 +198,9 @@ export default function LiveIdentifyModal({
   useEffect(() => {
     if (visible) {
       setState('idle');
-      setProgress(0);
       setIdentifiedTrack(null);
       setError(null);
 
-      // Fade in animation
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
@@ -110,70 +212,55 @@ export default function LiveIdentifyModal({
     }
   }, [visible]);
 
-  // Wave animations for recording state
+  // Pulse and glow animations
   useEffect(() => {
-    if (state === 'recording' || state === 'analyzing') {
-      // Pulsing animation
+    if (state === 'idle' || state === 'recording') {
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.15,
-            duration: 600,
+            toValue: 1.05,
+            duration: 1000,
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 600,
+            duration: 1000,
             useNativeDriver: true,
           }),
         ])
       ).start();
 
-      // Wave animations
-      const animateWave = (anim: Animated.Value, delay: number) => {
-        Animated.loop(
-          Animated.sequence([
-            Animated.delay(delay),
-            Animated.timing(anim, {
-              toValue: 1,
-              duration: 1500,
-              useNativeDriver: true,
-            }),
-            Animated.timing(anim, {
-              toValue: 0,
-              duration: 0,
-              useNativeDriver: true,
-            }),
-          ])
-        ).start();
-      };
-
-      animateWave(waveAnim1, 0);
-      animateWave(waveAnim2, 500);
-      animateWave(waveAnim3, 1000);
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(glowAnim, {
+            toValue: 0.8,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(glowAnim, {
+            toValue: 0.3,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     } else {
       pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
-      waveAnim1.stopAnimation();
-      waveAnim2.stopAnimation();
-      waveAnim3.stopAnimation();
-      waveAnim1.setValue(0);
-      waveAnim2.setValue(0);
-      waveAnim3.setValue(0);
+      glowAnim.stopAnimation();
+      glowAnim.setValue(0.3);
     }
 
     return () => {
       pulseAnim.stopAnimation();
-      waveAnim1.stopAnimation();
-      waveAnim2.stopAnimation();
-      waveAnim3.stopAnimation();
+      glowAnim.stopAnimation();
     };
   }, [state]);
 
   const stopRecording = useCallback(async () => {
-    if (progressInterval.current) {
-      clearInterval(progressInterval.current);
-      progressInterval.current = null;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
 
     if (recordingRef.current) {
@@ -202,33 +289,25 @@ export default function LiveIdentifyModal({
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       setState('recording');
-      setProgress(0);
       setError(null);
       setIdentifiedTrack(null);
 
-      // Configure audio mode
+      // Configure audio mode for optimal recording
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
 
-      // Create and start recording
+      // Create and start recording with high quality settings
       const { recording } = await Audio.Recording.createAsync(
         Audio.RecordingOptionsPresets.HIGH_QUALITY
       );
       recordingRef.current = recording;
 
-      // Progress timer
-      const startTime = Date.now();
-      progressInterval.current = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const newProgress = Math.min(elapsed / RECORDING_DURATION_MS, 1);
-        setProgress(newProgress);
-
-        if (elapsed >= RECORDING_DURATION_MS) {
-          finishRecording();
-        }
-      }, 100);
+      // Auto-finish after duration
+      timeoutRef.current = setTimeout(() => {
+        finishRecording();
+      }, RECORDING_DURATION_MS);
 
     } catch (err) {
       console.error('[LiveIdentify] Failed to start recording:', err);
@@ -243,16 +322,15 @@ export default function LiveIdentifyModal({
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setState('analyzing');
-      setProgress(1);
 
       // Stop recording
       await recordingRef.current.stopAndUnloadAsync();
       const uri = recordingRef.current.getURI();
       recordingRef.current = null;
 
-      if (progressInterval.current) {
-        clearInterval(progressInterval.current);
-        progressInterval.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
 
       if (!uri) {
@@ -309,7 +387,6 @@ export default function LiveIdentifyModal({
   const handleTryAgain = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setState('idle');
-    setProgress(0);
     setIdentifiedTrack(null);
     setError(null);
   };
@@ -325,15 +402,29 @@ export default function LiveIdentifyModal({
         return (
           <View style={styles.centerContent}>
             <Text style={styles.instructionText}>
-              Tap to start listening
+              Tap to identify
             </Text>
-            <Pressable style={styles.idButton} onPress={startRecording}>
-              <View style={styles.idButtonInner}>
+            <Pressable style={styles.idButtonOuter} onPress={startRecording}>
+              <Animated.View
+                style={[
+                  styles.idButtonGlow,
+                  { opacity: glowAnim }
+                ]}
+              />
+              <Animated.View
+                style={[
+                  styles.idButton,
+                  { transform: [{ scale: pulseAnim }] }
+                ]}
+              >
+                <View style={styles.idButtonWaveContainer}>
+                  <ScanningWaveform isActive={false} />
+                </View>
                 <Text style={styles.idButtonText}>ID</Text>
-              </View>
+              </Animated.View>
             </Pressable>
             <Text style={styles.hintText}>
-              Hold your phone near the music source
+              Hold your phone near the music
             </Text>
           </View>
         );
@@ -342,80 +433,29 @@ export default function LiveIdentifyModal({
         return (
           <View style={styles.centerContent}>
             <Text style={styles.listeningText}>Listening...</Text>
-            <View style={styles.recordingContainer}>
-              {/* Animated waves */}
+            <View style={styles.recordingOuter}>
               <Animated.View
                 style={[
-                  styles.wave,
-                  {
-                    opacity: waveAnim1.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.6, 0],
-                    }),
-                    transform: [
-                      {
-                        scale: waveAnim1.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 2],
-                        }),
-                      },
-                    ],
-                  },
+                  styles.recordingGlow,
+                  { opacity: glowAnim }
                 ]}
               />
-              <Animated.View
-                style={[
-                  styles.wave,
-                  {
-                    opacity: waveAnim2.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.6, 0],
-                    }),
-                    transform: [
-                      {
-                        scale: waveAnim2.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 2],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.wave,
-                  {
-                    opacity: waveAnim3.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [0.6, 0],
-                    }),
-                    transform: [
-                      {
-                        scale: waveAnim3.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 2],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              />
-              <Animated.View
-                style={[
-                  styles.recordingButton,
-                  { transform: [{ scale: pulseAnim }] },
-                ]}
-              >
-                <Text style={styles.recordingButtonText}>ID</Text>
-              </Animated.View>
+              <View style={styles.recordingButton}>
+                <View style={styles.recordingWaveContainer}>
+                  <ScanningWaveform isActive={true} />
+                </View>
+                <Animated.Text
+                  style={[
+                    styles.recordingIdText,
+                    { transform: [{ scale: pulseAnim }] }
+                  ]}
+                >
+                  ID
+                </Animated.Text>
+              </View>
             </View>
-            {/* Progress bar */}
-            <View style={styles.progressContainer}>
-              <View style={[styles.progressBar, { width: `${progress * 100}%` }]} />
-            </View>
-            <Text style={styles.progressText}>
-              {Math.round(progress * 10)} / 10 seconds
+            <Text style={styles.hintText}>
+              Scanning audio...
             </Text>
           </View>
         );
@@ -424,18 +464,18 @@ export default function LiveIdentifyModal({
         return (
           <View style={styles.centerContent}>
             <Text style={styles.listeningText}>Analyzing...</Text>
-            <View style={styles.recordingContainer}>
+            <View style={styles.analyzingOuter}>
               <Animated.View
                 style={[
                   styles.analyzingButton,
-                  { transform: [{ scale: pulseAnim }] },
+                  { transform: [{ scale: pulseAnim }] }
                 ]}
               >
                 <Disc3 size={48} color={Colors.dark.primary} strokeWidth={1.5} />
               </Animated.View>
             </View>
             <Text style={styles.hintText}>
-              Searching our database...
+              Searching database...
             </Text>
           </View>
         );
@@ -470,7 +510,7 @@ export default function LiveIdentifyModal({
             {identifiedTrack && (
               <View style={styles.confidenceBadge}>
                 <Text style={styles.confidenceText}>
-                  {identifiedTrack.confidence}% confidence
+                  {identifiedTrack.confidence}% match
                 </Text>
               </View>
             )}
@@ -597,6 +637,20 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     marginBottom: 40,
   },
+  // ID Button styles
+  idButtonOuter: {
+    width: 200,
+    height: 200,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  idButtonGlow: {
+    position: 'absolute',
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: Colors.dark.primary,
+  },
   idButton: {
     width: 180,
     height: 180,
@@ -609,20 +663,22 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 20,
     elevation: 15,
+    overflow: 'hidden',
   },
-  idButtonInner: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+  idButtonWaveContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
+    opacity: 0.3,
   },
   idButtonText: {
-    fontSize: 64,
-    fontWeight: '800',
+    fontSize: 72,
+    fontWeight: '900',
     color: '#fff',
-    letterSpacing: -2,
+    letterSpacing: -3,
+    zIndex: 2,
   },
   hintText: {
     fontSize: 14,
@@ -636,62 +692,85 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
     marginBottom: 40,
   },
-  recordingContainer: {
+  // Recording button styles
+  recordingOuter: {
     width: 200,
     height: 200,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 40,
   },
-  wave: {
+  recordingGlow: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: Colors.dark.primary,
   },
   recordingButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.6,
+    shadowRadius: 25,
+    elevation: 20,
+    overflow: 'hidden',
   },
-  recordingButtonText: {
-    fontSize: 42,
-    fontWeight: '800',
+  recordingWaveContainer: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingIdText: {
+    fontSize: 64,
+    fontWeight: '900',
     color: '#fff',
-    letterSpacing: -1,
+    letterSpacing: -2,
+    zIndex: 2,
+  },
+  // Waveform styles
+  waveformContainer: {
+    width: 160,
+    height: 80,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waveformInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 80,
+    gap: 3,
+  },
+  waveformBar: {
+    width: 4,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderRadius: 2,
+  },
+  // Analyzing styles
+  analyzingOuter: {
+    width: 160,
+    height: 160,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   analyzingButton: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     backgroundColor: Colors.dark.surface,
     borderWidth: 3,
     borderColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  progressContainer: {
-    width: width - 80,
-    height: 6,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  progressBar: {
-    height: '100%',
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 3,
-  },
-  progressText: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-    marginTop: 12,
-  },
+  // Result styles
   resultContent: {
     flex: 1,
     alignItems: 'center',
