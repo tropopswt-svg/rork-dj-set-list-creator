@@ -3,9 +3,9 @@ import * as crypto from "crypto";
 import * as path from "path";
 import * as fs from "fs";
 import { spawnSync } from "child_process";
-import { createTRPCRouter, publicProcedure } from "../create-context.js";
+import { createTRPCRouter, publicProcedure } from "../create-context";
 import { tmpdir } from "os";
-import { logACRCloudCall, logSoundCloudCall, logYouTubeCall } from "../../lib/apiLogger.js";
+import { logACRCloudCall, logSoundCloudCall, logYouTubeCall } from "../../lib/apiLogger";
 
 const ScrapedTrack = z.object({
   title: z.string(),

@@ -1,6 +1,6 @@
-import { createTRPCRouter } from "./create-context.js";
-import { scraperRouter } from "./routes/scraper.js";
-import { gapAnalysisRouter } from "./routes/gap-analysis.js";
+import { createTRPCRouter } from "./create-context";
+import { scraperRouter } from "./routes/scraper";
+import { gapAnalysisRouter } from "./routes/gap-analysis";
 
 export const appRouter = createTRPCRouter({
   scraper: scraperRouter,
