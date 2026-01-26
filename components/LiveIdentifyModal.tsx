@@ -22,7 +22,7 @@ import {
   RotateCcw,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
 
@@ -322,7 +322,7 @@ export default function LiveIdentifyModal({
             </Text>
             <Pressable style={styles.idButton} onPress={startRecording}>
               <View style={styles.idButtonInner}>
-                <Radio size={64} color="#fff" strokeWidth={1.5} />
+                <Text style={styles.idButtonText}>ID</Text>
               </View>
             </Pressable>
             <Text style={styles.hintText}>
@@ -400,7 +400,7 @@ export default function LiveIdentifyModal({
                   { transform: [{ scale: pulseAnim }] },
                 ]}
               >
-                <Radio size={48} color="#fff" strokeWidth={1.5} />
+                <Text style={styles.recordingButtonText}>ID</Text>
               </Animated.View>
             </View>
             {/* Progress bar */}
@@ -611,6 +611,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  idButtonText: {
+    fontSize: 64,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -2,
+  },
   hintText: {
     fontSize: 14,
     color: Colors.dark.textMuted,
@@ -645,6 +651,12 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  recordingButtonText: {
+    fontSize: 42,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -1,
   },
   analyzingButton: {
     width: 120,
