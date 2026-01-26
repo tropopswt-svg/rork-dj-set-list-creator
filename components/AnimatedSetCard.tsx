@@ -10,10 +10,11 @@ interface AnimatedSetCardProps {
   scrollY: Animated.Value;
   onPress: () => void;
   onArtistPress: (artist: string) => void;
+  centerOffset?: number; // Offset to adjust where "center" is (accounts for header)
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const CARD_HEIGHT = 116; // Approximate height of SetFeedCard (80px image + padding + margins)
+export const CARD_HEIGHT = 116; // Approximate height of SetFeedCard (80px image + padding + margins)
 
 export default function AnimatedSetCard({
   setList,
@@ -21,9 +22,11 @@ export default function AnimatedSetCard({
   scrollY,
   onPress,
   onArtistPress,
+  centerOffset = 0,
 }: AnimatedSetCardProps) {
   // The scroll value when this card should be perfectly centered
-  const scrollYWhenCentered = index * CARD_HEIGHT;
+  // centerOffset shifts the "center point" down to account for header elements
+  const scrollYWhenCentered = index * CARD_HEIGHT - centerOffset;
 
   // WIDER input range for stronger stickiness - takes more scroll to transition
   // This creates more "drag resistance" so user has to scroll more before

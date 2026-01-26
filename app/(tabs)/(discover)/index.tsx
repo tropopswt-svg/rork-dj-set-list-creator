@@ -1,18 +1,22 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Dimensions, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
-import AnimatedSetCard from '@/components/AnimatedSetCard';
+import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+// Offset to shift the "center" down - accounts for header (~180px) plus moves center below middle
+const CENTER_OFFSET = 100;
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -59,8 +63,10 @@ export default function DiscoverScreen() {
   const [filterSearch, setFilterSearch] = useState('');
   const dropdownAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
   const lastCenteredIndex = useRef(-1);
   const lastHapticTime = useRef(0);
+  const isJumping = useRef(false); // Flag to prevent haptics during scroll position jumps
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
   const [refreshing, setRefreshing] = useState(false);
@@ -126,13 +132,14 @@ export default function DiscoverScreen() {
 
   // Haptic feedback when scrolling through cards
   useEffect(() => {
-    const CARD_HEIGHT = 116;
-    const HEADER_HEIGHT = 180;
     const HAPTIC_THROTTLE_MS = 80; // Minimum time between haptics
 
     const listenerId = scrollY.addListener(({ value }) => {
-      // Calculate which card is currently centered
-      const centeredIndex = Math.round((value + HEADER_HEIGHT) / CARD_HEIGHT);
+      // Skip haptics during loop jump
+      if (isJumping.current) return;
+
+      // Calculate which card is currently centered (adjusted for CENTER_OFFSET)
+      const centeredIndex = Math.round((value + CENTER_OFFSET) / CARD_HEIGHT);
       const now = Date.now();
 
       // Trigger haptic if centered card changed (with throttle for smooth feel)
@@ -262,6 +269,60 @@ export default function DiscoverScreen() {
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
   }, [setLists, debouncedSearchQuery, activeFilter, selectedFilters]);
+
+  // Create looped list for infinite scroll (3 copies: prepend + original + append)
+  const loopedSets = useMemo(() => {
+    if (filteredSets.length === 0) return [];
+    // Create 3 copies for seamless looping
+    return [
+      ...filteredSets.map((set, i) => ({ ...set, loopKey: `prepend-${set.id}-${i}`, originalIndex: i })),
+      ...filteredSets.map((set, i) => ({ ...set, loopKey: `original-${set.id}-${i}`, originalIndex: i })),
+      ...filteredSets.map((set, i) => ({ ...set, loopKey: `append-${set.id}-${i}`, originalIndex: i })),
+    ];
+  }, [filteredSets]);
+
+  // Calculate scroll positions for loop boundaries
+  const singleSetHeight = filteredSets.length * CARD_HEIGHT;
+  const middleSectionStart = singleSetHeight; // Where the "real" middle section starts
+  const middleSectionEnd = singleSetHeight * 2; // Where the "real" middle section ends
+
+  // Initial scroll position (start at middle section)
+  const initialScrollOffset = middleSectionStart + CENTER_OFFSET;
+
+  // Set/reset scroll position when data loads or list content changes
+  // Using a string key of filtered set IDs to detect actual content changes
+  const filteredSetKey = useMemo(() => filteredSets.map(s => s.id).join(','), [filteredSets]);
+
+  useEffect(() => {
+    if (filteredSets.length > 0 && scrollViewRef.current) {
+      // Small delay to ensure layout is complete
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: initialScrollOffset, animated: false });
+      }, 100);
+    }
+  }, [filteredSetKey, initialScrollOffset]);
+
+  // Handle scroll end to implement infinite loop
+  const handleScrollEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (filteredSets.length === 0 || isJumping.current) return;
+
+    const offsetY = event.nativeEvent.contentOffset.y;
+
+    // If scrolled into prepended section, jump to equivalent position in middle
+    if (offsetY < middleSectionStart - CARD_HEIGHT) {
+      isJumping.current = true;
+      const newOffset = offsetY + singleSetHeight;
+      scrollViewRef.current?.scrollTo({ y: newOffset, animated: false });
+      setTimeout(() => { isJumping.current = false; }, 50);
+    }
+    // If scrolled into appended section, jump to equivalent position in middle
+    else if (offsetY > middleSectionEnd - CENTER_OFFSET) {
+      isJumping.current = true;
+      const newOffset = offsetY - singleSetHeight;
+      scrollViewRef.current?.scrollTo({ y: newOffset, animated: false });
+      setTimeout(() => { isJumping.current = false; }, 50);
+    }
+  }, [filteredSets.length, middleSectionStart, middleSectionEnd, singleSetHeight]);
 
   const toggleFilter = (type: keyof Filters, value: string) => {
     setSelectedFilters(prev => {
@@ -547,6 +608,7 @@ export default function DiscoverScreen() {
         )}
 
         <Animated.ScrollView
+          ref={scrollViewRef as any}
           style={styles.scrollView}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -555,6 +617,8 @@ export default function DiscoverScreen() {
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
+          onScrollEndDrag={handleScrollEnd}
+          onMomentumScrollEnd={handleScrollEnd}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -570,12 +634,13 @@ export default function DiscoverScreen() {
             </View>
           ) : (
             <>
-              {filteredSets.map((setList, index) => (
+              {loopedSets.map((setList, index) => (
                 <AnimatedSetCard
-                  key={setList.id}
+                  key={setList.loopKey}
                   setList={setList}
                   index={index}
                   scrollY={scrollY}
+                  centerOffset={CENTER_OFFSET}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
                   onArtistPress={(artist) => {
                     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
