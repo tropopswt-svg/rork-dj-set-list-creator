@@ -20,6 +20,7 @@ import {
   Bookmark,
   BookmarkCheck,
   AlertCircle,
+  Radio,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -36,6 +37,8 @@ import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import TrackDetailModal from '@/components/TrackDetailModal';
 import AudioPreviewModal from '@/components/AudioPreviewModal';
+import IdentifyTrackModal from '@/components/IdentifyTrackModal';
+import CommentsSection from '@/components/CommentsSection';
 import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
@@ -73,6 +76,10 @@ export default function SetDetailScreen() {
 
   // Audio Preview Modal state (for identifying unknown tracks)
   const [audioPreviewTrack, setAudioPreviewTrack] = useState<Track | null>(null);
+
+  // Identify Track Modal state (for ACRCloud identification)
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
+  const [identifyTimestamp, setIdentifyTimestamp] = useState(0);
 
   // Track votes on timestamp conflicts (conflictTimestamp -> selected track)
   const [timestampVotes, setTimestampVotes] = useState<Record<number, Track>>({});
@@ -754,6 +761,36 @@ export default function SetDetailScreen() {
     }
   };
 
+  // Handle ACRCloud identification result from IdentifyTrackModal
+  const handleACRCloudIdentified = async (
+    track: { title: string; artist: string; album?: string; label?: string; confidence: number },
+    timestamp: number
+  ) => {
+    if (!setList) return;
+
+    // Create a new track object from the ACRCloud result
+    const newTrack: Track = {
+      id: `acrcloud-${Date.now()}`,
+      title: track.title,
+      artist: track.artist,
+      duration: 0,
+      coverUrl: '',
+      addedAt: new Date(),
+      source: 'database',
+      timestamp,
+      verified: true,
+      confidence: track.confidence / 100, // Convert percentage to 0-1
+      isId: false,
+    };
+
+    // Add track to set via context
+    addTracksToSet(setList.id, [newTrack]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Award points for using ACRCloud to identify a track
+    await addPoints('track_confirmed', setList.id);
+  };
+
   // Get the source URL and platform for audio preview
   const getAudioSource = (): { url: string; platform: 'youtube' | 'soundcloud' } | null => {
     if (!setList?.sourceLinks) return null;
@@ -1415,9 +1452,10 @@ export default function SetDetailScreen() {
                 };
                 const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
                 const isHighlighted = isDraggingTrack && highlightedGap === item.gapId;
+                const hasAudioSource = !!audioSource;
 
                 return (
-                  <Pressable
+                  <View
                     key={item.gapId}
                     style={[
                       styles.gapIndicator,
@@ -1425,11 +1463,6 @@ export default function SetDetailScreen() {
                       isHighlighted && styles.gapIndicatorHighlighted,
                     ]}
                     onLayout={handleGapLayout(item.gapId, item.timestamp)}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setFillGapTimestamp(item.timestamp);
-                      setShowFillGapModal(true);
-                    }}
                   >
                     <View style={styles.gapTimestamp}>
                       <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
@@ -1441,8 +1474,34 @@ export default function SetDetailScreen() {
                       </Text>
                       <View style={[styles.gapLine, isDraggingTrack && styles.gapLineActive]} />
                     </View>
-                    <Plus size={16} color={isDraggingTrack ? Colors.dark.primary : Colors.dark.primary} />
-                  </Pressable>
+                    <View style={styles.gapActions}>
+                      {hasAudioSource && (
+                        <Pressable
+                          style={styles.gapIdentifyButton}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            setIdentifyTimestamp(item.timestamp);
+                            setShowIdentifyModal(true);
+                          }}
+                          hitSlop={8}
+                        >
+                          <Radio size={14} color={Colors.dark.primary} />
+                          <Text style={styles.gapIdentifyText}>Identify</Text>
+                        </Pressable>
+                      )}
+                      <Pressable
+                        style={styles.gapAddButton}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setFillGapTimestamp(item.timestamp);
+                          setShowFillGapModal(true);
+                        }}
+                        hitSlop={8}
+                      >
+                        <Plus size={16} color={Colors.dark.primary} />
+                      </Pressable>
+                    </View>
+                  </View>
                 );
               }
 
@@ -1642,6 +1701,9 @@ export default function SetDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* Comments Section */}
+          {id && <CommentsSection setId={id} />}
         </View>
       </ScrollView>
 
@@ -1835,6 +1897,15 @@ export default function SetDetailScreen() {
             ? audioPreviewTrack.artist
             : undefined
         }
+      />
+
+      <IdentifyTrackModal
+        visible={showIdentifyModal}
+        onClose={() => setShowIdentifyModal(false)}
+        onIdentified={handleACRCloudIdentified}
+        timestamp={identifyTimestamp}
+        setTitle={setList?.name}
+        audioUrl={audioSource?.url}
       />
     </View>
   );
@@ -2479,6 +2550,29 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700' as const,
     color: Colors.dark.primary,
+  },
+  gapActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: 8,
+  },
+  gapIdentifyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 212, 170, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  gapIdentifyText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+  },
+  gapAddButton: {
+    padding: 4,
   },
   unplacedIdsBanner: {
     flexDirection: 'row',

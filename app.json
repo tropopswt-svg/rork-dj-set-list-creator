@@ -15,14 +15,20 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.dj-set-list-creator"
+      "bundleIdentifier": "app.rork.dj-set-list-creator",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "IDentified needs access to your microphone to identify tracks playing nearby using audio fingerprinting."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.dj_set_list_creator"
+      "package": "app.rork.dj_set_list_creator",
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -32,6 +38,12 @@
         "expo-router",
         {
           "origin": "https://rork.com/"
+        }
+      ],
+      [
+        "expo-av",
+        {
+          "microphonePermission": "IDentified needs access to your microphone to identify tracks playing nearby."
         }
       ],
       "expo-font",

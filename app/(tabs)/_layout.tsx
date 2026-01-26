@@ -1,9 +1,11 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Disc3, Rss, Users, Plus, User } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing } from 'react-native';
-import { useRef, useEffect, useMemo } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import FABActionModal from '@/components/FABActionModal';
+import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 
 // Animated Vinyl FAB with Plus
 const VinylFAB = ({ onPress }: { onPress: () => void }) => {
@@ -56,6 +58,8 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const [showActionModal, setShowActionModal] = useState(false);
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
 
   // Only show FAB on main tab index pages
   const showFAB = useMemo(() => {
@@ -80,7 +84,17 @@ export default function TabLayout() {
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setShowActionModal(true);
+  };
+
+  const handleAddSet = () => {
+    setShowActionModal(false);
     router.push('/(tabs)/(submit)');
+  };
+
+  const handleIdentify = () => {
+    setShowActionModal(false);
+    setShowIdentifyModal(true);
   };
 
   return (
@@ -138,6 +152,18 @@ export default function TabLayout() {
     </Tabs>
 
       {showFAB && <VinylFAB onPress={handleFABPress} />}
+
+      <FABActionModal
+        visible={showActionModal}
+        onClose={() => setShowActionModal(false)}
+        onAddSet={handleAddSet}
+        onIdentify={handleIdentify}
+      />
+
+      <LiveIdentifyModal
+        visible={showIdentifyModal}
+        onClose={() => setShowIdentifyModal(false)}
+      />
     </View>
   );
 }

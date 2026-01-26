@@ -2161,4 +2161,182 @@ export const scraperRouter = createTRPCRouter({
       console.log(`[ACRCloud] Result:`, JSON.stringify(result, null, 2));
       return result;
     }),
+
+  // Live microphone identification - for Shazam-like functionality
+  identifyTrackFromAudio: publicProcedure
+    .input(z.object({
+      audioBase64: z.string(),
+      audioFormat: z.enum(['m4a', 'mp4', 'wav', 'mp3', 'aac']).optional().default('m4a'),
+    }))
+    .mutation(async ({ input }) => {
+      console.log(`[ACRCloud] Starting live audio identification`);
+      console.log(`[ACRCloud] Audio format: ${input.audioFormat}`);
+      console.log(`[ACRCloud] Audio data size: ${Math.round(input.audioBase64.length / 1024)} KB`);
+
+      const accessKey = process.env.ACRCLOUD_ACCESS_KEY;
+      const accessSecret = process.env.ACRCLOUD_ACCESS_SECRET;
+      const host = process.env.ACRCLOUD_HOST || 'identify-us-west-2.acrcloud.com';
+
+      if (!accessKey || !accessSecret) {
+        console.error('[ACRCloud] Missing credentials');
+        return {
+          success: false,
+          error: 'ACRCloud credentials not configured',
+          result: null,
+        };
+      }
+
+      try {
+        const httpMethod = 'POST';
+        const httpUri = '/v1/identify';
+        const dataType = 'audio';
+        const signatureVersion = '1';
+        const timestamp = Math.floor(Date.now() / 1000).toString();
+
+        const stringToSign = [
+          httpMethod,
+          httpUri,
+          accessKey,
+          dataType,
+          signatureVersion,
+          timestamp,
+        ].join('\n');
+
+        const signature = crypto
+          .createHmac('sha1', accessSecret)
+          .update(stringToSign)
+          .digest('base64');
+
+        const audioBuffer = Buffer.from(input.audioBase64, 'base64');
+
+        // Map format to MIME type
+        const mimeTypes: Record<string, string> = {
+          'm4a': 'audio/mp4',
+          'mp4': 'audio/mp4',
+          'wav': 'audio/wav',
+          'mp3': 'audio/mpeg',
+          'aac': 'audio/aac',
+        };
+        const mimeType = mimeTypes[input.audioFormat] || 'audio/mp4';
+        const fileExt = input.audioFormat;
+
+        const boundary = '----WebKitFormBoundary' + Math.random().toString(36).substring(2);
+        const formParts: string[] = [];
+
+        const addField = (name: string, value: string) => {
+          formParts.push(`--${boundary}\r\n`);
+          formParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
+          formParts.push(`${value}\r\n`);
+        };
+
+        addField('access_key', accessKey);
+        addField('sample_bytes', audioBuffer.length.toString());
+        addField('timestamp', timestamp);
+        addField('signature', signature);
+        addField('data_type', dataType);
+        addField('signature_version', signatureVersion);
+
+        const headerPart = formParts.join('');
+        const filePart = `--${boundary}\r\nContent-Disposition: form-data; name="sample"; filename="audio.${fileExt}"\r\nContent-Type: ${mimeType}\r\n\r\n`;
+        const endPart = `\r\n--${boundary}--\r\n`;
+
+        // Convert all parts to Uint8Array for Vercel's fetch API compatibility
+        const headerBytes = new Uint8Array(Buffer.from(headerPart));
+        const filePartBytes = new Uint8Array(Buffer.from(filePart));
+        const audioBytes = new Uint8Array(audioBuffer);
+        const endBytes = new Uint8Array(Buffer.from(endPart));
+
+        // Concatenate Uint8Arrays
+        const totalLength = headerBytes.length + filePartBytes.length + audioBytes.length + endBytes.length;
+        const body = new Uint8Array(totalLength);
+        let offset = 0;
+        body.set(headerBytes, offset);
+        offset += headerBytes.length;
+        body.set(filePartBytes, offset);
+        offset += filePartBytes.length;
+        body.set(audioBytes, offset);
+        offset += audioBytes.length;
+        body.set(endBytes, offset);
+
+        console.log(`[ACRCloud] Sending live identification request to ${host}`);
+
+        const acrStartTime = Date.now();
+        const response = await fetch(`https://${host}${httpUri}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          },
+          body,
+        });
+        const acrResponseTime = Date.now() - acrStartTime;
+
+        // Log ACRCloud API call
+        logACRCloudCall('/v1/identify', response.status, acrResponseTime, {
+          method: 'live_audio',
+          format: input.audioFormat,
+          sizeKB: Math.round(audioBuffer.length / 1024),
+        }).catch(() => {});
+
+        const result = await response.json();
+        console.log('[ACRCloud] Live identification response:', JSON.stringify(result, null, 2));
+
+        if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
+          const music = result.metadata.music[0];
+          const artists = music.artists?.map((a: { name: string }) => a.name).join(', ') || 'Unknown Artist';
+          const title = music.title || 'Unknown Track';
+          const album = music.album?.name;
+          const releaseDate = music.release_date;
+          const label = music.label;
+          const externalIds = music.external_ids || {};
+          const externalMetadata = music.external_metadata || {};
+
+          const spotifyId = externalMetadata.spotify?.track?.id;
+          const youtubeId = externalMetadata.youtube?.vid;
+
+          console.log(`[ACRCloud] Live identification success: ${artists} - ${title}`);
+
+          return {
+            success: true,
+            error: null,
+            result: {
+              title,
+              artist: artists,
+              album,
+              releaseDate,
+              label,
+              confidence: music.score || 100,
+              duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
+              links: {
+                spotify: spotifyId ? `https://open.spotify.com/track/${spotifyId}` : undefined,
+                youtube: youtubeId ? `https://www.youtube.com/watch?v=${youtubeId}` : undefined,
+                isrc: externalIds.isrc,
+              },
+            },
+          };
+        }
+
+        if (result.status?.code === 1001) {
+          console.log('[ACRCloud] Live identification: No match found');
+          return {
+            success: true,
+            error: null,
+            result: null,
+          };
+        }
+
+        console.error('[ACRCloud] Live identification API error:', result.status);
+        return {
+          success: false,
+          error: result.status?.msg || 'Unknown error from ACRCloud',
+          result: null,
+        };
+      } catch (error) {
+        console.error('[ACRCloud] Live identification request error:', error);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to identify track',
+          result: null,
+        };
+      }
+    }),
 });
