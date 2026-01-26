@@ -69,7 +69,7 @@ export interface SetList {
   plays?: number;
   // Multi-source merging
   conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes
-  // IDentified matching state
+  // TRACK'D matching state
   isMatchingInProgress?: boolean;
   matchingStats?: {
     total: number;

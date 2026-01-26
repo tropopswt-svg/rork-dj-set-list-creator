@@ -43,7 +43,7 @@ function getActivityText(activity: ActivityWithDetails) {
     case 'like_set':
       return 'liked a set';
     case 'track_id':
-      return 'identified a track';
+      return 'track\'d a song';
     case 'new_set':
       return 'new set added';
     case 'follow_user':

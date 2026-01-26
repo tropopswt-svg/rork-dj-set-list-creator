@@ -198,7 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           redirectTo: Platform.OS === 'web'
             ? window.location.origin
-            : 'identified://auth/callback',
+            : 'trackd://auth/callback',
         },
       });
 
@@ -217,7 +217,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         options: {
           redirectTo: Platform.OS === 'web'
             ? window.location.origin
-            : 'identified://auth/callback',
+            : 'trackd://auth/callback',
         },
       });
 
@@ -249,7 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: Platform.OS === 'web'
           ? `${window.location.origin}/reset-password`
-          : 'identified://auth/reset-password',
+          : 'trackd://auth/reset-password',
       });
 
       return { error };

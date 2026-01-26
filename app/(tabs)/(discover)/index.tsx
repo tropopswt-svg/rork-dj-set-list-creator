@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
-import IDentifiedLogo from '@/components/IDentifiedLogo';
+import TrackdLogo from '@/components/TrackdLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
@@ -354,7 +354,7 @@ export default function DiscoverScreen() {
 
   const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0);
 
-  // Check if a set has been IDentified (analyzed via YouTube/SoundCloud)
+  // Check if a set has been TRACK'D (analyzed via YouTube/SoundCloud)
   const isSetIdentified = (set: SetList): boolean => {
     // Check if set has YouTube or SoundCloud sources
     const hasAnalyzableSource = set.sourceLinks?.some(
@@ -386,7 +386,7 @@ export default function DiscoverScreen() {
           if (!matchesSearch) return false;
         }
 
-        // IDentified / Source filter
+        // TRACK'D / Source filter
         if (selectedFilters.identified !== 'all') {
           if (selectedFilters.identified === 'needs-source') {
             if (!setNeedsSource(set)) return false;
@@ -522,7 +522,7 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={Colors.dark.primary} />
             )}
           </Pressable>
-          <IDentifiedLogo />
+          <TrackdLogo />
           <View style={styles.headerSpacer}>
             <Pressable 
               style={styles.addButton}
@@ -604,7 +604,7 @@ export default function DiscoverScreen() {
         {/* Filter Dropdown */}
         {showFilterDropdown && (
           <Animated.View style={[styles.filterDropdown]}>
-            {/* IDentified toggle */}
+            {/* TRACK'D status toggle */}
             <View style={styles.identifiedFilterRow}>
               <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.identifiedFilterLabel}>Status:</Text>
@@ -637,7 +637,7 @@ export default function DiscoverScreen() {
                   <Text style={[
                     styles.identifiedToggleText,
                     selectedFilters.identified === 'identified' && styles.identifiedToggleTextActive,
-                  ]}>IDentified</Text>
+                  ]}>TRACK'D</Text>
                 </Pressable>
                 <Pressable
                   style={[

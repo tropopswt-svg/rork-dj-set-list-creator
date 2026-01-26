@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "IDentified",
-    "slug": "identified",
+    "name": "TRACK'D",
+    "slug": "trackd",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "rork-app",
+    "scheme": "trackd",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,9 +15,9 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "app.rork.dj-set-list-creator",
+      "bundleIdentifier": "app.trackd.music",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "IDentified needs access to your microphone to identify tracks playing nearby using audio fingerprinting."
+        "NSMicrophoneUsageDescription": "TRACK'D needs access to your microphone to identify tracks playing nearby using audio fingerprinting."
       }
     },
     "android": {
@@ -25,7 +25,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.dj_set_list_creator",
+      "package": "app.trackd.music",
       "permissions": [
         "android.permission.RECORD_AUDIO"
       ]
@@ -37,13 +37,13 @@
       [
         "expo-router",
         {
-          "origin": "https://rork.com/"
+          "origin": "https://trackd.app/"
         }
       ],
       [
         "expo-av",
         {
-          "microphonePermission": "IDentified needs access to your microphone to identify tracks playing nearby."
+          "microphonePermission": "TRACK'D needs access to your microphone to identify tracks playing nearby."
         }
       ],
       "expo-font",

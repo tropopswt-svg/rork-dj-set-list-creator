@@ -519,17 +519,17 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
     onArtistPress?.(artistName);
   };
 
-  // Handle ID badge press - show explanation popup
-  const handleIDBadgePress = () => {
+  // Handle TRACK'D badge press - show explanation popup
+  const handleTrackdBadgePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      'Track Identification',
+      'TRACK\'D Status',
       isIdentified
-        ? `This set has been analyzed and ${trackCount} track${trackCount !== 1 ? 's' : ''} ${trackCount !== 1 ? 'have' : 'has'} been identified.\n\n` +
+        ? `This set has been TRACK'D! ${trackCount} track${trackCount !== 1 ? 's' : ''} ${trackCount !== 1 ? 'have' : 'has'} been identified.\n\n` +
           (isFullyIdentified
-            ? '⭐ Fully identified - all tracks in this set have been found!'
+            ? '⭐ Fully TRACK\'D - all tracks in this set have been found!'
             : 'Some tracks may still be unidentified or have gaps.')
-        : 'This set has not been analyzed yet.\n\n' +
+        : 'This set has not been TRACK\'D yet.\n\n' +
           'Once analyzed, we\'ll identify the tracks played in this set using audio fingerprinting and tracklist databases.',
       [{ text: 'Got it', style: 'default' }]
     );
@@ -539,9 +539,9 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
   const handleUnanalyzedBadgePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      'Not Yet Analyzed',
-      'This set hasn\'t been analyzed for track identification yet.\n\n' +
-      'Tap the set to view details and start the identification process.',
+      'Not Yet TRACK\'D',
+      'This set hasn\'t been TRACK\'D yet.\n\n' +
+      'Tap the set to view details and start the TRACK\'D process.',
       [{ text: 'Got it', style: 'default' }]
     );
   };
@@ -551,13 +551,13 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
       'Source Link Required',
-      'This set needs a YouTube or SoundCloud link to enable track identification.\n\n' +
+      'This set needs a YouTube or SoundCloud link to get TRACK\'D.\n\n' +
       '📎 How to add a link:\n' +
       '1. Tap on this set to open it\n' +
       '2. Look for the "Add Source" button\n' +
       '3. Paste a YouTube or SoundCloud URL\n\n' +
       '🎵 What happens next:\n' +
-      'Once linked, we can analyze the audio to automatically identify the tracks played in this set!',
+      'Once linked, TRACK\'D will analyze the audio to automatically identify every track played!',
       [{ text: 'Got it', style: 'default' }]
     );
   };
@@ -1324,11 +1324,11 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                   <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
                 )}
 
-                {/* IDentified status badge - pressable to show explanation */}
+                {/* TRACK'D status badge - pressable to show explanation */}
                 {isIdentified ? (
-                  <Pressable onPress={handleIDBadgePress} hitSlop={4}>
-                    <View style={styles.identifiedBadge}>
-                      <Text style={styles.identifiedBadgeText}>ID</Text>
+                  <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
+                    <View style={styles.trackdBadge}>
+                      <Text style={styles.trackdBadgeText}>T'D</Text>
                     </View>
                   </Pressable>
                 ) : (
@@ -1718,17 +1718,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700' as const,
   },
-  // IDentified badge - square "ID" logo style
-  identifiedBadge: {
-    width: 22,
+  // TRACK'D badge - square logo style
+  trackdBadge: {
+    width: 24,
     height: 22,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.dark.primary,
     borderRadius: 5,
   },
-  identifiedBadgeText: {
-    fontSize: 10,
+  trackdBadgeText: {
+    fontSize: 9,
     color: '#fff',
     fontWeight: '900' as const,
     letterSpacing: -0.5,
