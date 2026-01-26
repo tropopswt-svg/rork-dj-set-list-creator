@@ -24,7 +24,9 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import Colors from '@/constants/colors';
-import { trpc } from '@/lib/trpc';
+
+// API URL for identify endpoint
+const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
 const { width } = Dimensions.get('window');
 
@@ -281,8 +283,6 @@ export default function LiveIdentifyModal({
   const glowAnim = useRef(new Animated.Value(0.3)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
-  const identifyMutation = trpc.scraper.identifyTrackFromAudio.useMutation();
-
   // Request microphone permission
   useEffect(() => {
     if (visible) {
@@ -450,10 +450,22 @@ export default function LiveIdentifyModal({
       console.log('[LiveIdentify] Audio file size:', Math.round(base64Audio.length / 1024), 'KB');
 
       // Send to backend for identification
-      const result = await identifyMutation.mutateAsync({
-        audioBase64: base64Audio,
-        audioFormat: Platform.OS === 'ios' ? 'm4a' : 'mp4',
+      const response = await fetch(`${API_URL}/api/identify`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          audioBase64: base64Audio,
+          audioFormat: Platform.OS === 'ios' ? 'm4a' : 'mp4',
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
+
+      const result = await response.json();
 
       if (result.success && result.result) {
         console.log('[LiveIdentify] Track identified:', result.result);
