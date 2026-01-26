@@ -70,7 +70,7 @@ const generateBars = (barCount: number) => {
 
 const { height: screenHeight } = Dimensions.get('window');
 
-// Animated Waveform Component for button
+// Animated Waveform Component for button - slower, subtler
 const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const pulseAnims = useRef(
@@ -81,30 +81,30 @@ const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
 
   useEffect(() => {
     if (isActive) {
-      // Scrolling animation at 128 BPM
+      // Much slower scrolling - gentle flow
       Animated.loop(
         Animated.timing(scrollAnim, {
           toValue: 1,
-          duration: 3750,
+          duration: 12000, // Much slower
           easing: Easing.linear,
           useNativeDriver: true,
         })
       ).start();
 
-      // Individual bar pulse animations with staggered delays
+      // Gentle pulse animations with longer durations
       pulseAnims.forEach((anim, index) => {
         Animated.loop(
           Animated.sequence([
-            Animated.delay(index * 50),
+            Animated.delay(index * 100), // More stagger
             Animated.timing(anim, {
               toValue: 1,
-              duration: 300,
+              duration: 800, // Slower pulse
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
             Animated.timing(anim, {
               toValue: 0,
-              duration: 300,
+              duration: 800,
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
@@ -143,7 +143,7 @@ const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
           const pulseIndex = idx % pulseAnims.length;
           const scale = pulseAnims[pulseIndex].interpolate({
             inputRange: [0, 1],
-            outputRange: [1, 1.4],
+            outputRange: [1, 1.15], // Much subtler scale
           });
 
           return (
@@ -164,7 +164,7 @@ const ScanningWaveform = ({ isActive }: { isActive: boolean }) => {
   );
 };
 
-// Full-screen vertical background waveform
+// Full-screen vertical background waveform - slow and subtle
 const BackgroundWaveform = ({ isActive }: { isActive: boolean }) => {
   const scrollAnim = useRef(new Animated.Value(0)).current;
   const pulseAnims = useRef(
@@ -176,30 +176,30 @@ const BackgroundWaveform = ({ isActive }: { isActive: boolean }) => {
 
   useEffect(() => {
     if (isActive) {
-      // Vertical scrolling animation - smooth continuous flow
+      // Very slow vertical scroll - barely perceptible movement
       Animated.loop(
         Animated.timing(scrollAnim, {
           toValue: 1,
-          duration: 8000,
+          duration: 20000, // Much slower
           easing: Easing.linear,
           useNativeDriver: true,
         })
       ).start();
 
-      // Staggered pulse animations for each bar
+      // Very gentle pulse animations
       pulseAnims.forEach((anim, index) => {
         Animated.loop(
           Animated.sequence([
-            Animated.delay(index * 80),
+            Animated.delay(index * 150), // More stagger
             Animated.timing(anim, {
               toValue: 1,
-              duration: 600,
+              duration: 1200, // Much slower
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
             Animated.timing(anim, {
               toValue: 0,
-              duration: 600,
+              duration: 1200,
               easing: Easing.inOut(Easing.ease),
               useNativeDriver: true,
             }),
@@ -239,11 +239,11 @@ const BackgroundWaveform = ({ isActive }: { isActive: boolean }) => {
           const pulseIndex = idx % pulseAnims.length;
           const scale = pulseAnims[pulseIndex].interpolate({
             inputRange: [0, 1],
-            outputRange: [1, 1.5],
+            outputRange: [1, 1.1], // Much subtler
           });
           const opacity = pulseAnims[pulseIndex].interpolate({
             inputRange: [0, 1],
-            outputRange: [0.08, 0.2],
+            outputRange: [0.04, 0.1], // Much more subtle
           });
 
           return (
@@ -282,6 +282,7 @@ export default function LiveIdentifyModal({
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const glowAnim = useRef(new Animated.Value(0.3)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
 
   // Request microphone permission
   useEffect(() => {
@@ -315,34 +316,54 @@ export default function LiveIdentifyModal({
     }
   }, [visible]);
 
-  // Pulse and glow animations
+  // Pulse, glow, and floating animations
   useEffect(() => {
     if (state === 'idle' || state === 'recording') {
+      // Very gentle pulse
       Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
-            toValue: 1.05,
-            duration: 1000,
+            toValue: 1.02,
+            duration: 2000, // Slower
             useNativeDriver: true,
           }),
           Animated.timing(pulseAnim, {
             toValue: 1,
-            duration: 1000,
+            duration: 2000,
             useNativeDriver: true,
           }),
         ])
       ).start();
 
+      // Gentle glow
       Animated.loop(
         Animated.sequence([
           Animated.timing(glowAnim, {
-            toValue: 0.8,
-            duration: 800,
+            toValue: 0.5,
+            duration: 1500, // Slower
             useNativeDriver: true,
           }),
           Animated.timing(glowAnim, {
-            toValue: 0.3,
-            duration: 800,
+            toValue: 0.2,
+            duration: 1500,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+
+      // Very slow floating animation
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(floatAnim, {
+            toValue: 1,
+            duration: 4000, // Very slow
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(floatAnim, {
+            toValue: 0,
+            duration: 4000,
+            easing: Easing.inOut(Easing.ease),
             useNativeDriver: true,
           }),
         ])
@@ -351,11 +372,14 @@ export default function LiveIdentifyModal({
       pulseAnim.stopAnimation();
       pulseAnim.setValue(1);
       glowAnim.stopAnimation();
-      glowAnim.setValue(0.3);
+      glowAnim.setValue(0.2);
+      floatAnim.stopAnimation();
+      floatAnim.setValue(0);
     }
 
     return () => {
       pulseAnim.stopAnimation();
+      floatAnim.stopAnimation();
       glowAnim.stopAnimation();
     };
   }, [state]);
@@ -529,7 +553,15 @@ export default function LiveIdentifyModal({
               <Animated.View
                 style={[
                   styles.idButton,
-                  { transform: [{ scale: pulseAnim }] }
+                  {
+                    transform: [
+                      { scale: pulseAnim },
+                      { translateY: floatAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -8], // Very subtle float
+                      })}
+                    ]
+                  }
                 ]}
               >
                 <View style={styles.idButtonWaveContainer}>
@@ -555,7 +587,19 @@ export default function LiveIdentifyModal({
                   { opacity: glowAnim }
                 ]}
               />
-              <View style={styles.recordingButton}>
+              <Animated.View
+                style={[
+                  styles.recordingButton,
+                  {
+                    transform: [
+                      { translateY: floatAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -8],
+                      })}
+                    ]
+                  }
+                ]}
+              >
                 <View style={styles.recordingWaveContainer}>
                   <ScanningWaveform isActive={true} />
                 </View>
@@ -567,7 +611,7 @@ export default function LiveIdentifyModal({
                 >
                   ID
                 </Animated.Text>
-              </View>
+              </Animated.View>
             </View>
             <Text style={styles.hintText}>
               Scanning audio...
@@ -757,7 +801,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.textSecondary,
     marginBottom: 40,
   },
-  // ID Button styles
+  // ID Button styles - rounded square box like logo
   idButtonOuter: {
     width: 200,
     height: 200,
@@ -766,15 +810,15 @@ const styles = StyleSheet.create({
   },
   idButtonGlow: {
     position: 'absolute',
-    width: 220,
-    height: 220,
-    borderRadius: 110,
+    width: 200,
+    height: 200,
+    borderRadius: 32,
     backgroundColor: Colors.dark.primary,
   },
   idButton: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 160,
+    height: 160,
+    borderRadius: 28,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -812,7 +856,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
     marginBottom: 40,
   },
-  // Recording button styles
+  // Recording button styles - rounded square box
   recordingOuter: {
     width: 200,
     height: 200,
@@ -821,15 +865,15 @@ const styles = StyleSheet.create({
   },
   recordingGlow: {
     position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
+    width: 200,
+    height: 200,
+    borderRadius: 36,
     backgroundColor: Colors.dark.primary,
   },
   recordingButton: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
+    width: 160,
+    height: 160,
+    borderRadius: 28,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
