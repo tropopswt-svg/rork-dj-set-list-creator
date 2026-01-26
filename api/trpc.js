@@ -19,8 +19,8 @@ export default async function handler(req, res) {
   try {
     // Dynamic import tRPC dependencies
     const { fetchRequestHandler } = await import('@trpc/server/adapters/fetch');
-    const { appRouter } = await import('../backend/trpc/app-router.js');
-    const { createContext } = await import('../backend/trpc/create-context.js');
+    const { appRouter } = await import('../backend/trpc/app-router');
+    const { createContext } = await import('../backend/trpc/create-context');
 
     // Convert Vercel request to Fetch API Request for tRPC
     const protocol = req.headers['x-forwarded-proto'] || 'https';
