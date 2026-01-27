@@ -22,12 +22,13 @@ const seededRandom = (seed: number) => {
 const generateWaveformData = (count: number) => {
   const data: { height: number; color: string }[] = [];
 
+  // Circoloco red (#C41E3A) with varying shades
   const colors = [
-    'rgba(100, 180, 255, 0.5)',    // Blue - intro/outro
-    'rgba(255, 150, 200, 0.5)',    // Pink - buildup
-    'rgba(255, 100, 80, 0.5)',     // Red/Orange - drop
-    'rgba(150, 220, 255, 0.5)',    // Cyan - breakdown
-    'rgba(180, 255, 180, 0.5)',    // Green - breakdown 2
+    'rgba(196, 30, 58, 0.4)',     // Circoloco red - lighter (intro/outro)
+    'rgba(196, 30, 58, 0.55)',    // Circoloco red - medium (buildup)
+    'rgba(196, 30, 58, 0.75)',    // Circoloco red - strong (drop)
+    'rgba(180, 25, 50, 0.5)',     // Slightly darker red (breakdown)
+    'rgba(220, 40, 70, 0.5)',     // Slightly lighter/brighter red (breakdown 2)
   ];
 
   // Simulate a real track with intro, buildup, drop, breakdown, outro

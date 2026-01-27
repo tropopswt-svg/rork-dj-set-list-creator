@@ -18,12 +18,13 @@ const seededRandom = (seed: number) => {
 const generateWaveformData = (count: number) => {
   const data: { height: number; color: string }[] = [];
 
+  // Circoloco red (#C41E3A) with varying shades
   const colors = [
-    'rgba(100, 180, 255, 0.6)',    // Blue - intro/outro
-    'rgba(255, 150, 200, 0.6)',    // Pink - buildup
-    'rgba(255, 100, 80, 0.6)',     // Red/Orange - drop
-    'rgba(150, 220, 255, 0.6)',    // Cyan - breakdown
-    'rgba(180, 255, 180, 0.6)',    // Green - breakdown 2
+    'rgba(196, 30, 58, 0.5)',     // Circoloco red - lighter (intro/outro)
+    'rgba(196, 30, 58, 0.65)',    // Circoloco red - medium (buildup)
+    'rgba(196, 30, 58, 0.85)',    // Circoloco red - strong (drop)
+    'rgba(180, 25, 50, 0.6)',     // Slightly darker red (breakdown)
+    'rgba(220, 40, 70, 0.6)',     // Slightly lighter/brighter red (breakdown 2)
   ];
 
   for (let i = 0; i < count; i++) {
@@ -343,18 +344,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)', // Light overlay to soften waveform
+    backgroundColor: 'rgba(255, 255, 255, 0.15)', // Very subtle overlay
   },
   textContainer: {
     zIndex: 2,
   },
   logoText: {
     fontWeight: '900',
-    color: '#1A1A1A', // Dark text on white background
+    color: '#FFFFFF', // White text
     letterSpacing: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.1)', // Subtle shadow
+    textShadowColor: 'rgba(0, 0, 0, 0.6)', // Shadow for visibility on white/red
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 4,
     fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style condensed geometric font
   },
 });
