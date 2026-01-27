@@ -1479,7 +1479,7 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.25)',
+    borderColor: 'rgba(196, 30, 58, 0.25)',
   },
   vinylGroove2: {
     position: 'absolute',
@@ -1487,7 +1487,7 @@ const styles = StyleSheet.create({
     height: 42,
     borderRadius: 21,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.35)',
+    borderColor: 'rgba(196, 30, 58, 0.35)',
   },
   vinylGroove3: {
     position: 'absolute',
@@ -1495,7 +1495,7 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.45)',
+    borderColor: 'rgba(196, 30, 58, 0.45)',
   },
   vinylSpinCircle: {
     position: 'absolute',
@@ -1505,7 +1505,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
     borderTopColor: Colors.dark.primary,
-    borderRightColor: 'rgba(226, 29, 72, 0.5)',
+    borderRightColor: 'rgba(196, 30, 58, 0.5)',
   },
   vinylCenter: {
     width: 30,
@@ -1552,7 +1552,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(226, 29, 72, 0.15)',
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -1887,9 +1887,9 @@ const styles = StyleSheet.create({
   },
   // Admin Menu Highlight for results button
   adminMenuItemHighlight: {
-    backgroundColor: 'rgba(226, 29, 72, 0.1)',
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.3)',
+    borderColor: 'rgba(196, 30, 58, 0.3)',
   },
   // Refresh Results Modal styles
   resultsModalOverlay: {
@@ -1995,7 +1995,7 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 30,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.25)',
+    borderColor: 'rgba(196, 30, 58, 0.25)',
   },
   clearFilterGroove2: {
     position: 'absolute',
@@ -2003,7 +2003,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.35)',
+    borderColor: 'rgba(196, 30, 58, 0.35)',
   },
   clearFilterGroove3: {
     position: 'absolute',
@@ -2011,7 +2011,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.45)',
+    borderColor: 'rgba(196, 30, 58, 0.45)',
   },
   clearFilterSpinCircle: {
     position: 'absolute',
@@ -2021,7 +2021,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
     borderTopColor: Colors.dark.primary,
-    borderRightColor: 'rgba(226, 29, 72, 0.5)',
+    borderRightColor: 'rgba(196, 30, 58, 0.5)',
   },
   clearFilterInner: {
     width: 36,

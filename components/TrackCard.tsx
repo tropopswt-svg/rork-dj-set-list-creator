@@ -263,7 +263,7 @@ export default function TrackCard({
               {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : track.title)}
             </Text>
             {isUnidentified && (
-              <HelpCircle size={14} color="#cd6a6f" />
+              <HelpCircle size={14} color="#C41E3A" />
             )}
           </View>
           <Text style={[styles.artist, isUnidentified && styles.unidentifiedArtist]} numberOfLines={1}>
@@ -271,7 +271,7 @@ export default function TrackCard({
           </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
-              <Disc3 size={12} color="#cd6a6f" />
+              <Disc3 size={12} color="#C41E3A" />
               <Text style={styles.featuredMainText}>
                 In {featuredCount} other set{featuredCount !== 1 ? 's' : ''}
               </Text>
@@ -593,7 +593,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   featuredMainText: {
-    color: '#cd6a6f',
+    color: '#C41E3A',
     fontSize: 12,
     fontWeight: '600' as const,
   },
@@ -614,7 +614,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#cd6a6f',
+    backgroundColor: '#C41E3A',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
@@ -645,7 +645,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   unidentifiedTitle: {
-    color: '#cd6a6f',
+    color: '#C41E3A',
     fontStyle: 'italic',
   },
   unidentifiedArtist: {

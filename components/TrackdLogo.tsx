@@ -121,7 +121,7 @@ const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height
                 height: bar.height,
                 width: 2,
                 marginHorizontal: 1,
-                backgroundColor: `rgba(226, 29, 72, ${0.08 + (bar.height / height) * 0.1})`,
+                backgroundColor: `rgba(196, 30, 58, ${0.08 + (bar.height / height) * 0.1})`,
               },
             ]}
           />

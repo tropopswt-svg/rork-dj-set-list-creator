@@ -1739,7 +1739,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   artistMoreBadge: {
-    backgroundColor: 'rgba(226, 29, 72, 0.25)', // Subtle primary tint - shows it's different/clickable
+    backgroundColor: 'rgba(196, 30, 58, 0.25)', // Subtle primary tint - shows it's different/clickable
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,

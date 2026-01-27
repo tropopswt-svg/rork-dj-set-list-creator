@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     height: 66,
     borderRadius: 33,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.25)',
+    borderColor: 'rgba(196, 30, 58, 0.25)',
   },
   vinylGroove2: {
     position: 'absolute',
@@ -305,7 +305,7 @@ const styles = StyleSheet.create({
     height: 58,
     borderRadius: 29,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.35)',
+    borderColor: 'rgba(196, 30, 58, 0.35)',
   },
   vinylGroove3: {
     position: 'absolute',
@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderRadius: 25,
     borderWidth: 1,
-    borderColor: 'rgba(226, 29, 72, 0.45)',
+    borderColor: 'rgba(196, 30, 58, 0.45)',
   },
   spinCircle: {
     position: 'absolute',
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
     borderTopColor: Colors.dark.primary,
-    borderRightColor: 'rgba(226, 29, 72, 0.5)',
+    borderRightColor: 'rgba(196, 30, 58, 0.5)',
   },
   fabCenter: {
     width: 42,

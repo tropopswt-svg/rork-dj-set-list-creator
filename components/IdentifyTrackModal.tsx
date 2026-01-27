@@ -324,7 +324,7 @@ export default function IdentifyTrackModal({
           {noMatch && (
             <View style={styles.resultContainer}>
               <View style={styles.noMatchIcon}>
-                <AlertCircle size={32} color="#cd6a6f" />
+                <AlertCircle size={32} color="#C41E3A" />
               </View>
               <Text style={styles.noMatchText}>No Match Found</Text>
               <Text style={styles.noMatchSubtext}>

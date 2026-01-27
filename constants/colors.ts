@@ -1,3 +1,4 @@
+// Circoloco Red: #C41E3A
 export default {
   light: {
     background: '#F5F0E8',
@@ -10,14 +11,14 @@ export default {
     text: '#2D2A26',
     textSecondary: '#6B6560',
     textMuted: '#9C968E',
-    primary: '#cd6a6f',
-    primaryDark: '#b55a5e',
-    primaryLight: '#d98589',
-    accent: '#cd6a6f',
-    accentSecondary: '#e5b8ba',
+    primary: '#C41E3A', // Circoloco red
+    primaryDark: '#9E1830',
+    primaryLight: '#D64458',
+    accent: '#C41E3A',
+    accentSecondary: '#E8A0AA',
     gradient: {
-      start: '#cd6a6f',
-      end: '#d98589',
+      start: '#C41E3A',
+      end: '#D64458',
     },
     success: '#2E7D32',
     warning: '#ED6C02',
@@ -42,14 +43,14 @@ export default {
     text: '#2D2A26',
     textSecondary: '#6B6560',
     textMuted: '#9C968E',
-    primary: '#cd6a6f',
-    primaryDark: '#b55a5e',
-    primaryLight: '#d98589',
-    accent: '#cd6a6f',
-    accentSecondary: '#e5b8ba',
+    primary: '#C41E3A', // Circoloco red
+    primaryDark: '#9E1830',
+    primaryLight: '#D64458',
+    accent: '#C41E3A',
+    accentSecondary: '#E8A0AA',
     gradient: {
-      start: '#cd6a6f',
-      end: '#d98589',
+      start: '#C41E3A',
+      end: '#D64458',
     },
     success: '#2E7D32',
     warning: '#ED6C02',

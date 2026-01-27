@@ -4,7 +4,7 @@ const path = require('path');
 
 // TRACK'D App Icon Generator
 const SIZE = 1024;
-const PRIMARY_COLOR = '#cd6a6f';
+const PRIMARY_COLOR = '#C41E3A';
 const BACKGROUND_COLOR = '#1a1a1a';
 const TEXT_COLOR = '#FFFFFF';
 
