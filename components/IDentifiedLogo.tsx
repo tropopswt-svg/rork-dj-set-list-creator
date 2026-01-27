@@ -314,12 +314,12 @@ export default function IDentifiedLogo({ size = 'medium' }: IDentifiedLogoProps)
 
 const styles = StyleSheet.create({
   boxContainer: {
-    backgroundColor: 'rgba(30, 30, 35, 0.9)', // Slightly translucent dark
+    backgroundColor: '#FFFFFF', // Clean white background
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)', // Subtle white border for glass effect
+    borderColor: 'rgba(0, 0, 0, 0.1)', // Subtle border
   },
   waveformContainer: {
     position: 'absolute',
@@ -343,18 +343,18 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)', // Very subtle glass sheen
+    backgroundColor: 'rgba(255, 255, 255, 0.3)', // Light overlay to soften waveform
   },
   textContainer: {
     zIndex: 2,
   },
   logoText: {
     fontWeight: '900',
-    color: 'rgba(255, 255, 255, 0.95)', // Slightly translucent white for glass effect
+    color: '#1A1A1A', // Dark text on white background
     letterSpacing: 4,
-    textShadowColor: 'rgba(255, 255, 255, 0.3)', // White glow for glass effect
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 8,
+    textShadowColor: 'rgba(0, 0, 0, 0.1)', // Subtle shadow
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
     fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style condensed geometric font
   },
 });

@@ -480,28 +480,31 @@ const styles = StyleSheet.create({
   },
   logoText: {
     fontWeight: '900',
-    color: Colors.dark.text,
+    color: '#FFFFFF', // White text
     letterSpacing: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
   },
   apostrophe: {
     fontWeight: '900',
-    color: Colors.dark.text,
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
+    color: '#FFFFFF', // White text
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
   },
   vinylDContainer: {
     position: 'relative',
   },
   vinylD: {
     fontWeight: '900',
-    color: Colors.dark.text,
-    textShadowColor: 'rgba(0, 0, 0, 0.9)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 6,
+    color: '#FFFFFF', // White text
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
   },
   needleContainer: {
     position: 'absolute',
