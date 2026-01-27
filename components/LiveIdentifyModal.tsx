@@ -57,7 +57,7 @@ type IdentifyState = 'idle' | 'recording' | 'analyzing' | 'success' | 'no_match'
 // especially for tracks with long intros or ambient sections
 const RECORDING_DURATION_MS = 15000;
 
-// Generate waveform bars similar to IDentifiedLogo
+// Generate waveform bars similar to TrackdLogo
 const generateBars = (barCount: number) => {
   return Array.from({ length: barCount }, (_, i) => {
     const noise1 = Math.sin(i * 0.8) * 0.3;

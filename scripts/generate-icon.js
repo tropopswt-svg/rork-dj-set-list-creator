@@ -2,7 +2,7 @@ const { createCanvas, registerFont } = require('canvas');
 const fs = require('fs');
 const path = require('path');
 
-// IDentified App Icon Generator
+// TRACK'D App Icon Generator
 const SIZE = 1024;
 const PRIMARY_COLOR = '#cd6a6f';
 const BACKGROUND_COLOR = '#1a1a1a';

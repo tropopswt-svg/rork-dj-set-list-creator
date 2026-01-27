@@ -4,78 +4,87 @@ import Colors from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// ID'D Logo
-// Clean ID'D text with spinning vinyl D and full-width waveform background
+// TRACK'D Logo
+// Clean TRACK'D text with spinning vinyl D and full-width waveform background
 
 interface IddLogoProps {
   size?: 'small' | 'medium' | 'large';
   showTagline?: boolean;
 }
 
-// Generate realistic waveform data - mimics actual track dynamics
+// Seeded random for consistent waveform generation
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed * 9999) * 10000;
+  return x - Math.floor(x);
+};
+
+// Generate realistic waveform data - seamless loop (end matches start)
 const generateWaveformData = (count: number) => {
   const data: { height: number; color: string }[] = [];
 
+  const colors = [
+    'rgba(100, 180, 255, 0.5)',    // Blue - intro/outro
+    'rgba(255, 150, 200, 0.5)',    // Pink - buildup
+    'rgba(255, 100, 80, 0.5)',     // Red/Orange - drop
+    'rgba(150, 220, 255, 0.5)',    // Cyan - breakdown
+    'rgba(180, 255, 180, 0.5)',    // Green - breakdown 2
+  ];
+
   // Simulate a real track with intro, buildup, drop, breakdown, outro
+  // Outro transitions back to intro values for seamless loop
   for (let i = 0; i < count; i++) {
     const progress = i / count;
+    const seed = i * 1.337; // Consistent seed for each bar
 
-    // Base amplitude varies by "section" of the track
     let baseAmp = 0.3;
     let colorPhase = 0;
 
-    // Intro (quiet)
-    if (progress < 0.1) {
-      baseAmp = 0.15 + Math.random() * 0.15;
+    // Intro (quiet) - blue
+    if (progress < 0.08) {
+      baseAmp = 0.2 + seededRandom(seed) * 0.15;
       colorPhase = 0;
     }
-    // Buildup
-    else if (progress < 0.2) {
-      baseAmp = 0.3 + (progress - 0.1) * 4 + Math.random() * 0.2;
+    // Buildup - pink
+    else if (progress < 0.18) {
+      baseAmp = 0.3 + (progress - 0.08) * 4 + seededRandom(seed) * 0.2;
       colorPhase = 1;
     }
-    // Drop (loud)
+    // Drop (loud) - red
     else if (progress < 0.35) {
-      baseAmp = 0.7 + Math.random() * 0.3;
+      baseAmp = 0.7 + seededRandom(seed) * 0.3;
       colorPhase = 2;
     }
-    // Breakdown (quieter)
+    // Breakdown (quieter) - cyan
     else if (progress < 0.45) {
-      baseAmp = 0.25 + Math.random() * 0.2;
+      baseAmp = 0.25 + seededRandom(seed) * 0.2;
       colorPhase = 3;
     }
-    // Buildup 2
+    // Buildup 2 - pink
     else if (progress < 0.55) {
-      baseAmp = 0.35 + (progress - 0.45) * 5 + Math.random() * 0.2;
+      baseAmp = 0.35 + (progress - 0.45) * 5 + seededRandom(seed) * 0.2;
       colorPhase = 1;
     }
-    // Drop 2 (loud)
-    else if (progress < 0.75) {
-      baseAmp = 0.75 + Math.random() * 0.25;
+    // Drop 2 (loud) - red
+    else if (progress < 0.72) {
+      baseAmp = 0.75 + seededRandom(seed) * 0.25;
       colorPhase = 2;
     }
-    // Breakdown 2
-    else if (progress < 0.85) {
-      baseAmp = 0.3 + Math.random() * 0.25;
+    // Breakdown 2 - green
+    else if (progress < 0.82) {
+      baseAmp = 0.3 + seededRandom(seed) * 0.25;
       colorPhase = 4;
     }
-    // Outro (fading)
+    // Outro (fading back to intro) - transition to blue
     else {
-      baseAmp = 0.4 - (progress - 0.85) * 2 + Math.random() * 0.15;
-      colorPhase = 0;
+      // Smoothly fade from breakdown levels back to intro levels
+      const outroProgress = (progress - 0.82) / 0.18; // 0 to 1 within outro
+      const startAmp = 0.35;
+      const endAmp = 0.2; // Match intro starting amplitude
+      baseAmp = startAmp + (endAmp - startAmp) * outroProgress + seededRandom(seed) * 0.1;
+      colorPhase = 0; // Blue like intro
     }
 
-    // Add some randomness for realism
-    const height = Math.max(0.08, Math.min(1, baseAmp + (Math.random() - 0.5) * 0.15));
-
-    // Color based on section (like Rekordbox) - muted/subtle opacity
-    const colors = [
-      'rgba(100, 180, 255, 0.5)',    // Blue - intro/outro
-      'rgba(255, 150, 200, 0.5)',    // Pink - buildup
-      'rgba(255, 100, 80, 0.5)',     // Red/Orange - drop
-      'rgba(150, 220, 255, 0.5)',    // Cyan - breakdown
-      'rgba(180, 255, 180, 0.5)',    // Green - breakdown 2
-    ];
+    const height = Math.max(0.08, Math.min(1, baseAmp + seededRandom(seed + 0.5) * 0.1));
 
     data.push({
       height,
@@ -129,11 +138,14 @@ const FullWaveform = ({ width, height }: { width: number; height: number }) => {
     ).start();
   }, []);
 
-  const totalWidth = waveformData.length * 4; // Each bar is 3px + 1px gap
+  // Each bar is 3px wide + 0.5px margin on each side = 4px total
+  const barWidth = 4;
+  const singleSetWidth = waveformData.length * barWidth;
 
+  // Scroll exactly one full set width for seamless loop
   const translateX = scrollAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -totalWidth / 2],
+    outputRange: [0, -singleSetWidth],
   });
 
   // Wave pulse creates a vertical scale effect - bars shrink then grow
@@ -256,12 +268,121 @@ const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
   );
 };
 
+// Waveform speed calculation: 150 bars * 4px = 600px in 8000ms = 0.075 px/ms
+const WAVEFORM_SPEED = 600 / 8000; // px per ms
+
 export default function IddLogo({ size = 'medium', showTagline = false }: IddLogoProps) {
+  const textSlideAnim = useRef(new Animated.Value(0)).current;
+  const textPulseAnim = useRef(new Animated.Value(1)).current;
+  const scanAnim = useRef(new Animated.Value(0)).current;
+  const jumpAnim = useRef(new Animated.Value(0)).current;
+
   const sizeConfig = {
     small: { fontSize: 42, spacing: 2, waveHeight: 70 },
     medium: { fontSize: 56, spacing: 3, waveHeight: 90 },
     large: { fontSize: 72, spacing: 4, waveHeight: 110 },
   }[size];
+
+  // Calculate slide duration to match waveform speed exactly
+  const slideDuration = SCREEN_WIDTH / WAVEFORM_SPEED; // ~5200ms for 390px screen
+
+  useEffect(() => {
+    // Logo animation: scan, pulse, jump onto waveform, ride out, come back from right
+    Animated.loop(
+      Animated.sequence([
+        // Wait 10 seconds
+        Animated.delay(10000),
+        // Scan effect (slight horizontal shake like scanning for a spot)
+        Animated.sequence([
+          Animated.timing(scanAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+          Animated.timing(scanAnim, { toValue: -1, duration: 100, useNativeDriver: true }),
+          Animated.timing(scanAnim, { toValue: 1, duration: 100, useNativeDriver: true }),
+          Animated.timing(scanAnim, { toValue: 0, duration: 100, useNativeDriver: true }),
+        ]),
+        // Pulse (found a spot!)
+        Animated.sequence([
+          Animated.timing(textPulseAnim, {
+            toValue: 1.15,
+            duration: 150,
+            easing: Easing.out(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(textPulseAnim, {
+            toValue: 0.95,
+            duration: 150,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(textPulseAnim, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+        ]),
+        // Jump up and land on waveform (quick hop before sticking)
+        Animated.sequence([
+          Animated.timing(jumpAnim, {
+            toValue: 1,
+            duration: 150,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(jumpAnim, {
+            toValue: 0,
+            duration: 100,
+            easing: Easing.in(Easing.bounce),
+            useNativeDriver: true,
+          }),
+        ]),
+        // Ride out with waveform (at exact waveform speed - linear)
+        Animated.timing(textSlideAnim, {
+          toValue: 1,
+          duration: slideDuration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        // Pause off screen
+        Animated.delay(1500),
+        // Jump to right side (instant)
+        Animated.timing(textSlideAnim, {
+          toValue: 2,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        // Ride back in from right at exact waveform speed
+        Animated.timing(textSlideAnim, {
+          toValue: 3,
+          duration: slideDuration,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        // Reset
+        Animated.timing(textSlideAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [slideDuration]);
+
+  // Text slides out left, then in from right
+  const textTranslateX = textSlideAnim.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: [0, -SCREEN_WIDTH, SCREEN_WIDTH, 0],
+  });
+
+  // Scan shake effect
+  const scanTranslateX = scanAnim.interpolate({
+    inputRange: [-1, 0, 1],
+    outputRange: [-8, 0, 8],
+  });
+
+  // Jump effect (hop up before sticking to waveform)
+  const jumpTranslateY = jumpAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -12],
+  });
 
   return (
     <View style={styles.container}>
@@ -270,9 +391,21 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
         <FullWaveform width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
       </View>
 
-      {/* Logo text on top */}
-      <View style={styles.logoWrapper}>
-        {/* ID */}
+      {/* Logo text on top - animated to scan, pulse, jump, and ride waveform */}
+      <Animated.View
+        style={[
+          styles.logoWrapper,
+          {
+            transform: [
+              { translateX: textTranslateX },
+              { translateX: scanTranslateX },
+              { translateY: jumpTranslateY },
+              { scale: textPulseAnim },
+            ],
+          },
+        ]}
+      >
+        {/* TRACK' */}
         <Text
           style={[
             styles.logoText,
@@ -282,29 +415,15 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
             }
           ]}
         >
-          ID
-        </Text>
-
-        {/* Apostrophe */}
-        <Text
-          style={[
-            styles.apostrophe,
-            {
-              fontSize: sizeConfig.fontSize,
-              lineHeight: sizeConfig.fontSize,
-              marginLeft: sizeConfig.spacing,
-            }
-          ]}
-        >
-          '
+          TRACK'
         </Text>
 
         {/* Spinning D with vinyl needle */}
         <VinylD fontSize={sizeConfig.fontSize} />
-      </View>
+      </Animated.View>
 
       {showTagline && (
-        <Text style={styles.tagline}>Every track. Identified.</Text>
+        <Text style={styles.tagline}>Every track. Every set.</Text>
       )}
     </View>
   );
@@ -319,7 +438,7 @@ export function IddBadge({ size = 'small' }: { size?: 'small' | 'medium' }) {
 
   return (
     <View style={[styles.badge, { paddingHorizontal: sizeConfig.padding + 2, paddingVertical: sizeConfig.padding }]}>
-      <Text style={[styles.badgeText, { fontSize: sizeConfig.fontSize }]}>ID'D</Text>
+      <Text style={[styles.badgeText, { fontSize: sizeConfig.fontSize }]}>TRACK'D</Text>
     </View>
   );
 }

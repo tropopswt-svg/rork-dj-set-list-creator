@@ -1,4 +1,4 @@
--- IDentified Database Schema
+-- TRACK'D Database Schema
 -- Artists, Tracks, and relationships for the DJ set identification app
 
 -- ============================================

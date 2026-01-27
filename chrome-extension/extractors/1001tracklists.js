@@ -1,4 +1,4 @@
-// IDentified - 1001Tracklists Extractor
+// TRACK'D - 1001Tracklists Extractor
 // Scrapes tracklists from 1001tracklists.com
 
 (function() {
@@ -775,8 +775,8 @@
     
     const btn = document.createElement('button');
     btn.id = 'identified-btn';
-    btn.innerHTML = '✨ IDentified';
-    btn.title = 'Scrape and send tracklist to IDentified';
+    btn.innerHTML = '✨ TRACK'D';
+    btn.title = 'Scrape and send tracklist to TRACK'D';
     
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -788,7 +788,7 @@
         if (data.tracks.length === 0 && data.artists?.length === 0) {
           btn.innerHTML = '⚠️ No tracks found';
           setTimeout(() => {
-            btn.innerHTML = '✨ IDentified';
+            btn.innerHTML = '✨ TRACK'D';
             btn.disabled = false;
           }, 2000);
           return;
@@ -822,7 +822,7 @@
         }
 
         setTimeout(() => {
-          btn.innerHTML = '✨ IDentified';
+          btn.innerHTML = '✨ TRACK'D';
           btn.disabled = false;
         }, 4000);
 
@@ -830,7 +830,7 @@
         console.error('[1001TL] Button error:', e);
         btn.innerHTML = '❌ Error';
         setTimeout(() => {
-          btn.innerHTML = '✨ IDentified';
+          btn.innerHTML = '✨ TRACK'D';
           btn.disabled = false;
         }, 3000);
       }

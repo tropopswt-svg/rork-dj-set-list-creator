@@ -14,7 +14,7 @@ const createSvg = (size) => `
     </linearGradient>
   </defs>
   <rect width="${size}" height="${size}" rx="${size * 0.2}" fill="url(#grad)"/>
-  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="${size * 0.5}">ID</text>
+  <text x="50%" y="55%" dominant-baseline="middle" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-weight="bold" font-size="${size * 0.35}">T'D</text>
 </svg>
 `;
 

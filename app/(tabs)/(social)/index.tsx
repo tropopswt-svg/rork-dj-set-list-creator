@@ -6,6 +6,7 @@ import { Heart, MessageCircle, Music, Clock, CheckCircle, Users, Share2, Bell, U
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import IDentifiedLogo from '@/components/IDentifiedLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFeed, useFollowing, useNotifications, ActivityWithDetails } from '@/hooks/useSocial';
 
@@ -165,7 +166,9 @@ export default function SocialScreen() {
             <Text style={styles.title}>Social</Text>
           </View>
           <View style={styles.loginPromptContainer}>
-            <Users size={48} color={Colors.dark.textMuted} />
+            <View style={styles.loginLogoWrapper}>
+              <IDentifiedLogo size="xlarge" />
+            </View>
             <Text style={styles.loginPromptTitle}>Connect with friends</Text>
             <Text style={styles.loginPromptText}>
               Log in to follow friends, see their activity, and share your contributions
@@ -407,6 +410,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 32,
     gap: 16,
+  },
+  loginLogoWrapper: {
+    marginBottom: 8,
   },
   loginPromptTitle: {
     fontSize: 20,

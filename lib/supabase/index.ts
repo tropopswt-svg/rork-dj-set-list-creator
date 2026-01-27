@@ -41,3 +41,13 @@ export {
   getArtistSlug,
   batchCheckTracks,
 } from './linkingService';
+
+// Points service
+export {
+  addPointsToDatabase,
+  getPointsTransactions,
+  hasEarnedPointsForDb,
+  syncAnonymousPoints,
+  getCategoryFromReason,
+} from './pointsService';
+export type { DbPointTransaction } from './pointsService';

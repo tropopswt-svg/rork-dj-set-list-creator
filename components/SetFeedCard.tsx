@@ -14,6 +14,8 @@ interface SetFeedCardProps {
   onArtistPress?: (artist: string) => void;
   onEventPress?: (eventId: string) => void;
   isSelected?: boolean; // Whether this card is the main/centered one in the scroll wheel
+  fillProgress?: Animated.AnimatedInterpolation<number>; // 0-1 for liquid fill effect on chips
+  fillDirection?: Animated.AnimatedInterpolation<number>; // 1 = fill up, -1 = drain down
 }
 
 const coverImages = [
@@ -271,7 +273,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Printworks': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, fillProgress, fillDirection }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
   // Pulsing glow animation for selected card's artist chips
@@ -303,15 +305,15 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
     }
   }, [isSelected, glowAnim]);
 
-  // Interpolate glow values
+  // Interpolate glow values (reduced for subtler effect)
   const glowShadowOpacity = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0.3, 0.7],
+    outputRange: [0.15, 0.35],
   });
 
   const glowShadowRadius = glowAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [4, 12],
+    outputRange: [2, 6],
   });
 
   // Calculate dynamic font sizes based on content length and venue presence
@@ -1082,7 +1084,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   );
   const needsSource = !hasAnalyzableSource;
 
-  // Check if set has been IDentified (analyzed via YouTube/SoundCloud)
+  // Check if set has been TRACK'D (analyzed via YouTube/SoundCloud)
   const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
   const isIdentified = hasAnalyzableSource && (setList.aiProcessed || trackCount > 0);
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
@@ -1105,6 +1107,45 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const { display: displayArtists, hasMore: showMoreButton, moreCount } = getDisplayArtists(artists, !!venue);
   const actualMoreCount = moreCount ?? (artists.length - displayArtists.length);
 
+  // Dynamic badge sizing based on available space
+  // Count how many badges will be displayed
+  const badgeCount = useMemo(() => {
+    let count = 1; // Always have status badge (T'D or ?)
+    if (locationCity || smartLocation) count++; // Location icon
+    if (locationFlag) count++; // Flag
+    if (detectedEvent) count++; // Event badge
+    return count;
+  }, [locationCity, smartLocation, locationFlag, detectedEvent]);
+
+  // Get display name length for space calculation
+  const displayNameLength = formatDisplayName().length;
+
+  // Calculate badge size scale: more space = bigger badges
+  // Scale from 1.0 (minimum, 4 badges + long name) to 1.5 (maximum, 1-2 badges + short name)
+  const badgeSizeScale = useMemo(() => {
+    // Fewer badges = more space
+    const badgeSpaceFactor = Math.max(0, (4 - badgeCount) * 0.1); // 0 to 0.3
+    // Shorter name = more space (under 25 chars is "short")
+    const nameSpaceFactor = displayNameLength < 25 ? 0.2 : displayNameLength < 35 ? 0.1 : 0;
+    // Combined scale: 1.0 to 1.5
+    return Math.min(1.5, 1.0 + badgeSpaceFactor + nameSpaceFactor);
+  }, [badgeCount, displayNameLength]);
+
+  // Dynamic badge dimensions
+  const dynamicBadgeSize = {
+    locationIcon: Math.round(14 * badgeSizeScale),
+    locationIconPin: Math.round(8 * badgeSizeScale),
+    flagEmoji: Math.round(8 * badgeSizeScale),
+    trackdWidth: Math.round(16 * badgeSizeScale),
+    trackdHeight: Math.round(14 * badgeSizeScale),
+    trackdFont: Math.round(6 * badgeSizeScale),
+    unanalyzedSize: Math.round(12 * badgeSizeScale),
+    unanalyzedFont: Math.round(7 * badgeSizeScale),
+    tracksPaddingH: Math.round(5 * badgeSizeScale),
+    tracksPaddingV: Math.round(2 * badgeSizeScale),
+    tracksFont: Math.round(8 * badgeSizeScale),
+  };
+
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
@@ -1118,6 +1159,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
         <Animated.View
           style={[
             styles.venueBadgeTopRight,
+            styles.venueBadgeWithFill,
             isSelected && styles.venueBadgeSelected,
             isSelected && {
               shadowColor: Colors.dark.primary,
@@ -1127,17 +1169,34 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
             },
           ]}
         >
-          <Ticket size={venueFontSize} color={isSelected ? '#FFF8F0' : Colors.dark.primary} />
-          <Text
-            style={[
-              styles.venueBadgeText,
-              { fontSize: venueFontSize },
-              isSelected && styles.venueBadgeTextSelected,
-            ]}
-            numberOfLines={1}
-          >
-            {displayVenue}
-          </Text>
+          {/* Fill overlay - only when not selected, capped opacity for text visibility */}
+          {fillProgress && !isSelected && (
+            <Animated.View
+              style={[
+                styles.venueFillOverlay,
+                {
+                  opacity: fillProgress.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, 0.7],
+                    extrapolate: 'clamp',
+                  }),
+                },
+              ]}
+            />
+          )}
+          <View style={styles.venueContentContainer}>
+            <Ticket size={venueFontSize} color={isSelected ? '#FFF8F0' : Colors.dark.primary} />
+            <Text
+              style={[
+                styles.venueBadgeText,
+                { fontSize: venueFontSize },
+                isSelected && styles.venueBadgeTextSelected,
+              ]}
+              numberOfLines={1}
+            >
+              {displayVenue}
+            </Text>
+          </View>
         </Animated.View>
       )}
 
@@ -1221,6 +1280,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                       <Animated.View
                         style={[
                           styles.artistChip,
+                          styles.artistChipWithFill,
                           {
                             paddingHorizontal: artistChipStyle.paddingH,
                             paddingVertical: artistChipStyle.paddingV,
@@ -1235,17 +1295,34 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                           pressed && styles.artistChipPressed
                         ]}
                       >
-                        <Text
-                          style={[
-                            styles.artistText,
-                            { fontSize: artistChipStyle.fontSize },
-                            isSelected && styles.artistTextSelected,
-                            pressed && styles.artistTextPressed
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {artist}
-                        </Text>
+                        {/* Fill overlay - only when not selected, capped opacity for text visibility */}
+                        {fillProgress && !isSelected && (
+                          <Animated.View
+                            style={[
+                              styles.chipFillOverlay,
+                              {
+                                opacity: fillProgress.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [0, 0.7],
+                                  extrapolate: 'clamp',
+                                }),
+                              },
+                            ]}
+                          />
+                        )}
+                        <View style={styles.chipTextContainer}>
+                          <Text
+                            style={[
+                              styles.artistText,
+                              { fontSize: artistChipStyle.fontSize },
+                              isSelected && styles.artistTextSelected,
+                              pressed && styles.artistTextPressed
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {artist}
+                          </Text>
+                        </View>
                       </Animated.View>
                     )}
                   </Pressable>
@@ -1317,8 +1394,11 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                   </View>
                 )}
                 {/* Tracks count badge */}
-                <View style={styles.tracksBadge}>
-                  <Text style={styles.tracksBadgeText}>
+                <View style={[styles.tracksBadge, {
+                  paddingHorizontal: dynamicBadgeSize.tracksPaddingH,
+                  paddingVertical: dynamicBadgeSize.tracksPaddingV,
+                }]}>
+                  <Text style={[styles.tracksBadgeText, { fontSize: dynamicBadgeSize.tracksFont }]}>
                     {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
                   </Text>
                 </View>
@@ -1336,32 +1416,45 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                       }}
                       hitSlop={4}
                     >
-                      <View style={styles.locationIconBadge}>
-                        <MapPin size={8} color="#fff" />
+                      <View style={[styles.locationIconBadge, {
+                        width: dynamicBadgeSize.locationIcon,
+                        height: dynamicBadgeSize.locationIcon
+                      }]}>
+                        <MapPin size={dynamicBadgeSize.locationIconPin} color="#fff" />
                       </View>
                     </Pressable>
                   )}
                   {/* Flag badge */}
                   {locationFlag && (
                     <View style={styles.flagBadge}>
-                      <Text style={styles.flagEmoji}>{locationFlag}</Text>
+                      <Text style={[styles.flagEmoji, { fontSize: dynamicBadgeSize.flagEmoji }]}>{locationFlag}</Text>
                     </View>
                   )}
                   {/* Event/Festival badge */}
                   {detectedEvent && (
-                    <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
+                    <EventBadge
+                      eventId={detectedEvent}
+                      size={badgeSizeScale > 1.2 ? 'medium' : 'small'}
+                      onPress={onEventPress}
+                    />
                   )}
                   {/* Status badge */}
                   {isIdentified ? (
                     <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
-                      <View style={styles.trackdBadge}>
-                        <Text style={styles.trackdBadgeText}>T'D</Text>
+                      <View style={[styles.trackdBadge, {
+                        width: dynamicBadgeSize.trackdWidth,
+                        height: dynamicBadgeSize.trackdHeight,
+                      }]}>
+                        <Text style={[styles.trackdBadgeText, { fontSize: dynamicBadgeSize.trackdFont }]}>T'D</Text>
                       </View>
                     </Pressable>
                   ) : (
                     <Pressable onPress={handleUnanalyzedBadgePress} hitSlop={4}>
-                      <View style={styles.unanalyzedBadge}>
-                        <Text style={styles.unanalyzedBadgeText}>?</Text>
+                      <View style={[styles.unanalyzedBadge, {
+                        width: dynamicBadgeSize.unanalyzedSize,
+                        height: dynamicBadgeSize.unanalyzedSize,
+                      }]}>
+                        <Text style={[styles.unanalyzedBadgeText, { fontSize: dynamicBadgeSize.unanalyzedFont }]}>?</Text>
                       </View>
                     </Pressable>
                   )}
@@ -1444,9 +1537,28 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 4,
   },
+  venueBadgeWithFill: {
+    overflow: 'hidden',
+  },
+  venueFillOverlay: {
+    position: 'absolute',
+    top: -1,
+    bottom: -1,
+    left: -1,
+    right: -1,
+    backgroundColor: '#C41E3A', // Circoloco red
+    borderRadius: 10,
+  },
+  venueContentContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    zIndex: 10,
+  },
   venueBadgeSelected: {
-    backgroundColor: Colors.dark.primary,
-    borderColor: Colors.dark.primary,
+    backgroundColor: '#C41E3A', // Circoloco red
+    borderColor: '#C41E3A',
+    borderWidth: 1.5,
   },
   venueBadgeTextSelected: {
     color: '#FFF8F0',
@@ -1566,9 +1678,45 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: Colors.dark.primary,
   },
-  artistChipSelected: {
+  artistChipWithFill: {
+    overflow: 'hidden',
+  },
+  chipFillOverlay: {
+    position: 'absolute',
+    top: -1,
+    bottom: -1,
+    left: -1,
+    right: -1,
+    backgroundColor: '#C41E3A', // Circoloco red
+    borderRadius: 11,
+  },
+  chipTextContainer: {
+    zIndex: 10,
+  },
+  chipFillOverlayBottom: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
     backgroundColor: Colors.dark.primary,
-    borderColor: Colors.dark.primary,
+    borderRadius: 10,
+    zIndex: 1,
+  },
+  chipFillOverlayTop: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 10,
+    zIndex: 1,
+  },
+  artistChipSelected: {
+    backgroundColor: '#C41E3A', // Circoloco red
+    borderColor: '#C41E3A',
+    borderWidth: 2,
   },
   artistChipPressed: {
     backgroundColor: Colors.dark.primary,
@@ -1635,8 +1783,8 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
   nameAccentSelected: {
-    backgroundColor: Colors.dark.primary,
-    shadowColor: Colors.dark.primary,
+    backgroundColor: '#C41E3A', // Circoloco red
+    shadowColor: '#C41E3A',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6,
     shadowRadius: 4,
@@ -1649,7 +1797,7 @@ const styles = StyleSheet.create({
     lineHeight: 15,
   },
   nameSelected: {
-    color: Colors.dark.primary,
+    color: '#C41E3A', // Circoloco red
     fontWeight: '700' as const,
   },
   // Location row - more prominent

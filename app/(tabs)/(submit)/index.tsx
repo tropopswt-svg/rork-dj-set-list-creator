@@ -860,10 +860,10 @@ export default function SubmitScreen() {
               />
             )}
             
-            {/* IDentified Branding */}
+            {/* TRACK'D Branding */}
             <View style={styles.identifiedBranding}>
               <Sparkles size={16} color={Colors.dark.primary} />
-              <Text style={styles.identifiedText}>IDentified</Text>
+              <Text style={styles.identifiedText}>TRACK'D</Text>
             </View>
             
             {/* Loading Indicator - During fetching/scanning */}

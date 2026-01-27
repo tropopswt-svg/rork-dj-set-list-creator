@@ -1083,9 +1083,9 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `IDentified ${importResult.setList.tracks.length} tracks from this source`);
+                              Alert.alert('Success', `TRACK'D ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
-                              Alert.alert('No Results', 'No tracks could be IDentified from this source');
+                              Alert.alert('No Results', 'No tracks could be identified from this source');
                             }
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
@@ -1099,10 +1099,7 @@ export default function SetDetailScreen() {
                       </Pressable>
                     ) : hasTimestamps ? (
                       <View style={styles.identifiedBadge}>
-                        <View style={styles.identifiedBadgeIdContainer}>
-                          <Text style={styles.identifiedBadgeId}>ID</Text>
-                        </View>
-                        <Text style={styles.identifiedBadgeText}>entified</Text>
+                        <Text style={styles.identifiedBadgeId}>TRACK'D</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1209,9 +1206,9 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `IDentified ${importResult.setList.tracks.length} tracks from this source`);
+                              Alert.alert('Success', `TRACK'D ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
-                              Alert.alert('No Results', 'No tracks could be IDentified from this source');
+                              Alert.alert('No Results', 'No tracks could be identified from this source');
                             }
                           } catch (error: any) {
                             Alert.alert('Error', error.message || 'Failed to analyze');
@@ -1225,10 +1222,7 @@ export default function SetDetailScreen() {
                       </Pressable>
                     ) : hasTimestamps ? (
                       <View style={styles.identifiedBadge}>
-                        <View style={styles.identifiedBadgeIdContainer}>
-                          <Text style={styles.identifiedBadgeId}>ID</Text>
-                        </View>
-                        <Text style={styles.identifiedBadgeText}>entified</Text>
+                        <Text style={styles.identifiedBadgeId}>TRACK'D</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1345,7 +1339,7 @@ export default function SetDetailScreen() {
             <View style={styles.aiInfoBanner}>
               <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                IDentified • {setList.commentsScraped?.toLocaleString()} data points analyzed
+                TRACK'D • {setList.commentsScraped?.toLocaleString()} data points analyzed
               </Text>
             </View>
           )}

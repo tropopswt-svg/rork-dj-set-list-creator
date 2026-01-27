@@ -73,7 +73,7 @@ console.log('House Music Genre URLs for Bulk Import');
 console.log('='.repeat(70));
 console.log('');
 console.log('Visit these URLs with the Chrome extension active.');
-console.log('Click the "IDentified" button on each page to import tracks.');
+console.log('Click the "TRACK\'D" button on each page to import tracks.');
 console.log('');
 console.log('Usage: node scripts/genre-urls.js [--beatport] [--soundcloud] [--1001] [--all]');
 console.log('');

@@ -564,14 +564,21 @@ export default function EventBadge({ eventId, size = 'small', onPress }: EventBa
     return null;
   }
 
+  // Size configurations: small (default/compact), medium (more space), large (full size)
   const isSmall = size === 'small';
-  const badgeHeight = isSmall ? 14 : 26;
-  const badgeWidth = config.isWide ? (isSmall ? 26 : 44) : badgeHeight;
+  const sizeConfig = {
+    small: { height: 14, wideWidth: 26, emoji: 9, wideFont: 5, normalFont: 6, handwritten: 9 },
+    medium: { height: 18, wideWidth: 32, emoji: 11, wideFont: 7, normalFont: 8, handwritten: 11 },
+  };
+  const sizes = sizeConfig[size] || sizeConfig.small;
+
+  const badgeHeight = sizes.height;
+  const badgeWidth = config.isWide ? sizes.wideWidth : badgeHeight;
   const fontSize = config.isEmoji
-    ? (isSmall ? 9 : 16)
+    ? sizes.emoji
     : config.isWide
-      ? (isSmall ? 5 : 9)
-      : (isSmall ? 6 : 11);
+      ? sizes.wideFont
+      : sizes.normalFont;
 
   // Font style variations
   const getFontStyle = () => {
@@ -579,7 +586,7 @@ export default function EventBadge({ eventId, size = 'small', onPress }: EventBa
       return {
         fontStyle: 'italic' as const,
         fontWeight: '400' as const,
-        fontSize: isSmall ? 9 : 16, // Larger for handwritten feel
+        fontSize: sizes.handwritten,
         letterSpacing: 0,
       };
     }

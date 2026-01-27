@@ -65,8 +65,8 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(`https://identified.app/set/${item.set.id}`, {
-          dialogTitle: `Check out ${item.set.name} on IDentified`,
+        await Sharing.shareAsync(`https://trackd.app/set/${item.set.id}`, {
+          dialogTitle: `Check out ${item.set.name} on TRACK'D`,
         });
       }
     } catch (error) {

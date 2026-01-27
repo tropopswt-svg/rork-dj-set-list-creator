@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Animated, Dimensions, ViewStyle, StyleSheet } from 'react-native';
+import React from 'react';
+import { Animated, Dimensions, ViewStyle, StyleSheet, View } from 'react-native';
 import SetFeedCard from './SetFeedCard';
 import { SetList } from '@/types';
 import Colors from '@/constants/colors';
@@ -30,47 +30,13 @@ export default function AnimatedSetCard({
   centerOffset = 0,
   isSelected: isSelectedProp = false,
 }: AnimatedSetCardProps) {
-  // Local state for quick deselection - prevents lag when scrolling away
-  const [localSelected, setLocalSelected] = useState(isSelectedProp);
-  const lastScrollValue = useRef(0);
-
   // The scroll value when this card should be perfectly centered
-  // centerOffset shifts the "center point" down to account for header elements
   const scrollYWhenCentered = index * CARD_HEIGHT - centerOffset;
 
-  // Sync with prop when it becomes true (parent says we're selected)
-  useEffect(() => {
-    if (isSelectedProp) {
-      setLocalSelected(true);
-    }
-  }, [isSelectedProp]);
+  // Use prop directly - no local state to avoid re-renders
+  const isSelected = isSelectedProp;
 
-  // Listen to scroll to quickly deselect when scrolling away
-  useEffect(() => {
-    const listenerId = scrollY.addListener(({ value }) => {
-      const centeredIndex = Math.round((value + centerOffset) / CARD_HEIGHT);
-      const shouldBeSelected = centeredIndex === index;
-
-      // Quickly deselect if we're no longer centered
-      if (!shouldBeSelected && localSelected) {
-        setLocalSelected(false);
-      }
-      // Only select if prop says so (parent is source of truth for selection)
-      else if (shouldBeSelected && isSelectedProp && !localSelected) {
-        setLocalSelected(true);
-      }
-
-      lastScrollValue.current = value;
-    });
-
-    return () => scrollY.removeListener(listenerId);
-  }, [scrollY, centerOffset, index, localSelected, isSelectedProp]);
-
-  // Use local state for rendering (faster response)
-  const isSelected = localSelected && isSelectedProp;
-
-  // 5-point input range - selected card is BIG and requires more scroll to transition
-  // Small center plateau keeps one card selected, wide transitions = more scroll needed
+  // 5-point input range - smooth transitions
   const inputRange = [
     scrollYWhenCentered - CARD_HEIGHT * 1.8,  // Far - very small
     scrollYWhenCentered - CARD_HEIGHT * 0.4,  // Approaching center
@@ -79,31 +45,31 @@ export default function AnimatedSetCard({
     scrollYWhenCentered + CARD_HEIGHT * 1.8,  // Far - very small
   ];
 
-  // BIG scale difference - selected card really pops out
+  // Scale difference - selected card pops out
   const scale = scrollY.interpolate({
     inputRange,
-    outputRange: [0.82, 0.92, 1.12, 0.92, 0.82],
+    outputRange: [0.85, 0.94, 1.1, 0.94, 0.85],
     extrapolate: 'clamp',
   });
 
-  // Strong opacity contrast
+  // Strong opacity contrast - non-selected more faded
   const opacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.4, 0.7, 1, 0.7, 0.4],
+    outputRange: [0.35, 0.6, 1, 0.6, 0.35],
     extrapolate: 'clamp',
   });
 
-  // Strong glow on selected card
+  // Glow on selected card - prominent
   const shadowOpacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 0.15, 0.6, 0.15, 0],
+    outputRange: [0, 0.2, 0.65, 0.2, 0],
     extrapolate: 'clamp',
   });
 
-  // Shadow spread - big glow on selected
+  // Shadow spread - strong glow on selected
   const shadowRadius = scrollY.interpolate({
     inputRange,
-    outputRange: [0, 6, 28, 6, 0],
+    outputRange: [0, 6, 24, 6, 0],
     extrapolate: 'clamp',
   });
 
@@ -111,6 +77,33 @@ export default function AnimatedSetCard({
   const translateY = scrollY.interpolate({
     inputRange,
     outputRange: [2, 0, -10, 0, 2],
+    extrapolate: 'clamp',
+  });
+
+  // Fill progress for the "liquid fill" effect on artist/venue chips
+  // Very tight range for snappy color changes
+  const fillInputRange = [
+    scrollYWhenCentered - CARD_HEIGHT * 0.8,  // Start filling
+    scrollYWhenCentered - CARD_HEIGHT * 0.08, // Nearly full
+    scrollYWhenCentered,                       // Full
+    scrollYWhenCentered + CARD_HEIGHT * 0.08, // Nearly full
+    scrollYWhenCentered + CARD_HEIGHT * 0.8,  // Start draining
+  ];
+  const fillProgress = scrollY.interpolate({
+    inputRange: fillInputRange,
+    outputRange: [0, 0.95, 1, 0.95, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Direction of fill: 1 = filling from bottom (approaching), -1 = draining from top (leaving)
+  // Cards above center drain downward, cards below center fill upward
+  const fillDirection = scrollY.interpolate({
+    inputRange: [
+      scrollYWhenCentered - CARD_HEIGHT * 2,
+      scrollYWhenCentered,
+      scrollYWhenCentered + CARD_HEIGHT * 2,
+    ],
+    outputRange: [1, 0, -1], // 1 = above (drains down), -1 = below (fills up)
     extrapolate: 'clamp',
   });
 
@@ -139,6 +132,8 @@ export default function AnimatedSetCard({
         onArtistPress={onArtistPress}
         onEventPress={onEventPress}
         isSelected={isSelected}
+        fillProgress={fillProgress}
+        fillDirection={fillDirection}
       />
     </Animated.View>
   );

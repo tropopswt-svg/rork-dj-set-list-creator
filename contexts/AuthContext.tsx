@@ -17,6 +17,9 @@ export interface Profile {
   sets_saved_count: number;
   contributions_count: number;
   points: number;
+  points_voting: number;
+  points_contributions: number;
+  points_track_ids: number;
   favorite_genres: string[];
   is_public: boolean;
   show_contributions: boolean;

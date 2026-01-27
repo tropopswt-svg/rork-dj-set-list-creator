@@ -1,6 +1,6 @@
-# IDentified - Chrome Extension
+# TRACK'D - Chrome Extension
 
-Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists directly into your IDentified database.
+Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists directly into your TRACK'D database.
 
 ## Installation
 
@@ -27,7 +27,7 @@ Then convert the SVG files to PNG:
 
 ### Step 3: Configure API URL
 
-1. Click the IDentified extension icon
+1. Click the TRACK'D extension icon
 2. Click the ⚙️ settings icon
 3. Enter your API URL (e.g., `https://your-app.vercel.app`)
 4. Click "Test Connection" to verify
@@ -44,11 +44,11 @@ Then convert the SVG files to PNG:
 ### How to Scrape
 
 1. Navigate to a supported page
-2. Click the floating "✨ IDentified" button, OR
+2. Click the floating "✨ TRACK'D" button, OR
 3. Click the extension icon in your toolbar
 4. Click "Scrape from [Site]"
 5. Review the results
-6. Click "Send to IDentified" to import
+6. Click "Send to TRACK'D" to import
 
 ## What Gets Scraped
 

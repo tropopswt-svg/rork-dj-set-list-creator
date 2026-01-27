@@ -20,39 +20,98 @@ import { detectEvent, getEventLabel } from '@/components/EventBadge';
 // Higher value = center point lower on screen
 const CENTER_OFFSET = 107;
 
-// Spinning clear filter FAB component
+// Clear filter FAB with grooves, pulse, and spinning accent circle
 const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const spinCircleOpacity = useRef(new Animated.Value(0)).current;
+  const spinCircleRotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(spinAnim, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // Subtle pulse every 15 seconds
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(15000),
+        Animated.timing(pulseAnim, {
+          toValue: 1.08,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.95,
+          duration: 150,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimation.start();
+
+    // Every 30 seconds, show a spinning accent circle
+    const spinCircleAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(30000),
+        Animated.timing(spinCircleOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(spinCircleRotation, {
+          toValue: 3,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(spinCircleOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(spinCircleRotation, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    spinCircleAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+      spinCircleAnimation.stop();
+    };
   }, []);
 
-  const rotation = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+  const spinCircleSpin = spinCircleRotation.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: ['0deg', '360deg', '720deg', '1080deg'],
   });
 
   return (
     <Pressable style={styles.clearFilterFab} onPress={onPress}>
-      {/* Spinning outer ring */}
+      {/* Multiple vinyl grooves (static) */}
+      <View style={styles.clearFilterGroove1} />
+      <View style={styles.clearFilterGroove2} />
+      <View style={styles.clearFilterGroove3} />
+      {/* Spinning accent circle that appears every 30s */}
       <Animated.View
         style={[
-          styles.clearFilterRing,
-          { transform: [{ rotate: rotation }] },
+          styles.clearFilterSpinCircle,
+          {
+            opacity: spinCircleOpacity,
+            transform: [{ rotate: spinCircleSpin }],
+          },
         ]}
       />
-      {/* Static X icon */}
-      <View style={styles.clearFilterInner}>
+      {/* Center X icon - pulses */}
+      <Animated.View style={[styles.clearFilterInner, { transform: [{ scale: pulseAnim }] }]}>
         <X size={24} color={Colors.dark.background} />
-      </View>
+      </Animated.View>
     </Pressable>
   );
 };
@@ -120,6 +179,13 @@ export default function DiscoverScreen() {
   });
   const [selectedIndex, setSelectedIndex] = useState(0);
 
+  // Auto-scroll feature - starts after 20 seconds of inactivity
+  const AUTO_SCROLL_DELAY = 20000; // 20 seconds before auto-scroll starts
+  const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds per set
+  const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
+  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
+  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+
   // Hidden admin menu - tap 2 times, then hold to open
   const hiddenTapCount = useRef(0);
   const hiddenTapTimer = useRef<NodeJS.Timeout | null>(null);
@@ -141,23 +207,75 @@ export default function DiscoverScreen() {
   const [likedSets, setLikedSets] = useState<Set<string>>(new Set());
   const [savedSets, setSavedSets] = useState<Set<string>>(new Set());
 
-  // Vinyl ring spin animation for buttons - continuous rotation like a record
-  const vinylSpinAnim = useRef(new Animated.Value(0)).current;
+  // Vinyl button animations - pulse every 15s, spinning circle every 30s
+  const vinylPulseAnim = useRef(new Animated.Value(1)).current;
+  const vinylSpinCircleOpacity = useRef(new Animated.Value(0)).current;
+  const vinylSpinCircleRotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
-      Animated.timing(vinylSpinAnim, {
-        toValue: 1,
-        duration: 3000, // 3 seconds per rotation
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // Subtle pulse every 15 seconds
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(15000),
+        Animated.timing(vinylPulseAnim, {
+          toValue: 1.08,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vinylPulseAnim, {
+          toValue: 0.95,
+          duration: 150,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vinylPulseAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimation.start();
+
+    // Every 30 seconds, show a spinning accent circle
+    const spinCircleAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(30000),
+        Animated.timing(vinylSpinCircleOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(vinylSpinCircleRotation, {
+          toValue: 3,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(vinylSpinCircleOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(vinylSpinCircleRotation, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    spinCircleAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+      spinCircleAnimation.stop();
+    };
   }, []);
 
-  const vinylRotation = vinylSpinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+  const vinylSpinCircleSpin = vinylSpinCircleRotation.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: ['0deg', '360deg', '720deg', '1080deg'],
   });
 
   // Handle press in - start long press detection after 2 taps
@@ -598,6 +716,79 @@ export default function DiscoverScreen() {
     }
   }, [filteredSetKey, initialScrollOffset]);
 
+  // Auto-scroll: scroll to next set
+  const scrollToNextSet = useCallback(() => {
+    if (!scrollViewRef.current || filteredSets.length === 0) return;
+
+    const nextIndex = (selectedIndex + 1) % filteredSets.length;
+    const targetOffset = nextIndex * CARD_HEIGHT - CENTER_OFFSET;
+
+    scrollViewRef.current.scrollTo({
+      y: Math.max(0, targetOffset),
+      animated: true,
+    });
+  }, [selectedIndex, filteredSets.length]);
+
+  // Start auto-scroll mode
+  const startAutoScroll = useCallback(() => {
+    if (filteredSets.length <= 1) return;
+
+    setIsAutoScrolling(true);
+    // Scroll to next set immediately, then every 5 seconds
+    scrollToNextSet();
+    autoScrollTimer.current = setInterval(() => {
+      scrollToNextSet();
+    }, AUTO_SCROLL_INTERVAL);
+  }, [scrollToNextSet, filteredSets.length]);
+
+  // Stop auto-scroll and reset inactivity timer
+  const stopAutoScroll = useCallback(() => {
+    setIsAutoScrolling(false);
+    if (autoScrollTimer.current) {
+      clearInterval(autoScrollTimer.current);
+      autoScrollTimer.current = null;
+    }
+  }, []);
+
+  // Reset inactivity timer (called on any user interaction)
+  const resetInactivityTimer = useCallback(() => {
+    // Stop auto-scroll if it's running
+    if (isAutoScrolling) {
+      stopAutoScroll();
+    }
+
+    // Clear existing inactivity timer
+    if (inactivityTimer.current) {
+      clearTimeout(inactivityTimer.current);
+    }
+
+    // Start new inactivity timer
+    inactivityTimer.current = setTimeout(() => {
+      startAutoScroll();
+    }, AUTO_SCROLL_DELAY);
+  }, [isAutoScrolling, stopAutoScroll, startAutoScroll]);
+
+  // Initialize inactivity timer on mount and cleanup on unmount
+  useEffect(() => {
+    resetInactivityTimer();
+
+    return () => {
+      if (inactivityTimer.current) {
+        clearTimeout(inactivityTimer.current);
+      }
+      if (autoScrollTimer.current) {
+        clearInterval(autoScrollTimer.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Reset timer when filteredSets changes (user interacted with filters)
+  useEffect(() => {
+    resetInactivityTimer();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSetKey]);
+
   const toggleFilter = (type: keyof Filters, value: string) => {
     setSelectedFilters(prev => {
       const current = prev[type];
@@ -681,17 +872,24 @@ export default function DiscoverScreen() {
                 setShowImportModal(true);
               }}
             >
-              {/* Spinning vinyl ring */}
+              {/* Multiple vinyl grooves (static) */}
+              <View style={styles.vinylGroove1} />
+              <View style={styles.vinylGroove2} />
+              <View style={styles.vinylGroove3} />
+              {/* Spinning accent circle that appears every 30s */}
               <Animated.View
                 style={[
-                  styles.vinylRing,
-                  { transform: [{ rotate: vinylRotation }] },
+                  styles.vinylSpinCircle,
+                  {
+                    opacity: vinylSpinCircleOpacity,
+                    transform: [{ rotate: vinylSpinCircleSpin }],
+                  },
                 ]}
               />
-              {/* Static icon in center */}
-              <View style={styles.vinylCenter}>
+              {/* Center icon - pulses */}
+              <Animated.View style={[styles.vinylCenter, { transform: [{ scale: vinylPulseAnim }] }]}>
                 <Link2 size={16} color={Colors.dark.background} />
-              </View>
+              </Animated.View>
             </Pressable>
           </View>
         </View>
@@ -948,6 +1146,8 @@ export default function DiscoverScreen() {
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
+          onScrollBeginDrag={resetInactivityTimer}
+          onTouchStart={resetInactivityTimer}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -1268,25 +1468,49 @@ const styles = StyleSheet.create({
   },
   // Vinyl-style button with spinning ring
   vinylButton: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  vinylRing: {
+  vinylGroove1: {
+    position: 'absolute',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.25)',
+  },
+  vinylGroove2: {
     position: 'absolute',
     width: 42,
     height: 42,
     borderRadius: 21,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
-    borderTopColor: 'transparent',
-    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.35)',
+  },
+  vinylGroove3: {
+    position: 'absolute',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.45)',
+  },
+  vinylSpinCircle: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderTopColor: Colors.dark.primary,
+    borderRightColor: 'rgba(226, 29, 72, 0.5)',
   },
   vinylCenter: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1750,13 +1974,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#fff',
   },
-  // Floating Clear Filter Button - bottom left with spinning ring
+  // Floating Clear Filter Button - bottom left with grooves and pulse
   clearFilterFab: {
     position: 'absolute',
     bottom: 24,
     left: 20,
-    width: 54,
-    height: 54,
+    width: 60,
+    height: 60,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -1765,20 +1989,44 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     elevation: 8,
   },
-  clearFilterRing: {
+  clearFilterGroove1: {
     position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
-    borderTopColor: 'transparent',
-    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.25)',
   },
-  clearFilterInner: {
+  clearFilterGroove2: {
+    position: 'absolute',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.35)',
+  },
+  clearFilterGroove3: {
+    position: 'absolute',
     width: 44,
     height: 44,
     borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.45)',
+  },
+  clearFilterSpinCircle: {
+    position: 'absolute',
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderTopColor: Colors.dark.primary,
+    borderRightColor: 'rgba(226, 29, 72, 0.5)',
+  },
+  clearFilterInner: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',

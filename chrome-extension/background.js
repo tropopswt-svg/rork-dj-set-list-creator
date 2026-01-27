@@ -1,4 +1,4 @@
-// IDentified - Background Service Worker
+// TRACK'D - Background Service Worker
 // Handles communication between content scripts and the API
 
 // Update this to your Vercel deployment URL
@@ -20,8 +20,8 @@ async function getApiUrl() {
 async function sendToApi(data) {
   const apiUrl = await getApiUrl();
 
-  console.log('[IDentified] Sending to API:', apiUrl);
-  console.log('[IDentified] Payload:', {
+  console.log('[TRACK'D] Sending to API:', apiUrl);
+  console.log('[TRACK'D] Payload:', {
     source: data.source,
     tracksCount: data.tracks?.length,
     artistsCount: data.artists?.length,
@@ -51,8 +51,8 @@ async function sendToApi(data) {
       responseBody = { error: await response.text() };
     }
 
-    console.log('[IDentified] API Response Status:', response.status);
-    console.log('[IDentified] API Response Body:', responseBody);
+    console.log('[TRACK'D] API Response Status:', response.status);
+    console.log('[TRACK'D] API Response Body:', responseBody);
 
     if (!response.ok) {
       const errorMessage = responseBody.error || responseBody.message || `${response.status} ${response.statusText}`;
@@ -70,7 +70,7 @@ async function sendToApi(data) {
 
     return responseBody;
   } catch (error) {
-    console.error('[IDentified] API Error:', error);
+    console.error('[TRACK'D] API Error:', error);
 
     // Enhance network errors
     if (error.message === 'Failed to fetch') {
@@ -106,7 +106,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'UPDATE_API_URL') {
     // Update the cached URL
     cachedApiUrl = message.url;
-    console.log('[IDentified] API URL updated to:', message.url);
+    console.log('[TRACK'D] API URL updated to:', message.url);
     sendResponse({ success: true });
   }
   
@@ -118,11 +118,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Clear cache and set correct URL on install/update
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('[IDentified] Extension installed/updated');
-  console.log('[IDentified] Default API URL:', DEFAULT_API_URL);
+  console.log('[TRACK'D] Extension installed/updated');
+  console.log('[TRACK'D] Default API URL:', DEFAULT_API_URL);
 
   // Clear any cached old URL and force use of DEFAULT_API_URL
   cachedApiUrl = null;
   chrome.storage.sync.set({ apiUrl: DEFAULT_API_URL });
-  console.log('[IDentified] Reset API URL to:', DEFAULT_API_URL);
+  console.log('[TRACK'D] Reset API URL to:', DEFAULT_API_URL);
 });

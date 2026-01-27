@@ -1,41 +1,110 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Disc3, Rss, Users, Plus, User } from 'lucide-react-native';
-import { StyleSheet, View, Pressable, Animated, Easing } from 'react-native';
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-native';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import FABActionModal from '@/components/FABActionModal';
 import LiveIdentifyModal from '@/components/LiveIdentifyModal';
+import { AuthGateModal } from '@/components/AuthGate';
+import { useAuth } from '@/contexts/AuthContext';
 
-// Animated Vinyl FAB with spinning ring (like a record)
+// Animated Vinyl FAB with multiple grooves, pulse, and spinning accent circle
 const VinylFAB = ({ onPress }: { onPress: () => void }) => {
-  const rotation = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const spinCircleOpacity = useRef(new Animated.Value(0)).current;
+  const spinCircleRotation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Continuous rotation like a vinyl record
-    Animated.loop(
-      Animated.timing(rotation, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
+    // Subtle pulse every 15 seconds
+    const pulseAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(15000),
+        Animated.timing(pulseAnim, {
+          toValue: 1.08,
+          duration: 200,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 0.95,
+          duration: 150,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    pulseAnimation.start();
+
+    // Every 30 seconds, show a spinning accent circle
+    const spinCircleAnimation = Animated.loop(
+      Animated.sequence([
+        Animated.delay(30000),
+        // Fade in
+        Animated.timing(spinCircleOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        // Spin 3 times
+        Animated.timing(spinCircleRotation, {
+          toValue: 3,
+          duration: 1500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        // Fade out
+        Animated.timing(spinCircleOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        // Reset rotation
+        Animated.timing(spinCircleRotation, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    spinCircleAnimation.start();
+
+    return () => {
+      pulseAnimation.stop();
+      spinCircleAnimation.stop();
+    };
   }, []);
 
-  const spin = rotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+  const spinCircleSpin = spinCircleRotation.interpolate({
+    inputRange: [0, 1, 2, 3],
+    outputRange: ['0deg', '360deg', '720deg', '1080deg'],
   });
 
   return (
     <Pressable style={styles.fab} onPress={onPress}>
-      {/* Spinning vinyl ring */}
-      <Animated.View style={[styles.vinylRing, { transform: [{ rotate: spin }] }]} />
-      {/* Static center with plus icon */}
-      <View style={styles.fabCenter}>
+      {/* Multiple vinyl grooves (static) */}
+      <View style={styles.vinylGroove1} />
+      <View style={styles.vinylGroove2} />
+      <View style={styles.vinylGroove3} />
+      {/* Spinning accent circle that appears every 30s */}
+      <Animated.View
+        style={[
+          styles.spinCircle,
+          {
+            opacity: spinCircleOpacity,
+            transform: [{ rotate: spinCircleSpin }],
+          },
+        ]}
+      />
+      {/* Center with plus icon - pulses */}
+      <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
         <Plus size={22} color={Colors.dark.background} strokeWidth={3} />
-      </View>
+      </Animated.View>
     </Pressable>
   );
 };
@@ -43,8 +112,17 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
+  const { isAuthenticated } = useAuth();
   const [showActionModal, setShowActionModal] = useState(false);
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
+  const [showAuthGate, setShowAuthGate] = useState(false);
+  const [authGateMessage, setAuthGateMessage] = useState('');
+
+  // Admin menu trigger - tap Discover tab 3 times, hold on 3rd
+  const discoverTapCount = useRef(0);
+  const discoverTapTimer = useRef<NodeJS.Timeout | null>(null);
+  const discoverLongPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const discoverPressStart = useRef<number>(0);
 
   // Only show FAB on main tab index pages
   const showFAB = useMemo(() => {
@@ -69,6 +147,12 @@ export default function TabLayout() {
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // TODO: Re-enable auth gate when ready for production
+    // if (!isAuthenticated) {
+    //   setAuthGateMessage('Sign up to import sets and identify tracks from your favorite DJ mixes.');
+    //   setShowAuthGate(true);
+    //   return;
+    // }
     setShowActionModal(true);
   };
 
@@ -80,6 +164,22 @@ export default function TabLayout() {
   const handleIdentify = () => {
     setShowActionModal(false);
     setShowIdentifyModal(true);
+  };
+
+  // Gate certain tabs for unauthenticated users
+  // TODO: Re-enable auth gate when ready for production
+  const handleTabPress = (tabName: string, e: any) => {
+    // const gatedTabs = ['(profile)', '(social)'];
+    // if (gatedTabs.includes(tabName) && !isAuthenticated) {
+    //   e.preventDefault();
+    //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    //   setAuthGateMessage(
+    //     tabName === '(profile)'
+    //       ? 'Create an account to build your music profile and track your contributions.'
+    //       : 'Sign up to connect with other music lovers and see what they\'re discovering.'
+    //   );
+    //   setShowAuthGate(true);
+    // }
   };
 
   return (
@@ -120,12 +220,18 @@ export default function TabLayout() {
           title: 'Social',
           tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
         }}
+        listeners={{
+          tabPress: (e) => handleTabPress('(social)', e),
+        }}
       />
       <Tabs.Screen
         name="(profile)"
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => handleTabPress('(profile)', e),
         }}
       />
       <Tabs.Screen
@@ -148,6 +254,12 @@ export default function TabLayout() {
       <LiveIdentifyModal
         visible={showIdentifyModal}
         onClose={() => setShowIdentifyModal(false)}
+      />
+
+      <AuthGateModal
+        visible={showAuthGate}
+        onClose={() => setShowAuthGate(false)}
+        message={authGateMessage}
       />
     </View>
   );
@@ -174,25 +286,49 @@ const styles = StyleSheet.create({
     bottom: 50,
     alignSelf: 'center',
     zIndex: 100,
-    width: 58,
-    height: 58,
+    width: 66,
+    height: 66,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  vinylRing: {
+  vinylGroove1: {
+    position: 'absolute',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.25)',
+  },
+  vinylGroove2: {
     position: 'absolute',
     width: 58,
     height: 58,
     borderRadius: 29,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
-    borderTopColor: 'transparent',
-    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.35)',
+  },
+  vinylGroove3: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: 'rgba(226, 29, 72, 0.45)',
+  },
+  spinCircle: {
+    position: 'absolute',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderTopColor: Colors.dark.primary,
+    borderRightColor: 'rgba(226, 29, 72, 0.5)',
   },
   fabCenter: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',

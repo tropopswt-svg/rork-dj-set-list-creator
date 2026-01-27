@@ -130,7 +130,7 @@ export default function Dashboard() {
       <header>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <h1>IDentified Admin</h1>
+            <h1>TRACK'D Admin</h1>
             <p>Monitor users, engagement, and system health</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -435,7 +435,7 @@ export default function Dashboard() {
         color: '#666',
         fontSize: '0.875rem'
       }}>
-        IDentified Admin Dashboard • Auto-refreshes every 60s
+        TRACK'D Admin Dashboard • Auto-refreshes every 60s
       </footer>
     </div>
   );

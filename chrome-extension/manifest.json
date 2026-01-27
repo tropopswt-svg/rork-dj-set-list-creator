@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "IDentified v3 - Auto Scraper",
-  "version": "3.4",
-  "description": "Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists for the IDentified app",
+  "name": "TRACK'D - Auto Scraper",
+  "version": "3.5",
+  "description": "Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists for the TRACK'D app",
   "permissions": [
     "activeTab",
     "clipboardWrite",

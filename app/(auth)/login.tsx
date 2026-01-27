@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,10 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Modal,
 } from 'react-native';
-import { useRouter, Link } from 'expo-router';
-import { Mail, Lock, Eye, EyeOff } from 'lucide-react-native';
+import { useRouter, Link, useLocalSearchParams } from 'expo-router';
+import { Mail, Lock, Eye, EyeOff, CheckCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
@@ -20,6 +21,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
   const { signIn, signInWithGoogle, signInWithApple } = useAuth();
 
   const [email, setEmail] = useState('');
@@ -27,6 +29,27 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showVerifiedModal, setShowVerifiedModal] = useState(false);
+
+  // Check if user just verified their email
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search || '');
+      const hashParams = new URLSearchParams(window.location.hash?.replace('#', '?') || '');
+
+      const type = params.type || urlParams.get('type') || hashParams.get('type');
+      const accessToken = hashParams.get('access_token');
+
+      if (type === 'signup' || type === 'email_confirm' || accessToken) {
+        setShowVerifiedModal(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Clear the hash to prevent showing modal on refresh
+        if (window.history.replaceState) {
+          window.history.replaceState(null, '', window.location.pathname);
+        }
+      }
+    }
+  }, [params]);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -82,6 +105,32 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
+      {/* Email Verified Success Modal */}
+      <Modal
+        visible={showVerifiedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowVerifiedModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalIcon}>
+              <CheckCircle size={48} color={Colors.dark.success} />
+            </View>
+            <Text style={styles.modalTitle}>You're All Set!</Text>
+            <Text style={styles.modalMessage}>
+              Your email has been verified successfully. You can now log in to your TRACK'D account.
+            </Text>
+            <Pressable
+              style={styles.modalButton}
+              onPress={() => setShowVerifiedModal(false)}
+            >
+              <Text style={styles.modalButtonText}>Continue to Login</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -321,5 +370,58 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
     fontSize: 14,
     fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 20,
+    padding: 32,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  modalIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(46, 125, 50, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: 16,
+    color: Colors.dark.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 24,
+  },
+  modalButton: {
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    width: '100%',
+  },
+  modalButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
 });

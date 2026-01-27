@@ -1,10 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
-import { UserPoints, PointsBreakdown, PointsTransaction, PointsReason } from '@/types';
+import { UserPoints, PointsBreakdown, PointsTransaction, PointsReason, PointsSyncState } from '@/types';
+import { useAuth } from './AuthContext';
+import {
+  addPointsToDatabase,
+  hasEarnedPointsForDb,
+  syncAnonymousPoints,
+  getCategoryFromReason,
+} from '@/lib/supabase';
 
 const USER_POINTS_KEY = 'user_points';
 const USER_ID_KEY = 'user_id';
+const POINTS_SYNCED_KEY = 'points_synced'; // Track if we've migrated this session
 
 // Points values for different actions
 const POINTS_VALUES: Record<PointsReason, number> = {
@@ -25,6 +33,8 @@ const POINTS_DESCRIPTIONS: Record<PointsReason, string> = {
 };
 
 export const [UserProvider, useUser] = createContextHook(() => {
+  const { user, isAuthenticated, profile, refreshProfile } = useAuth();
+
   const [userId, setUserId] = useState<string>('');
   const [points, setPoints] = useState<UserPoints>({
     oderId: '',
@@ -38,15 +48,41 @@ export const [UserProvider, useUser] = createContextHook(() => {
     history: [],
   });
   const [isLoading, setIsLoading] = useState(true);
+  const [syncState, setSyncState] = useState<PointsSyncState>('idle');
 
-  // Generate or load user ID
+  // Track if we've already synced for this auth session
+  const hasSyncedRef = useRef(false);
+  const previousAuthState = useRef<boolean>(false);
+
+  // Generate or load anonymous user ID
   useEffect(() => {
     loadUserData();
   }, []);
 
+  // Handle login migration: sync anonymous points to database
+  useEffect(() => {
+    const handleAuthChange = async () => {
+      // Detect login transition (was not authenticated, now is)
+      const justLoggedIn = isAuthenticated && !previousAuthState.current;
+      previousAuthState.current = isAuthenticated;
+
+      if (justLoggedIn && user && !hasSyncedRef.current) {
+        console.log('[UserContext] User logged in, checking for points to sync...');
+        await migrateAnonymousPoints();
+      }
+
+      // When logged out, reset sync state
+      if (!isAuthenticated) {
+        hasSyncedRef.current = false;
+      }
+    };
+
+    handleAuthChange();
+  }, [isAuthenticated, user]);
+
   const loadUserData = async () => {
     try {
-      // Get or create user ID
+      // Get or create anonymous user ID (used for tracking before login)
       let storedUserId = await AsyncStorage.getItem(USER_ID_KEY);
       if (!storedUserId) {
         storedUserId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -54,7 +90,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       }
       setUserId(storedUserId);
 
-      // Load points
+      // Load local points
       const pointsJson = await AsyncStorage.getItem(USER_POINTS_KEY);
       if (pointsJson) {
         const loaded = JSON.parse(pointsJson) as UserPoints;
@@ -91,7 +127,81 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, []);
 
   /**
+   * Migrate anonymous points to database when user logs in
+   */
+  const migrateAnonymousPoints = async () => {
+    if (!user || !points.history.length) {
+      console.log('[UserContext] No points to migrate');
+      return;
+    }
+
+    // Check if already synced in a previous session
+    const syncedKey = `${POINTS_SYNCED_KEY}_${user.id}`;
+    const alreadySynced = await AsyncStorage.getItem(syncedKey);
+    if (alreadySynced) {
+      console.log('[UserContext] Points already synced for this user');
+      hasSyncedRef.current = true;
+      return;
+    }
+
+    setSyncState('syncing');
+    console.log('[UserContext] Migrating anonymous points to database...');
+
+    try {
+      const result = await syncAnonymousPoints(
+        user.id,
+        {
+          total: points.total,
+          breakdown: {
+            voting: points.breakdown.voting,
+            contributions: points.breakdown.contributions,
+            trackIds: points.breakdown.trackIds,
+          },
+          history: points.history,
+        },
+        userId
+      );
+
+      if (result.success) {
+        console.log(`[UserContext] Synced ${result.syncedCount} transactions`);
+        // Mark as synced
+        await AsyncStorage.setItem(syncedKey, 'true');
+        hasSyncedRef.current = true;
+
+        // Clear local points after successful sync
+        const emptyPoints: UserPoints = {
+          oderId: userId,
+          total: 0,
+          breakdown: {
+            voting: 0,
+            correctVotes: 0,
+            contributions: 0,
+            trackIds: 0,
+          },
+          history: [],
+        };
+        setPoints(emptyPoints);
+        await savePoints(emptyPoints);
+
+        // Refresh profile to get updated totals from database
+        await refreshProfile();
+
+        setSyncState('synced');
+      } else {
+        console.error('[UserContext] Sync failed:', result.error);
+        setSyncState('error');
+      }
+    } catch (error) {
+      console.error('[UserContext] Migration error:', error);
+      setSyncState('error');
+    }
+  };
+
+  /**
    * Add points to the user's total
+   * - Always updates local state first (optimistic UI)
+   * - If authenticated: syncs to database
+   * - If anonymous: saves to AsyncStorage only
    */
   const addPoints = useCallback(async (
     reason: PointsReason,
@@ -110,9 +220,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
       createdAt: new Date(),
     };
 
+    // Always update local state first (optimistic UI)
     setPoints(prev => {
       const newBreakdown = { ...prev.breakdown };
-      
+
       // Update breakdown based on reason
       switch (reason) {
         case 'vote_cast':
@@ -138,13 +249,39 @@ export const [UserProvider, useUser] = createContextHook(() => {
         history: [transaction, ...prev.history].slice(0, 100), // Keep last 100
       };
 
-      savePoints(newPoints);
-      console.log('[UserContext] Points added:', amount, reason);
+      // Save to AsyncStorage (non-blocking)
+      if (!isAuthenticated) {
+        savePoints(newPoints);
+      }
+
+      console.log('[UserContext] Points added locally:', amount, reason);
       return newPoints;
     });
 
+    // If authenticated, sync to database
+    if (isAuthenticated && user) {
+      const category = getCategoryFromReason(reason);
+      const result = await addPointsToDatabase(
+        user.id,
+        amount,
+        reason,
+        category,
+        description,
+        relatedId
+      );
+
+      if (result.success) {
+        console.log('[UserContext] Points synced to database:', amount, reason);
+        // Refresh profile to update displayed totals
+        refreshProfile();
+      } else {
+        console.error('[UserContext] Failed to sync points:', result.error);
+        // Points are still saved locally, will sync on next login
+      }
+    }
+
     return amount;
-  }, [savePoints]);
+  }, [isAuthenticated, user, savePoints, refreshProfile]);
 
   /**
    * Get recent point transactions
@@ -162,20 +299,53 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   /**
    * Check if user has earned points for a specific action
+   * Checks both local history and database (if authenticated)
    */
-  const hasEarnedPointsFor = useCallback((reason: PointsReason, relatedId: string): boolean => {
+  const hasEarnedPointsFor = useCallback(async (reason: PointsReason, relatedId: string): Promise<boolean> => {
+    // First check local history
+    const localMatch = points.history.some(t => t.reason === reason && t.relatedId === relatedId);
+    if (localMatch) {
+      return true;
+    }
+
+    // If authenticated, also check database
+    if (isAuthenticated && user) {
+      return await hasEarnedPointsForDb(user.id, reason, relatedId);
+    }
+
+    return false;
+  }, [points.history, isAuthenticated, user]);
+
+  /**
+   * Synchronous version for quick local checks (doesn't check database)
+   */
+  const hasEarnedPointsForLocal = useCallback((reason: PointsReason, relatedId: string): boolean => {
     return points.history.some(t => t.reason === reason && t.relatedId === relatedId);
   }, [points.history]);
 
+  // Use profile points when authenticated, local points when anonymous
+  const displayTotal = isAuthenticated && profile ? profile.points : points.total;
+  const displayBreakdown: PointsBreakdown = isAuthenticated && profile
+    ? {
+        voting: profile.points_voting || 0,
+        correctVotes: 0, // Not tracked separately in profile
+        contributions: profile.points_contributions || 0,
+        trackIds: profile.points_track_ids || 0,
+      }
+    : points.breakdown;
+
   return {
-    userId,
-    totalPoints: points.total,
-    pointsBreakdown: points.breakdown,
+    userId: isAuthenticated && user ? user.id : userId,
+    totalPoints: displayTotal,
+    pointsBreakdown: displayBreakdown,
     isLoading,
+    syncState,
+    isAuthenticated,
     addPoints,
     getRecentTransactions,
     getPointsBreakdown,
     hasEarnedPointsFor,
+    hasEarnedPointsForLocal,
     POINTS_VALUES, // Export for UI display
   };
 });

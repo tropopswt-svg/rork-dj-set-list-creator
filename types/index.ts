@@ -207,9 +207,28 @@ export interface PointsTransaction {
   createdAt: Date;
 }
 
-export type PointsReason = 
+export type PointsReason =
   | 'vote_cast'           // +5 for voting
   | 'vote_correct'        // +10 bonus for correct vote
   | 'source_added'        // +25 for adding secondary source
   | 'track_confirmed'     // +15 for confirmed track ID
   | 'first_import';       // +10 for first import of a set
+
+export type PointsCategory = 'voting' | 'contributions' | 'track_ids';
+
+// Database point transaction (for Supabase storage)
+export interface DbPointTransaction {
+  id: string;
+  userId: string;
+  amount: number;
+  reason: PointsReason;
+  description: string;
+  relatedId?: string;
+  category: PointsCategory;
+  isSyncedFromAnonymous?: boolean;
+  anonymousUserId?: string;
+  createdAt: Date;
+}
+
+// Sync state for points system
+export type PointsSyncState = 'idle' | 'syncing' | 'synced' | 'error';

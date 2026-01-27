@@ -302,7 +302,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
                 {tracksFound > 0 && (
                   <View style={styles.statItem}>
                     <Text style={styles.statValue}>{tracksFound}</Text>
-                    <Text style={styles.statLabel}>Tracks IDentified</Text>
+                    <Text style={styles.statLabel}>Tracks Identified</Text>
                   </View>
                 )}
               </View>

@@ -1,4 +1,4 @@
-// IDentified - Popup Script
+// TRACK'D - Popup Script
 
 let currentPlatform = null;
 let scrapedData = null;
@@ -158,7 +158,7 @@ async function sendToApi() {
   }
   
   sendBtn.disabled = false;
-  sendBtn.textContent = 'Send to IDentified';
+  sendBtn.textContent = 'Send to TRACK\\'D';
 }
 
 // Initialize popup

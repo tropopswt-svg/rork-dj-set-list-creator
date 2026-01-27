@@ -1,13 +1,13 @@
 # Supabase Setup Guide
 
-This guide walks you through setting up Supabase for the IDentified artist/track database.
+This guide walks you through setting up Supabase for the TRACK'D artist/track database.
 
 ## 1. Create a Supabase Project
 
 1. Go to [supabase.com](https://supabase.com) and sign in
 2. Click **New Project**
 3. Choose your organization
-4. Enter a project name (e.g., "identified-db")
+4. Enter a project name (e.g., "trackd-db")
 5. Generate a strong database password (save it!)
 6. Select a region close to your users
 7. Click **Create new project**

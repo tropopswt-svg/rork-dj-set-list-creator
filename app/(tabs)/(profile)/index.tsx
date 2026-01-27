@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import IDentifiedLogo from '@/components/IDentifiedLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -151,8 +152,8 @@ export default function ProfileScreen() {
             <Text style={styles.headerTitle}>Profile</Text>
           </View>
           <View style={styles.loginPromptContainer}>
-            <View style={styles.loginIconWrapper}>
-              <LogIn size={48} color={Colors.dark.textMuted} />
+            <View style={styles.loginLogoWrapper}>
+              <IDentifiedLogo size="xlarge" />
             </View>
             <Text style={styles.loginPromptTitle}>Join the community</Text>
             <Text style={styles.loginPromptText}>
@@ -469,6 +470,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
+  },
+  loginLogoWrapper: {
+    marginBottom: 16,
   },
   loginPromptTitle: {
     fontSize: 22,
