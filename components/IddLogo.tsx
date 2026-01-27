@@ -1,9 +1,11 @@
 import React, { useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing, Dimensions } from 'react-native';
 import Colors from '@/constants/colors';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
 // ID'D Logo
-// Corner-bracketed [ID] with scrolling DJ waveform + 'D
+// Clean ID'D text with spinning vinyl D and full-width waveform background
 
 interface IddLogoProps {
   size?: 'small' | 'medium' | 'large';
@@ -66,13 +68,13 @@ const generateWaveformData = (count: number) => {
     // Add some randomness for realism
     const height = Math.max(0.08, Math.min(1, baseAmp + (Math.random() - 0.5) * 0.15));
 
-    // Color based on section (like Rekordbox)
+    // Color based on section (like Rekordbox) - muted/subtle opacity
     const colors = [
-      'rgba(100, 180, 255, 0.9)',  // Blue - intro/outro
-      'rgba(255, 150, 200, 0.9)',  // Pink - buildup
-      'rgba(255, 100, 80, 0.9)',   // Red/Orange - drop
-      'rgba(150, 220, 255, 0.9)',  // Cyan - breakdown
-      'rgba(180, 255, 180, 0.9)',  // Green - breakdown 2
+      'rgba(100, 180, 255, 0.5)',    // Blue - intro/outro
+      'rgba(255, 150, 200, 0.5)',    // Pink - buildup
+      'rgba(255, 100, 80, 0.5)',     // Red/Orange - drop
+      'rgba(150, 220, 255, 0.5)',    // Cyan - breakdown
+      'rgba(180, 255, 180, 0.5)',    // Green - breakdown 2
     ];
 
     data.push({
@@ -84,122 +86,75 @@ const generateWaveformData = (count: number) => {
   return data;
 };
 
-// Curved corner brackets
-const CurvedBrackets = ({ width, height, thickness = 2, radius = 12 }: {
-  width: number;
-  height: number;
-  thickness?: number;
-  radius?: number;
-}) => {
-  const bracketColor = Colors.dark.textMuted;
-  const arcLength = radius * 1.2;
-
-  return (
-    <>
-      {/* Top Left */}
-      <View
-        style={[
-          styles.curvedCorner,
-          {
-            top: 0,
-            left: 0,
-            width: arcLength,
-            height: arcLength,
-            borderTopWidth: thickness,
-            borderLeftWidth: thickness,
-            borderTopLeftRadius: radius,
-            borderColor: bracketColor,
-          },
-        ]}
-      />
-
-      {/* Top Right */}
-      <View
-        style={[
-          styles.curvedCorner,
-          {
-            top: 0,
-            right: 0,
-            width: arcLength,
-            height: arcLength,
-            borderTopWidth: thickness,
-            borderRightWidth: thickness,
-            borderTopRightRadius: radius,
-            borderColor: bracketColor,
-          },
-        ]}
-      />
-
-      {/* Bottom Left */}
-      <View
-        style={[
-          styles.curvedCorner,
-          {
-            bottom: 0,
-            left: 0,
-            width: arcLength,
-            height: arcLength,
-            borderBottomWidth: thickness,
-            borderLeftWidth: thickness,
-            borderBottomLeftRadius: radius,
-            borderColor: bracketColor,
-          },
-        ]}
-      />
-
-      {/* Bottom Right */}
-      <View
-        style={[
-          styles.curvedCorner,
-          {
-            bottom: 0,
-            right: 0,
-            width: arcLength,
-            height: arcLength,
-            borderBottomWidth: thickness,
-            borderRightWidth: thickness,
-            borderBottomRightRadius: radius,
-            borderColor: bracketColor,
-          },
-        ]}
-      />
-    </>
-  );
-};
-
-// Scrolling DJ waveform
-const DJWaveform = ({ width, height }: { width: number; height: number }) => {
+// Full-width scrolling DJ waveform background with wave pulse effect
+const FullWaveform = ({ width, height }: { width: number; height: number }) => {
   const scrollAnim = useRef(new Animated.Value(0)).current;
+  const wavePulseAnim = useRef(new Animated.Value(0)).current;
 
-  // Generate waveform data once
-  const waveformData = useRef(generateWaveformData(200)).current;
+  // Generate waveform data once (150 bars for full coverage)
+  const waveformData = useRef(generateWaveformData(150)).current;
 
   useEffect(() => {
-    // Continuous slow scroll
+    // Scroll at 128 BPM tempo feel - energetic pace
     Animated.loop(
       Animated.timing(scrollAnim, {
         toValue: 1,
-        duration: 20000, // Very slow - 20 seconds for full scroll
+        duration: 8000,
         easing: Easing.linear,
         useNativeDriver: true,
       })
     ).start();
+
+    // Wave pulse effect - once every 10 seconds, 4 second duration
+    // Creates a breathing/wave effect that moves through the waveform
+    Animated.loop(
+      Animated.sequence([
+        // Wait 6 seconds before pulse
+        Animated.delay(6000),
+        // Pulse down (compress) over 2 seconds
+        Animated.timing(wavePulseAnim, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        // Pulse back up (expand) over 2 seconds
+        Animated.timing(wavePulseAnim, {
+          toValue: 0,
+          duration: 2000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
   }, []);
 
-  const totalWidth = waveformData.length * 3; // Each bar is 2px + 1px gap
+  const totalWidth = waveformData.length * 4; // Each bar is 3px + 1px gap
 
   const translateX = scrollAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -totalWidth / 2],
   });
 
+  // Wave pulse creates a vertical scale effect - bars shrink then grow
+  const scaleY = wavePulseAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 0.7, 1], // Compress to 70% at peak, then back
+  });
+
+  // Slight vertical movement during pulse
+  const translateY = wavePulseAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [0, 4, 0], // Move down slightly during compression
+  });
+
   return (
-    <View style={[styles.waveformContainer, { width, height, overflow: 'hidden' }]}>
+    <View style={[styles.fullWaveformContainer, { width, height }]}>
       <Animated.View
         style={[
           styles.waveformBars,
           {
-            transform: [{ translateX }],
+            transform: [{ translateX }, { scaleY }, { translateY }],
           },
         ]}
       >
@@ -221,100 +176,7 @@ const DJWaveform = ({ width, height }: { width: number; height: number }) => {
   );
 };
 
-// The scanned [ID] with curved brackets, waveform, and pulse animation
-const ScannedID = ({ fontSize = 56 }: { fontSize?: number }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.5)).current;
-
-  useEffect(() => {
-    // Pulsing scale animation - like scanning/identifying
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.03,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.delay(1500),
-      ])
-    ).start();
-
-    // Glow animation synced with pulse - more opaque
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(glowAnim, {
-          toValue: 0.85,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(glowAnim, {
-          toValue: 0.5,
-          duration: 800,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.delay(1500),
-      ])
-    ).start();
-  }, []);
-
-  const containerWidth = fontSize * 1.6;
-  const containerHeight = fontSize * 1.1;
-  const bracketRadius = fontSize * 0.18;
-  const bracketThickness = 2;
-
-  return (
-    <Animated.View
-      style={[
-        styles.scannedContainer,
-        {
-          width: containerWidth,
-          height: containerHeight,
-          transform: [{ scale: pulseAnim }],
-        },
-      ]}
-    >
-      {/* Glow effect behind */}
-      <Animated.View
-        style={[
-          styles.scanGlow,
-          {
-            width: containerWidth * 0.9,
-            height: containerHeight * 0.8,
-            borderRadius: bracketRadius,
-            opacity: glowAnim,
-          },
-        ]}
-      />
-
-      {/* Curved corner brackets */}
-      <CurvedBrackets
-        width={containerWidth}
-        height={containerHeight}
-        thickness={bracketThickness}
-        radius={bracketRadius}
-      />
-
-      {/* Waveform behind text */}
-      <View style={styles.waveformWrapper}>
-        <DJWaveform width={containerWidth * 0.85} height={fontSize * 0.7} />
-      </View>
-
-      {/* ID text on top */}
-      <Text style={[styles.idText, { fontSize }]}>ID</Text>
-    </Animated.View>
-  );
-};
-
-// Spinning D that rotates like a vinyl every 10 seconds
+// Spinning D that rotates like a vinyl every 10 seconds with tiny needle
 const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
   const spinAnim = useRef(new Animated.Value(0)).current;
 
@@ -324,11 +186,11 @@ const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
       Animated.sequence([
         Animated.timing(spinAnim, {
           toValue: 1,
-          duration: 2000, // 2 second spin
+          duration: 4000, // 4 second spin
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.delay(8000), // Wait 8 seconds (total 10s cycle)
+        Animated.delay(6000), // Wait 6 seconds (total 10s cycle)
         Animated.timing(spinAnim, {
           toValue: 0,
           duration: 0,
@@ -342,36 +204,86 @@ const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
 
   const rotation = spinAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: ['0deg', '360deg'], // Clockwise
   });
 
+  const needleSize = fontSize * 0.12;
+  const needleArmLength = fontSize * 0.18;
+
   return (
-    <Animated.Text
-      style={[
-        styles.vinylD,
-        {
-          fontSize,
-          transform: [{ rotate: rotation }],
-        },
-      ]}
-    >
-      D
-    </Animated.Text>
+    <View style={styles.vinylDContainer}>
+      <Animated.Text
+        style={[
+          styles.vinylD,
+          {
+            fontSize,
+            lineHeight: fontSize,
+            transform: [{ rotate: rotation }],
+          },
+        ]}
+      >
+        D
+      </Animated.Text>
+      {/* Tiny vinyl needle/tonearm in center */}
+      <View style={[styles.needleContainer, { width: fontSize, height: fontSize }]}>
+        {/* Needle arm */}
+        <View
+          style={[
+            styles.needleArm,
+            {
+              width: needleArmLength,
+              height: 2,
+              top: fontSize * 0.48,
+              left: fontSize * 0.35,
+            },
+          ]}
+        />
+        {/* Needle head/cartridge */}
+        <View
+          style={[
+            styles.needleHead,
+            {
+              width: needleSize,
+              height: needleSize,
+              borderRadius: needleSize / 2,
+              top: fontSize * 0.44,
+              left: fontSize * 0.32,
+            },
+          ]}
+        />
+      </View>
+    </View>
   );
 };
 
 export default function IddLogo({ size = 'medium', showTagline = false }: IddLogoProps) {
   const sizeConfig = {
-    small: { fontSize: 42, spacing: 2 },
-    medium: { fontSize: 56, spacing: 3 },
-    large: { fontSize: 72, spacing: 4 },
+    small: { fontSize: 42, spacing: 2, waveHeight: 70 },
+    medium: { fontSize: 56, spacing: 3, waveHeight: 90 },
+    large: { fontSize: 72, spacing: 4, waveHeight: 110 },
   }[size];
 
   return (
     <View style={styles.container}>
+      {/* Full-width waveform background */}
+      <View style={styles.waveformBackground}>
+        <FullWaveform width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
+      </View>
+
+      {/* Logo text on top */}
       <View style={styles.logoWrapper}>
-        {/* Scanned [ID] with waveform */}
-        <ScannedID fontSize={sizeConfig.fontSize} />
+        {/* ID */}
+        <Text
+          style={[
+            styles.logoText,
+            {
+              fontSize: sizeConfig.fontSize,
+              lineHeight: sizeConfig.fontSize,
+            }
+          ]}
+        >
+          ID
+        </Text>
 
         {/* Apostrophe */}
         <Text
@@ -379,6 +291,7 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
             styles.apostrophe,
             {
               fontSize: sizeConfig.fontSize,
+              lineHeight: sizeConfig.fontSize,
               marginLeft: sizeConfig.spacing,
             }
           ]}
@@ -386,7 +299,7 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
           '
         </Text>
 
-        {/* Spinning D */}
+        {/* Spinning D with vinyl needle */}
         <VinylD fontSize={sizeConfig.fontSize} />
       </View>
 
@@ -415,57 +328,76 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  scannedContainer: {
     position: 'relative',
+  },
+  waveformBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
+    opacity: 0.6,
   },
-  curvedCorner: {
-    position: 'absolute',
-    borderColor: 'transparent',
-  },
-  scanGlow: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.primary,
-  },
-  waveformWrapper: {
-    position: 'absolute',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  waveformContainer: {
+  fullWaveformContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    overflow: 'hidden',
   },
   waveformBars: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   waveformBar: {
-    width: 2,
+    width: 3,
     marginHorizontal: 0.5,
-    borderRadius: 1,
+    borderRadius: 1.5,
   },
-  idText: {
+  logoWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  logoText: {
     fontWeight: '900',
     color: Colors.dark.text,
     letterSpacing: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
     textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 4,
+    textShadowRadius: 6,
   },
   apostrophe: {
     fontWeight: '900',
     color: Colors.dark.text,
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  vinylDContainer: {
+    position: 'relative',
   },
   vinylD: {
     fontWeight: '900',
     color: Colors.dark.text,
+    textShadowColor: 'rgba(0, 0, 0, 0.9)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
+  },
+  needleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none',
+  },
+  needleArm: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.textMuted,
+    transform: [{ rotate: '-35deg' }],
+  },
+  needleHead: {
+    position: 'absolute',
+    backgroundColor: Colors.dark.primary,
   },
   tagline: {
     marginTop: 12,

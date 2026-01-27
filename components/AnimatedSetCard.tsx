@@ -9,6 +9,7 @@ interface AnimatedSetCardProps {
   index: number;
   scrollY: Animated.Value;
   onPress: () => void;
+  onLongPress?: () => void;
   onArtistPress: (artist: string) => void;
   onEventPress?: (eventId: string) => void;
   centerOffset?: number; // Offset to adjust where "center" is (accounts for header)
@@ -16,13 +17,14 @@ interface AnimatedSetCardProps {
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-export const CARD_HEIGHT = 116; // Approximate height of SetFeedCard (80px image + padding + margins)
+export const CARD_HEIGHT = 120; // Height of SetFeedCard (108px row + 12px margin)
 
 export default function AnimatedSetCard({
   setList,
   index,
   scrollY,
   onPress,
+  onLongPress,
   onArtistPress,
   onEventPress,
   centerOffset = 0,
@@ -133,6 +135,7 @@ export default function AnimatedSetCard({
       <SetFeedCard
         setList={setList}
         onPress={onPress}
+        onLongPress={onLongPress}
         onArtistPress={onArtistPress}
         onEventPress={onEventPress}
         isSelected={isSelected}

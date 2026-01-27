@@ -565,13 +565,13 @@ export default function EventBadge({ eventId, size = 'small', onPress }: EventBa
   }
 
   const isSmall = size === 'small';
-  const badgeHeight = isSmall ? 20 : 26;
-  const badgeWidth = config.isWide ? (isSmall ? 36 : 44) : badgeHeight;
+  const badgeHeight = isSmall ? 14 : 26;
+  const badgeWidth = config.isWide ? (isSmall ? 26 : 44) : badgeHeight;
   const fontSize = config.isEmoji
-    ? (isSmall ? 12 : 16)
+    ? (isSmall ? 9 : 16)
     : config.isWide
-      ? (isSmall ? 7 : 9)
-      : (isSmall ? 9 : 11);
+      ? (isSmall ? 5 : 9)
+      : (isSmall ? 6 : 11);
 
   // Font style variations
   const getFontStyle = () => {
@@ -579,7 +579,7 @@ export default function EventBadge({ eventId, size = 'small', onPress }: EventBa
       return {
         fontStyle: 'italic' as const,
         fontWeight: '400' as const,
-        fontSize: isSmall ? 13 : 16, // Larger for handwritten feel
+        fontSize: isSmall ? 9 : 16, // Larger for handwritten feel
         letterSpacing: 0,
       };
     }

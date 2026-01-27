@@ -10,6 +10,7 @@ import { SetList } from '@/types';
 interface SetFeedCardProps {
   setList: SetList;
   onPress?: () => void;
+  onLongPress?: () => void;
   onArtistPress?: (artist: string) => void;
   onEventPress?: (eventId: string) => void;
   isSelected?: boolean; // Whether this card is the main/centered one in the scroll wheel
@@ -270,7 +271,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Printworks': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPress, isSelected = false }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
   // Pulsing glow animation for selected card's artist chips
@@ -677,18 +678,19 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
     'Coachella': '🇺🇸',
   };
 
-  // Parse location into city and country
+  // Parse location into city and country - strip country/state names, show only city
   const parseLocation = (loc: string): { city: string | null; country: string | null; flag: string | null } => {
     if (!loc) return { city: null, country: null, flag: null };
 
     const parts = loc.split(',').map(p => p.trim());
 
-    // Check if any part matches a known country
+    // Check if any part matches a known country/state with a flag
     for (let i = parts.length - 1; i >= 0; i--) {
       const part = parts[i];
       const flag = COUNTRY_FLAGS[part];
       if (flag) {
-        const city = parts.slice(0, i).join(', ') || null;
+        // Only take the first part as city (strip all country/state info)
+        const city = parts[0] !== part ? parts[0] : null;
         return { city, country: part, flag };
       }
     }
@@ -699,8 +701,8 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
       return { city: null, country: loc, flag: directFlag };
     }
 
-    // No country found, treat whole thing as city
-    return { city: loc, country: null, flag: null };
+    // No country found - take only the first part as city
+    return { city: parts[0], country: null, flag: null };
   };
 
   // Get smart location that avoids duplicating venue/festival name
@@ -1107,6 +1109,8 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={handlePress}
+      onLongPress={onLongPress}
+      delayLongPress={400}
       accessibilityLabel={searchableText}
     >
       {/* Venue badge - top right corner */}
@@ -1284,14 +1288,16 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
             </Animated.View>
           </View>
 
-          {/* Set name with accent bar */}
+          {/* Set name with accent bar - max 50 chars to prevent layout issues */}
           <View style={styles.nameContainer}>
             <View style={[styles.nameAccent, isSelected && styles.nameAccentSelected]} />
             <Text
               style={[styles.name, isSelected && styles.nameSelected]}
               numberOfLines={2}
             >
-              {formatDisplayName()}
+              {formatDisplayName().length > 50
+                ? formatDisplayName().substring(0, 47) + '...'
+                : formatDisplayName()}
             </Text>
           </View>
 
@@ -1318,35 +1324,34 @@ export default function SetFeedCard({ setList, onPress, onArtistPress, onEventPr
                 </View>
               </View>
 
-              {/* Right side: Location on top, Event + Status badges below */}
+              {/* Right side: all badges in a single row */}
               <View style={styles.rightStats}>
-                {/* Location badge - blue box on top */}
-                {locationCity && (
-                  <View style={[
-                    styles.locationBadgeBlue,
-                    locationCity.length > 12 && styles.locationBadgeWrap,
-                  ]}>
-                    <MapPin size={10} color="#fff" />
-                    <Text
-                      style={styles.locationBadgeBlueText}
-                      numberOfLines={locationCity.length > 12 ? 2 : 1}
+                <View style={styles.rightBadgesRow}>
+                  {/* Blue location icon - clickable to show full location */}
+                  {(locationCity || smartLocation) && (
+                    <Pressable
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        Alert.alert('Location', smartLocation || locationCity || '', [{ text: 'OK' }]);
+                      }}
+                      hitSlop={4}
                     >
-                      {locationCity}
-                    </Text>
-                    {locationFlag && (
-                      <Text style={styles.locationFlagSmall}>{locationFlag}</Text>
-                    )}
-                  </View>
-                )}
-
-                {/* Bottom row: Event badge + Status badge */}
-                <View style={styles.rightStatsRow}>
-                  {/* Event/Festival badge - clickable to filter by event */}
+                      <View style={styles.locationIconBadge}>
+                        <MapPin size={8} color="#fff" />
+                      </View>
+                    </Pressable>
+                  )}
+                  {/* Flag badge */}
+                  {locationFlag && (
+                    <View style={styles.flagBadge}>
+                      <Text style={styles.flagEmoji}>{locationFlag}</Text>
+                    </View>
+                  )}
+                  {/* Event/Festival badge */}
                   {detectedEvent && (
                     <EventBadge eventId={detectedEvent} size="small" onPress={onEventPress} />
                   )}
-
-                  {/* TRACK'D status badge - pressable to show explanation */}
+                  {/* Status badge */}
                   {isIdentified ? (
                     <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
                       <View style={styles.trackdBadge}>
@@ -1453,6 +1458,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     padding: 12,
+    height: 108, // Fixed height to ensure consistent card heights for scroll centering
   },
   coverContainer: {
     position: 'relative',
@@ -1537,7 +1543,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     marginLeft: 10,
-    justifyContent: 'space-between',
+    justifyContent: 'space-between', // Push footer to bottom, giving title more room
+    overflow: 'hidden', // Prevent content overflow that could affect height
+    height: 84, // Slightly taller than cover to fit badges
   },
   // Artist chips row
   artistSection: {
@@ -1545,9 +1553,10 @@ const styles = StyleSheet.create({
   },
   artistRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexWrap: 'nowrap', // Prevent wrapping to ensure consistent card height
     alignItems: 'center',
     gap: 4,
+    overflow: 'hidden',
   },
   artistChip: {
     backgroundColor: Colors.dark.surfaceLight,
@@ -1614,7 +1623,7 @@ const styles = StyleSheet.create({
   nameContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginVertical: 6,
+    marginVertical: 4,
     paddingLeft: 2,
   },
   nameAccent: {
@@ -1634,10 +1643,10 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    lineHeight: 17,
+    lineHeight: 15,
   },
   nameSelected: {
     color: Colors.dark.primary,
@@ -1679,12 +1688,12 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
   },
   footer: {
-    marginTop: 'auto',
+    marginTop: 2,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-end',
   },
   platforms: {
     flexDirection: 'row',
@@ -1697,40 +1706,34 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rightStats: {
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: 3,
-    justifyContent: 'flex-end',
-  },
-  rightStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    justifyContent: 'flex-end',
+    gap: 2,
+    flexShrink: 0,
   },
-  // Blue location badge - rectangle on top, wraps if too long
-  locationBadgeBlue: {
+  rightBadgesRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
+    gap: 2,
+  },
+  // Flag badge
+  flagBadge: {
+    backgroundColor: Colors.dark.surfaceLight,
+    paddingHorizontal: 1,
+    paddingVertical: 0,
+    borderRadius: 2,
+  },
+  flagEmoji: {
+    fontSize: 8,
+  },
+  // Blue location icon badge - square, clickable to show full location
+  locationIconBadge: {
+    width: 14,
+    height: 14,
     backgroundColor: '#2563EB',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    minHeight: 20,
-  },
-  locationBadgeWrap: {
-    maxWidth: 80,
-    flexWrap: 'wrap',
-  },
-  locationBadgeBlueText: {
-    fontSize: 9,
-    color: '#fff',
-    fontWeight: '700' as const,
-    flexShrink: 1,
-  },
-  locationFlagSmall: {
-    fontSize: 11,
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   statsRow: {
     flexDirection: 'row',
@@ -1740,41 +1743,41 @@ const styles = StyleSheet.create({
   // Tracks count badge - teal/cyan color
   tracksBadge: {
     backgroundColor: '#0D9488',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   tracksBadgeText: {
-    fontSize: 9,
+    fontSize: 8,
     color: '#fff',
     fontWeight: '700' as const,
   },
   // TRACK'D badge - square logo style
   trackdBadge: {
-    width: 24,
-    height: 22,
+    width: 16,
+    height: 14,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.dark.primary,
-    borderRadius: 5,
+    borderRadius: 3,
   },
   trackdBadgeText: {
-    fontSize: 9,
+    fontSize: 6,
     color: '#fff',
     fontWeight: '900' as const,
     letterSpacing: -0.5,
   },
   // Unanalyzed badge - smaller square with "?"
   unanalyzedBadge: {
-    width: 18,
-    height: 18,
+    width: 12,
+    height: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(107, 114, 128, 0.3)',
-    borderRadius: 4,
+    borderRadius: 2,
   },
   unanalyzedBadgeText: {
-    fontSize: 11,
+    fontSize: 7,
     color: Colors.dark.textMuted,
     fontWeight: '700' as const,
   },

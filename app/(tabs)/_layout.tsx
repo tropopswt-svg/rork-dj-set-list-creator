@@ -7,13 +7,12 @@ import Colors from '@/constants/colors';
 import FABActionModal from '@/components/FABActionModal';
 import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 
-// Animated Vinyl FAB with Plus
+// Animated Vinyl FAB with spinning ring (like a record)
 const VinylFAB = ({ onPress }: { onPress: () => void }) => {
   const rotation = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Continuous rotation
+    // Continuous rotation like a vinyl record
     Animated.loop(
       Animated.timing(rotation, {
         toValue: 1,
@@ -21,14 +20,6 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
         easing: Easing.linear,
         useNativeDriver: true,
       })
-    ).start();
-
-    // Subtle pulse
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.05, duration: 1500, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 1500, useNativeDriver: true }),
-      ])
     ).start();
   }, []);
 
@@ -39,18 +30,12 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
 
   return (
     <Pressable style={styles.fab} onPress={onPress}>
-      <Animated.View style={[styles.fabOuter, { transform: [{ scale: pulse }] }]}>
-        {/* Vinyl grooves */}
-        <Animated.View style={[styles.vinylDisc, { transform: [{ rotate: spin }] }]}>
-          <View style={styles.groove1} />
-          <View style={styles.groove2} />
-          <View style={styles.groove3} />
-        </Animated.View>
-        {/* Center label with plus */}
-        <View style={styles.centerLabel}>
-          <Plus size={18} color="#fff" strokeWidth={3} />
-        </View>
-      </Animated.View>
+      {/* Spinning vinyl ring */}
+      <Animated.View style={[styles.vinylRing, { transform: [{ rotate: spin }] }]} />
+      {/* Static center with plus icon */}
+      <View style={styles.fabCenter}>
+        <Plus size={22} color={Colors.dark.background} strokeWidth={3} />
+      </View>
     </Pressable>
   );
 };
@@ -189,11 +174,25 @@ const styles = StyleSheet.create({
     bottom: 50,
     alignSelf: 'center',
     zIndex: 100,
+    width: 58,
+    height: 58,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  fabOuter: {
+  vinylRing: {
+    position: 'absolute',
     width: 58,
     height: 58,
     borderRadius: 29,
+    borderWidth: 3,
+    borderColor: Colors.dark.primary,
+    borderTopColor: 'transparent',
+    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+  },
+  fabCenter: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -202,46 +201,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
-  },
-  vinylDisc: {
-    position: 'absolute',
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groove1: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-  },
-  groove2: {
-    position: 'absolute',
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  groove3: {
-    position: 'absolute',
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  centerLabel: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
   },
 });

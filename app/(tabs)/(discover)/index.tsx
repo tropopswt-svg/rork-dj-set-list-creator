@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, Link2, TrendingUp, Clock, Filter, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings } from 'lucide-react-native';
+import { Search, Link2, TrendingUp, Clock, SlidersHorizontal, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings, Heart, Bookmark, Play, Share2, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -19,6 +19,43 @@ import { detectEvent, getEventLabel } from '@/components/EventBadge';
 // Offset to shift the "center" down - moves the "selected" card to thumb position
 // Higher value = center point lower on screen
 const CENTER_OFFSET = 107;
+
+// Spinning clear filter FAB component
+const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(spinAnim, {
+        toValue: 1,
+        duration: 3000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  const rotation = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Pressable style={styles.clearFilterFab} onPress={onPress}>
+      {/* Spinning outer ring */}
+      <Animated.View
+        style={[
+          styles.clearFilterRing,
+          { transform: [{ rotate: rotation }] },
+        ]}
+      />
+      {/* Static X icon */}
+      <View style={styles.clearFilterInner}>
+        <X size={24} color={Colors.dark.background} />
+      </View>
+    </Pressable>
+  );
+};
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -97,6 +134,31 @@ export default function DiscoverScreen() {
     updatedSets: Array<{ setId: string; setName: string; updates: Record<string, string> }>;
     failedSets: Array<{ setId: string; setName: string; error: string }>;
   } | null>(null);
+
+  // Quick action menu state
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const [quickMenuSet, setQuickMenuSet] = useState<SetList | null>(null);
+  const [likedSets, setLikedSets] = useState<Set<string>>(new Set());
+  const [savedSets, setSavedSets] = useState<Set<string>>(new Set());
+
+  // Vinyl ring spin animation for buttons - continuous rotation like a record
+  const vinylSpinAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.timing(vinylSpinAnim, {
+        toValue: 1,
+        duration: 3000, // 3 seconds per rotation
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, []);
+
+  const vinylRotation = vinylSpinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   // Handle press in - start long press detection after 2 taps
   const handleHiddenPressIn = useCallback(() => {
@@ -233,6 +295,77 @@ export default function DiscoverScreen() {
     }));
   }, []);
 
+  // Handle long press on set card - show quick menu
+  const handleSetLongPress = useCallback((set: SetList) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setQuickMenuSet(set);
+    setShowQuickMenu(true);
+  }, []);
+
+  // Quick menu actions
+  const handleLikeSet = useCallback(() => {
+    if (!quickMenuSet) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLikedSets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(quickMenuSet.id)) {
+        newSet.delete(quickMenuSet.id);
+      } else {
+        newSet.add(quickMenuSet.id);
+      }
+      return newSet;
+    });
+    setShowQuickMenu(false);
+  }, [quickMenuSet]);
+
+  const handleSaveSet = useCallback(() => {
+    if (!quickMenuSet) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSavedSets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(quickMenuSet.id)) {
+        newSet.delete(quickMenuSet.id);
+      } else {
+        newSet.add(quickMenuSet.id);
+      }
+      return newSet;
+    });
+    setShowQuickMenu(false);
+    Alert.alert(
+      savedSets.has(quickMenuSet.id) ? 'Removed from Collection' : 'Added to Collection',
+      savedSets.has(quickMenuSet.id)
+        ? `"${quickMenuSet.name}" removed from your saved sets.`
+        : `"${quickMenuSet.name}" added to your saved sets.`
+    );
+  }, [quickMenuSet, savedSets]);
+
+  const handleListenSet = useCallback(() => {
+    if (!quickMenuSet) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowQuickMenu(false);
+    // Open first source link if available
+    const sourceLink = quickMenuSet.sourceLinks?.[0];
+    if (sourceLink) {
+      Alert.alert('Opening Source', `Opening ${sourceLink.platform}...`);
+      // In a real app, you'd use Linking.openURL(sourceLink.url)
+    } else {
+      Alert.alert('No Source', 'This set has no linked source to play.');
+    }
+  }, [quickMenuSet]);
+
+  const handleShareSet = useCallback(() => {
+    if (!quickMenuSet) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowQuickMenu(false);
+    Alert.alert('Share', `Share "${quickMenuSet.name}" - Coming soon!`);
+  }, [quickMenuSet]);
+
+  const handleViewSet = useCallback(() => {
+    if (!quickMenuSet) return;
+    setShowQuickMenu(false);
+    router.push(`/(tabs)/(discover)/${quickMenuSet.id}`);
+  }, [quickMenuSet, router]);
+
   // Fetch sets from database
   const fetchSets = useCallback(async () => {
     try {
@@ -352,7 +485,8 @@ export default function DiscoverScreen() {
     };
   }, [setLists]);
 
-  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0);
+  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0) + (selectedFilters.eventId ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0 || debouncedSearchQuery.length > 0;
 
   // Check if a set has been TRACK'D (analyzed via YouTube/SoundCloud)
   const isSetIdentified = (set: SetList): boolean => {
@@ -475,7 +609,23 @@ export default function DiscoverScreen() {
   };
 
   const clearFilters = () => {
-    setSelectedFilters({ artists: [], years: [], countries: [], identified: 'all' });
+    setSelectedFilters({ artists: [], years: [], countries: [], identified: 'all', eventId: null });
+    setSearchQuery('');
+  };
+
+  // Clear all filters and close dropdown
+  const handleClearAllFilters = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    clearFilters();
+    if (showFilterDropdown) {
+      setShowFilterDropdown(false);
+      setExpandedFilter(null);
+      Animated.timing(dropdownAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: false,
+      }).start();
+    }
   };
 
   const toggleFilterDropdown = () => {
@@ -524,14 +674,24 @@ export default function DiscoverScreen() {
           </Pressable>
           <IddLogo />
           <View style={styles.headerSpacer}>
-            <Pressable 
-              style={styles.addButton}
+            <Pressable
+              style={styles.vinylButton}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 setShowImportModal(true);
               }}
             >
-              <Link2 size={18} color={Colors.dark.background} />
+              {/* Spinning vinyl ring */}
+              <Animated.View
+                style={[
+                  styles.vinylRing,
+                  { transform: [{ rotate: vinylRotation }] },
+                ]}
+              />
+              {/* Static icon in center */}
+              <View style={styles.vinylCenter}>
+                <Link2 size={16} color={Colors.dark.background} />
+              </View>
             </Pressable>
           </View>
         </View>
@@ -572,9 +732,9 @@ export default function DiscoverScreen() {
             style={[styles.filterButton, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonActive]}
             onPress={toggleFilterDropdown}
           >
-            <Filter size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+            <SlidersHorizontal size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
             <Text style={[styles.filterButtonText, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonTextActive]}>
-              {activeFilterCount > 0 ? `${filteredSets.length} of ${dbStats.sets}` : `${dbStats.sets} sets`}
+              {activeFilterCount > 0 ? `${filteredSets.length} found` : 'Dig'}
             </Text>
             {showFilterDropdown ? (
               <ChevronUp size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
@@ -781,8 +941,9 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          snapToOffsets={snapOffsets}
-          decelerationRate={0.985}
+          snapToInterval={CARD_HEIGHT}
+          snapToAlignment="start"
+          decelerationRate="fast"
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
@@ -811,6 +972,7 @@ export default function DiscoverScreen() {
                   centerOffset={CENTER_OFFSET}
                   isSelected={index === selectedIndex}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
+                  onLongPress={() => handleSetLongPress(setList)}
                   onArtistPress={(artist) => {
                     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
                     router.push(`/(tabs)/(discover)/artist/${slug}`);
@@ -978,6 +1140,93 @@ export default function DiscoverScreen() {
           </View>
         )}
 
+        {/* Floating Clear Filter Button with spinning ring - shows when filter is open OR has active filters */}
+        {(hasActiveFilters || showFilterDropdown) && (
+          <ClearFilterFab onPress={handleClearAllFilters} />
+        )}
+
+        {/* Quick Action Menu Modal */}
+        <Modal
+          visible={showQuickMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowQuickMenu(false)}
+        >
+          <Pressable
+            style={styles.quickMenuOverlay}
+            onPress={() => setShowQuickMenu(false)}
+          >
+            <View style={styles.quickMenuContainer}>
+              {quickMenuSet && (
+                <>
+                  <View style={styles.quickMenuHeader}>
+                    <Text style={styles.quickMenuTitle} numberOfLines={1}>
+                      {quickMenuSet.name}
+                    </Text>
+                    <Text style={styles.quickMenuSubtitle} numberOfLines={1}>
+                      {quickMenuSet.artist}
+                    </Text>
+                  </View>
+
+                  <View style={styles.quickMenuActions}>
+                    <Pressable
+                      style={styles.quickMenuAction}
+                      onPress={handleLikeSet}
+                    >
+                      <Heart
+                        size={22}
+                        color={likedSets.has(quickMenuSet.id) ? Colors.dark.primary : Colors.dark.text}
+                        fill={likedSets.has(quickMenuSet.id) ? Colors.dark.primary : 'transparent'}
+                      />
+                      <Text style={styles.quickMenuActionText}>
+                        {likedSets.has(quickMenuSet.id) ? 'Liked' : 'Like'}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.quickMenuAction}
+                      onPress={handleSaveSet}
+                    >
+                      <Bookmark
+                        size={22}
+                        color={savedSets.has(quickMenuSet.id) ? Colors.dark.primary : Colors.dark.text}
+                        fill={savedSets.has(quickMenuSet.id) ? Colors.dark.primary : 'transparent'}
+                      />
+                      <Text style={styles.quickMenuActionText}>
+                        {savedSets.has(quickMenuSet.id) ? 'Saved' : 'Save'}
+                      </Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.quickMenuAction}
+                      onPress={handleListenSet}
+                    >
+                      <Play size={22} color={Colors.dark.text} />
+                      <Text style={styles.quickMenuActionText}>Listen</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.quickMenuAction}
+                      onPress={handleShareSet}
+                    >
+                      <Share2 size={22} color={Colors.dark.text} />
+                      <Text style={styles.quickMenuActionText}>Share</Text>
+                    </Pressable>
+                  </View>
+
+                  <Pressable
+                    style={styles.quickMenuViewButton}
+                    onPress={handleViewSet}
+                  >
+                    <ExternalLink size={16} color={Colors.dark.background} />
+                    <Text style={styles.quickMenuViewButtonText}>View Full Set</Text>
+                  </Pressable>
+                </>
+              )}
+            </View>
+          </Pressable>
+        </Modal>
+
       </SafeAreaView>
     </View>
   );
@@ -1013,6 +1262,31 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Vinyl-style button with spinning ring
+  vinylButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  vinylRing: {
+    position: 'absolute',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 3,
+    borderColor: Colors.dark.primary,
+    borderTopColor: 'transparent',
+    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+  },
+  vinylCenter: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1475,5 +1749,104 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#fff',
+  },
+  // Floating Clear Filter Button - bottom left with spinning ring
+  clearFilterFab: {
+    position: 'absolute',
+    bottom: 24,
+    left: 20,
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+  },
+  clearFilterRing: {
+    position: 'absolute',
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    borderWidth: 3,
+    borderColor: Colors.dark.primary,
+    borderTopColor: 'transparent',
+    borderRightColor: 'rgba(226, 29, 72, 0.3)',
+  },
+  clearFilterInner: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Quick Action Menu styles
+  quickMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  quickMenuContainer: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    maxWidth: 300,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  quickMenuHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.border,
+  },
+  quickMenuTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  quickMenuSubtitle: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+    textAlign: 'center',
+  },
+  quickMenuActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  quickMenuAction: {
+    alignItems: 'center',
+    padding: 12,
+    minWidth: 60,
+  },
+  quickMenuActionText: {
+    fontSize: 11,
+    color: Colors.dark.textSecondary,
+    marginTop: 6,
+    fontWeight: '500',
+  },
+  quickMenuViewButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: Colors.dark.primary,
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  quickMenuViewButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.dark.background,
   },
 });
