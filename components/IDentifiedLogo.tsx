@@ -350,12 +350,12 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   logoText: {
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#FFFFFF', // White text
-    letterSpacing: 4,
+    letterSpacing: 2,
     textShadowColor: 'rgba(0, 0, 0, 0.6)', // Shadow for visibility on white/red
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
-    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style condensed geometric font
+    fontFamily: 'System',
   },
 });

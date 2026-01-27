@@ -480,32 +480,32 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   logoText: {
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#FFFFFF', // White text
-    letterSpacing: 4,
+    letterSpacing: 2,
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
-    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
+    fontFamily: 'System',
   },
   apostrophe: {
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#FFFFFF', // White text
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
-    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
+    fontFamily: 'System',
   },
   vinylDContainer: {
     position: 'relative',
   },
   vinylD: {
-    fontWeight: '900',
+    fontWeight: '800',
     color: '#FFFFFF', // White text
     textShadowColor: 'rgba(0, 0, 0, 0.8)',
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 8,
-    fontFamily: 'AvenirNextCondensed-Heavy', // Pioneer DJ style font
+    fontFamily: 'System',
   },
   needleContainer: {
     position: 'absolute',
