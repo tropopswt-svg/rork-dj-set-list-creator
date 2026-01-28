@@ -81,17 +81,17 @@ export default function AnimatedSetCard({
   });
 
   // Fill progress for the "liquid fill" effect on artist/venue chips
-  // Very tight range for snappy color changes
+  // Tight range for snappy response - only show fill when very close to center
   const fillInputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 0.8,  // Start filling
-    scrollYWhenCentered - CARD_HEIGHT * 0.08, // Nearly full
+    scrollYWhenCentered - CARD_HEIGHT * 0.5,  // Start filling
+    scrollYWhenCentered - CARD_HEIGHT * 0.15, // Nearly full
     scrollYWhenCentered,                       // Full
-    scrollYWhenCentered + CARD_HEIGHT * 0.08, // Nearly full
-    scrollYWhenCentered + CARD_HEIGHT * 0.8,  // Start draining
+    scrollYWhenCentered + CARD_HEIGHT * 0.15, // Nearly full
+    scrollYWhenCentered + CARD_HEIGHT * 0.5,  // End draining
   ];
   const fillProgress = scrollY.interpolate({
     inputRange: fillInputRange,
-    outputRange: [0, 0.95, 1, 0.95, 0],
+    outputRange: [0, 0.9, 1, 0.9, 0], // Sharp on/off - no fill when not centered
     extrapolate: 'clamp',
   });
 

@@ -149,7 +149,9 @@ export default function ProfileScreen() {
       <View style={styles.container}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.headerBar}>
-            <Text style={styles.headerTitle}>Profile</Text>
+            <View style={styles.headerSpacer} />
+            <IDentifiedLogo size="medium" />
+            <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
@@ -187,7 +189,8 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.headerBar}>
-          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.headerSpacer} />
+          <IDentifiedLogo size="medium" />
           <Pressable style={styles.settingsButton} onPress={() => router.push('/(tabs)/(profile)/settings')}>
             <Settings size={22} color={Colors.dark.text} />
           </Pressable>
@@ -435,12 +438,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
   },
+  headerSpacer: {
+    width: 38, // Match settingsButton width for centering
+  },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.3,

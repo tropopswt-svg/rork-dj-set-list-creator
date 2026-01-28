@@ -1,5 +1,5 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
-import { Disc3, Rss, Users, Plus, User } from 'lucide-react-native';
+import { Disc3, Rss, Users, User } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-native';
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -101,9 +101,9 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
           },
         ]}
       />
-      {/* Center with plus icon - pulses */}
+      {/* Center with T'D text - pulses */}
       <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
-        <Plus size={22} color={Colors.dark.background} strokeWidth={3} />
+        <Text style={styles.fabText}>T'D</Text>
       </Animated.View>
     </Pressable>
   );
@@ -337,5 +337,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 10,
     elevation: 8,
+  },
+  fabText: {
+    color: Colors.dark.background,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: -0.5,
   },
 });

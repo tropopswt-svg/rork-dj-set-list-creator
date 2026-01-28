@@ -51,6 +51,8 @@ const VinylC = ({
 
   const fontSize = size * 0.85;
   const centerSize = size * 0.32; // Vinyl center label size
+  const needleSize = size * 0.12;
+  const needleArmLength = size * 0.18;
 
   return (
     <View style={[styles.vinylCContainer, { width: size, height: size }]}>
@@ -70,6 +72,32 @@ const VinylC = ({
       {/* Vinyl center label */}
       <View style={[styles.vinylCenter, { width: centerSize, height: centerSize, borderRadius: centerSize / 2 }]}>
         <View style={[styles.vinylCenterDot, { width: centerSize * 0.3, height: centerSize * 0.3, borderRadius: centerSize * 0.15 }]} />
+      </View>
+      {/* Vinyl needle */}
+      <View style={[styles.needleContainer, { width: size, height: size }]}>
+        <View
+          style={[
+            styles.needleArm,
+            {
+              width: needleArmLength,
+              height: 2,
+              top: size * 0.48,
+              left: size * 0.35,
+            },
+          ]}
+        />
+        <View
+          style={[
+            styles.needleHead,
+            {
+              width: needleSize,
+              height: needleSize,
+              borderRadius: needleSize / 2,
+              top: size * 0.44,
+              left: size * 0.32,
+            },
+          ]}
+        />
       </View>
     </View>
   );
@@ -252,6 +280,21 @@ const styles = StyleSheet.create({
   },
   vinylCenterDot: {
     backgroundColor: Colors.dark.background,
+  },
+  needleContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    pointerEvents: 'none',
+  },
+  needleArm: {
+    position: 'absolute',
+    backgroundColor: '#6B6B6B', // Grey arm
+    transform: [{ rotate: '-35deg' }],
+  },
+  needleHead: {
+    position: 'absolute',
+    backgroundColor: '#9E1830', // Dark red cartridge (Circoloco dark)
   },
   tagline: {
     marginTop: 8,

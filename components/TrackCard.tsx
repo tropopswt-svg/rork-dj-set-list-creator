@@ -168,7 +168,7 @@ export default function TrackCard({
         return null;
     }
 
-    // For confirmed tracks, show both the checkmark and a small platform indicator
+    // For confirmed tracks, show T'D badge with platform indicator
     if (info.icon === 'confirmed' && (info as any).subIcon) {
       const subIconSize = 9;
       const SubIcon = (info as any).subIcon === 'youtube'
@@ -176,9 +176,10 @@ export default function TrackCard({
         : <Music2 size={subIconSize} color="#FF5500" />;
 
       return (
-        <View style={[styles.sourceTag, styles.confirmedTag]}>
-          {IconComponent}
-          <Text style={[styles.sourceTagText, { color: info.color }]}>{info.label}</Text>
+        <View style={styles.confirmedContainer}>
+          <View style={styles.tdBadge}>
+            <Text style={styles.tdBadgeText}>T'D</Text>
+          </View>
           <View style={styles.subIconContainer}>
             {SubIcon}
           </View>
@@ -513,6 +514,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34, 197, 94, 0.15)',
     borderWidth: 1,
     borderColor: 'rgba(34, 197, 94, 0.3)',
+  },
+  confirmedContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tdBadge: {
+    backgroundColor: '#C41E3A',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  tdBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.3,
   },
   subIconContainer: {
     marginLeft: 2,

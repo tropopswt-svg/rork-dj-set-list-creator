@@ -163,7 +163,9 @@ export default function SocialScreen() {
       <View style={styles.container}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
-            <Text style={styles.title}>Social</Text>
+            <View style={styles.headerSpacer} />
+            <IDentifiedLogo size="medium" />
+            <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
@@ -195,7 +197,8 @@ export default function SocialScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.title}>Social</Text>
+          <View style={styles.headerSpacer} />
+          <IDentifiedLogo size="medium" />
           <View style={styles.headerButtons}>
             <Pressable
               style={styles.headerButton}
@@ -357,12 +360,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
   },
+  headerSpacer: {
+    width: 84, // Match headerButtons width for centering
+  },
   title: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.3,
@@ -370,6 +376,8 @@ const styles = StyleSheet.create({
   headerButtons: {
     flexDirection: 'row',
     gap: 8,
+    width: 84,
+    justifyContent: 'flex-end',
   },
   headerButton: {
     width: 38,

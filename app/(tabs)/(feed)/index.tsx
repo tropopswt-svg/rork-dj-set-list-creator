@@ -252,6 +252,7 @@ export default function FeedScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
+          <View style={styles.headerLeft} />
           <IDentifiedLogo size="medium" />
           <View style={styles.headerRight}>
             {!isAuthenticated && (
@@ -403,14 +404,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  headerLeft: {
+    width: 90, // Match headerRight width for centering
   },
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: 12,
+    width: 90,
   },
   loginButton: {
     flexDirection: 'row',
