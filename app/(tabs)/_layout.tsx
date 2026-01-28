@@ -147,12 +147,11 @@ export default function TabLayout() {
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // TODO: Re-enable auth gate when ready for production
-    // if (!isAuthenticated) {
-    //   setAuthGateMessage('Sign up to import sets and identify tracks from your favorite DJ mixes.');
-    //   setShowAuthGate(true);
-    //   return;
-    // }
+    if (!isAuthenticated) {
+      setAuthGateMessage('Sign up to import sets and identify tracks from your favorite DJ mixes.');
+      setShowAuthGate(true);
+      return;
+    }
     setShowActionModal(true);
   };
 
@@ -167,19 +166,18 @@ export default function TabLayout() {
   };
 
   // Gate certain tabs for unauthenticated users
-  // TODO: Re-enable auth gate when ready for production
   const handleTabPress = (tabName: string, e: any) => {
-    // const gatedTabs = ['(profile)', '(social)'];
-    // if (gatedTabs.includes(tabName) && !isAuthenticated) {
-    //   e.preventDefault();
-    //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    //   setAuthGateMessage(
-    //     tabName === '(profile)'
-    //       ? 'Create an account to build your music profile and track your contributions.'
-    //       : 'Sign up to connect with other music lovers and see what they\'re discovering.'
-    //   );
-    //   setShowAuthGate(true);
-    // }
+    const gatedTabs = ['(profile)', '(social)'];
+    if (gatedTabs.includes(tabName) && !isAuthenticated) {
+      e.preventDefault();
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setAuthGateMessage(
+        tabName === '(profile)'
+          ? 'Create an account to build your music profile and track your contributions.'
+          : 'Sign up to connect with other music lovers and see what they\'re discovering.'
+      );
+      setShowAuthGate(true);
+    }
   };
 
   return (
