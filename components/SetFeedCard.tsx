@@ -1161,12 +1161,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
             styles.venueBadgeTopRight,
             fillProgress && {
               backgroundColor: fillProgress.interpolate({
-                inputRange: [0, 0.5, 0.8, 1],
+                inputRange: [0, 0.3, 0.6, 1],
                 outputRange: [Colors.dark.surface, Colors.dark.surface, '#C41E3A', '#C41E3A'],
                 extrapolate: 'clamp',
               }),
               borderColor: fillProgress.interpolate({
-                inputRange: [0, 0.5, 0.8, 1],
+                inputRange: [0, 0.3, 0.6, 1],
                 outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
                 extrapolate: 'clamp',
               }),
@@ -1174,14 +1174,14 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
           ]}
         >
           <View style={styles.venueContentContainer}>
-            <Ticket size={venueFontSize} color={Colors.dark.primary} />
+            <Ticket size={venueFontSize} color="#D4AF37" />
             <Animated.Text
               style={[
                 styles.venueBadgeText,
                 { fontSize: venueFontSize },
                 fillProgress && {
                   color: fillProgress.interpolate({
-                    inputRange: [0, 0.5, 0.8, 1],
+                    inputRange: [0, 0.3, 0.6, 1],
                     outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
                     extrapolate: 'clamp',
                   }),
@@ -1282,12 +1282,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                           },
                           fillProgress && {
                             backgroundColor: fillProgress.interpolate({
-                              inputRange: [0, 0.5, 0.8, 1],
+                              inputRange: [0, 0.3, 0.6, 1],
                               outputRange: [Colors.dark.surfaceLight, Colors.dark.surfaceLight, '#C41E3A', '#C41E3A'],
                               extrapolate: 'clamp',
                             }),
                             borderColor: fillProgress.interpolate({
-                              inputRange: [0, 0.5, 0.8, 1],
+                              inputRange: [0, 0.3, 0.6, 1],
                               outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
                               extrapolate: 'clamp',
                             }),
@@ -1302,7 +1302,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                               { fontSize: artistChipStyle.fontSize },
                               fillProgress && {
                                 color: fillProgress.interpolate({
-                                  inputRange: [0, 0.5, 0.8, 1],
+                                  inputRange: [0, 0.3, 0.6, 1],
                                   outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
                                   extrapolate: 'clamp',
                                 }),
