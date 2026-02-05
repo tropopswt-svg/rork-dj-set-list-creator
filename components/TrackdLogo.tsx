@@ -163,9 +163,9 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const sizeConfig = {
-    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 80 },
-    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 100 },
-    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 120 },
+    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 40 },
+    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 50 },
+    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 60 },
   }[size];
 
   useEffect(() => {
@@ -238,7 +238,8 @@ const styles = StyleSheet.create({
     right: 0,
     justifyContent: 'center',
     alignItems: 'center',
-    opacity: 0.4,
+    opacity: 0.5,
+    zIndex: 0,
   },
   waveformContainer: {
     flexDirection: 'row',
@@ -254,6 +255,7 @@ const styles = StyleSheet.create({
   logoWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
+    zIndex: 1,
   },
   logoText: {
     fontWeight: '900',
