@@ -36,91 +36,44 @@ export default function AnimatedSetCard({
   // Use prop directly - no local state to avoid re-renders
   const isSelected = isSelectedProp;
 
-  // 5-point input range - smooth transitions
+  // 3-point input range - simpler, smoother transitions
   const inputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 1.8,  // Far - very small
-    scrollYWhenCentered - CARD_HEIGHT * 0.4,  // Approaching center
-    scrollYWhenCentered,                       // Centered - MAX size
-    scrollYWhenCentered + CARD_HEIGHT * 0.4,  // Leaving center
-    scrollYWhenCentered + CARD_HEIGHT * 1.8,  // Far - very small
+    scrollYWhenCentered - CARD_HEIGHT,  // One card away
+    scrollYWhenCentered,                 // Centered
+    scrollYWhenCentered + CARD_HEIGHT,  // One card away
   ];
 
-  // Scale difference - selected card pops out
+  // Scale - subtle difference, surrounding cards still prominent
   const scale = scrollY.interpolate({
     inputRange,
-    outputRange: [0.85, 0.94, 1.1, 0.94, 0.85],
+    outputRange: [0.95, 1.05, 0.95],
     extrapolate: 'clamp',
   });
 
-  // Strong opacity contrast - non-selected more faded
+  // Opacity - surrounding cards more visible
   const opacity = scrollY.interpolate({
     inputRange,
-    outputRange: [0.35, 0.6, 1, 0.6, 0.35],
+    outputRange: [0.7, 1, 0.7],
     extrapolate: 'clamp',
   });
 
-  // Glow on selected card - prominent
-  const shadowOpacity = scrollY.interpolate({
-    inputRange,
-    outputRange: [0, 0.2, 0.65, 0.2, 0],
-    extrapolate: 'clamp',
-  });
-
-  // Shadow spread - strong glow on selected
-  const shadowRadius = scrollY.interpolate({
-    inputRange,
-    outputRange: [0, 6, 24, 6, 0],
-    extrapolate: 'clamp',
-  });
-
-  // Lift effect - selected card floats up
+  // Lift effect - subtle float
   const translateY = scrollY.interpolate({
     inputRange,
-    outputRange: [2, 0, -10, 0, 2],
+    outputRange: [0, -6, 0],
     extrapolate: 'clamp',
   });
 
-  // Fill progress for the "liquid fill" effect on artist/venue chips
-  // Tight range for snappy response - only show fill when very close to center
-  const fillInputRange = [
-    scrollYWhenCentered - CARD_HEIGHT * 0.5,  // Start filling
-    scrollYWhenCentered - CARD_HEIGHT * 0.15, // Nearly full
-    scrollYWhenCentered,                       // Full
-    scrollYWhenCentered + CARD_HEIGHT * 0.15, // Nearly full
-    scrollYWhenCentered + CARD_HEIGHT * 0.5,  // End draining
-  ];
+  // Simplified fill progress
   const fillProgress = scrollY.interpolate({
-    inputRange: fillInputRange,
-    outputRange: [0, 0.9, 1, 0.9, 0], // Sharp on/off - no fill when not centered
-    extrapolate: 'clamp',
-  });
-
-  // Direction of fill: 1 = filling from bottom (approaching), -1 = draining from top (leaving)
-  // Cards above center drain downward, cards below center fill upward
-  const fillDirection = scrollY.interpolate({
-    inputRange: [
-      scrollYWhenCentered - CARD_HEIGHT * 2,
-      scrollYWhenCentered,
-      scrollYWhenCentered + CARD_HEIGHT * 2,
-    ],
-    outputRange: [1, 0, -1], // 1 = above (drains down), -1 = below (fills up)
+    inputRange,
+    outputRange: [0, 1, 0],
     extrapolate: 'clamp',
   });
 
   const animatedStyle: Animated.WithAnimatedObject<ViewStyle> = {
     transform: [{ scale }, { translateY }],
     opacity,
-    // Strong glow effect on selected card
-    shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity,
-    shadowRadius,
-    // Android elevation
-    elevation: scrollY.interpolate({
-      inputRange,
-      outputRange: [1, 4, 16, 4, 1],
-      extrapolate: 'clamp',
-    }),
   };
 
   return (
@@ -133,7 +86,6 @@ export default function AnimatedSetCard({
         onEventPress={onEventPress}
         isSelected={isSelected}
         fillProgress={fillProgress}
-        fillDirection={fillDirection}
       />
     </Animated.View>
   );

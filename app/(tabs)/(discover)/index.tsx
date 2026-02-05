@@ -16,9 +16,8 @@ import { ImportResult } from '@/services/importService';
 import { useSets } from '@/contexts/SetsContext';
 import { detectEvent, getEventLabel } from '@/components/EventBadge';
 
-// Offset to shift the "center" down - moves the "selected" card to thumb position
-// Higher value = center point lower on screen
-const CENTER_OFFSET = 107;
+// Fixed offset - controls vertical position of raised card
+const CENTER_OFFSET = 140;
 
 // Clear filter FAB with grooves, pulse, and spinning accent circle
 const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
@@ -536,26 +535,15 @@ export default function DiscoverScreen() {
     setSetLists(combined);
   }, [dbSets]);
 
-  // Haptic feedback when scrolling through cards - strong feedback on each card
+  // Haptic feedback when scrolling through cards - no state updates for performance
   useEffect(() => {
-    const HAPTIC_THROTTLE_MS = 60; // Slightly faster for responsive feel
-
     const listenerId = scrollY.addListener(({ value }) => {
-      // Calculate which card is currently centered (adjusted for CENTER_OFFSET)
       const centeredIndex = Math.round((value + CENTER_OFFSET) / CARD_HEIGHT);
-      const now = Date.now();
 
-      // Update selected index immediately for responsive visual feedback
       if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
         lastCenteredIndex.current = centeredIndex;
-        setSelectedIndex(centeredIndex);
-
-        // Trigger haptic with throttle for smooth feel
-        if (now - lastHapticTime.current > HAPTIC_THROTTLE_MS) {
-          lastHapticTime.current = now;
-          // Medium impact - noticeable "click" as you scroll through each set
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }
+        // Only haptic - no state update during scroll for smooth performance
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     });
 
@@ -691,13 +679,11 @@ export default function DiscoverScreen() {
   const snapOffsets = useMemo(() => {
     const offsets: number[] = [];
     filteredSets.forEach((_, index) => {
-      // Position where this card is centered/raised
       const offset = index * CARD_HEIGHT - CENTER_OFFSET;
       if (offset >= 0) {
         offsets.push(offset);
       }
     });
-    // Add 0 as first snap point if not already there
     if (offsets.length === 0 || offsets[0] !== 0) {
       offsets.unshift(0);
     }
@@ -1139,13 +1125,20 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          snapToInterval={CARD_HEIGHT}
-          snapToAlignment="start"
-          decelerationRate="fast"
+          decelerationRate={0.985}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
+          onMomentumScrollEnd={(e) => {
+            // Snap to nearest card when scroll ends
+            const y = e.nativeEvent.contentOffset.y;
+            const nearestIndex = Math.round(y / CARD_HEIGHT);
+            const snapY = nearestIndex * CARD_HEIGHT;
+            if (Math.abs(y - snapY) > 1) {
+              scrollViewRef.current?.scrollTo({ y: snapY, animated: true });
+            }
+          }}
           onScrollBeginDrag={resetInactivityTimer}
           onTouchStart={resetInactivityTimer}
           refreshControl={
@@ -1592,7 +1585,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 200,
   },
   emptyState: {
     alignItems: 'center',

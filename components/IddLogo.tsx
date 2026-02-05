@@ -17,128 +17,6 @@ const seededRandom = (seed: number) => {
   return x - Math.floor(x);
 };
 
-// Generate realistic waveform data for background
-const generateWaveformData = (count: number) => {
-  const data: { height: number; color: string }[] = [];
-  const colors = [
-    'rgba(196, 30, 58, 0.4)',
-    'rgba(196, 30, 58, 0.55)',
-    'rgba(196, 30, 58, 0.75)',
-    'rgba(180, 25, 50, 0.5)',
-    'rgba(220, 40, 70, 0.5)',
-  ];
-
-  for (let i = 0; i < count; i++) {
-    const progress = i / count;
-    const seed = i * 1.337;
-    let baseAmp = 0.3;
-    let colorPhase = 0;
-
-    if (progress < 0.08) {
-      baseAmp = 0.2 + seededRandom(seed) * 0.15;
-      colorPhase = 0;
-    } else if (progress < 0.18) {
-      baseAmp = 0.3 + (progress - 0.08) * 4 + seededRandom(seed) * 0.2;
-      colorPhase = 1;
-    } else if (progress < 0.35) {
-      baseAmp = 0.7 + seededRandom(seed) * 0.3;
-      colorPhase = 2;
-    } else if (progress < 0.45) {
-      baseAmp = 0.25 + seededRandom(seed) * 0.2;
-      colorPhase = 3;
-    } else if (progress < 0.55) {
-      baseAmp = 0.35 + (progress - 0.45) * 5 + seededRandom(seed) * 0.2;
-      colorPhase = 1;
-    } else if (progress < 0.72) {
-      baseAmp = 0.75 + seededRandom(seed) * 0.25;
-      colorPhase = 2;
-    } else if (progress < 0.82) {
-      baseAmp = 0.3 + seededRandom(seed) * 0.25;
-      colorPhase = 4;
-    } else {
-      const outroProgress = (progress - 0.82) / 0.18;
-      baseAmp = 0.35 + (0.2 - 0.35) * outroProgress + seededRandom(seed) * 0.1;
-      colorPhase = 0;
-    }
-
-    data.push({
-      height: Math.max(0.08, Math.min(1, baseAmp + seededRandom(seed + 0.5) * 0.1)),
-      color: colors[colorPhase],
-    });
-  }
-  return data;
-};
-
-// Full-width scrolling waveform background
-const FullWaveform = ({ width, height }: { width: number; height: number }) => {
-  const scrollAnim = useRef(new Animated.Value(0)).current;
-  const wavePulseAnim = useRef(new Animated.Value(0)).current;
-  const waveformData = useRef(generateWaveformData(150)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.timing(scrollAnim, {
-        toValue: 1,
-        duration: 8000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    Animated.loop(
-      Animated.sequence([
-        Animated.delay(6000),
-        Animated.timing(wavePulseAnim, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-        Animated.timing(wavePulseAnim, {
-          toValue: 0,
-          duration: 2000,
-          easing: Easing.inOut(Easing.sin),
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const barWidth = 4;
-  const singleSetWidth = waveformData.length * barWidth;
-
-  const translateX = scrollAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -singleSetWidth],
-  });
-
-  const scaleY = wavePulseAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [1, 0.7, 1],
-  });
-
-  return (
-    <View style={[styles.fullWaveformContainer, { width, height }]}>
-      <Animated.View
-        style={[
-          styles.waveformBars,
-          { transform: [{ translateX }, { scaleY }] },
-        ]}
-      >
-        {[...waveformData, ...waveformData].map((bar, i) => (
-          <View
-            key={i}
-            style={[
-              styles.waveformBar,
-              { height: height * bar.height, backgroundColor: bar.color },
-            ]}
-          />
-        ))}
-      </Animated.View>
-    </View>
-  );
-};
-
 // Individual letter with volume bars that animate from bottom
 const AnimatedLetter = ({
   letter,
@@ -180,7 +58,8 @@ const AnimatedLetter = ({
 
   const barWidth = fontSize * 0.08;
   const barMaxHeight = fontSize * 0.5;
-  const letterWidth = fontSize * 0.55; // Tighter letter spacing
+  // Apostrophe needs less width than other letters
+  const letterWidth = letter === "'" ? fontSize * 0.25 : fontSize * 0.6;
 
   return (
     <View style={[styles.letterContainer, { width: letterWidth }]}>
@@ -220,7 +99,7 @@ const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
   const needleArmLength = fontSize * 0.18;
 
   return (
-    <View style={[styles.vinylDWrapper, { marginLeft: -fontSize * 0.1 }]}>
+    <View style={[styles.vinylDWrapper, { width: fontSize * 0.65 }]}>
       <Text
         style={[
           styles.vinylD,
@@ -330,21 +209,16 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
 
   return (
     <View style={styles.container}>
-      {/* Full-width waveform background */}
-      <View style={styles.waveformBackground}>
-        <FullWaveform width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
-      </View>
-
-      {/* Logo with animated letters */}
-      <View style={[styles.logoWrapper, { width: sizeConfig.logoWidth }]}>
-        {/* Scan line */}
+      {/* Logo with animated letters and scan line */}
+      <View style={[styles.logoWrapper, { width: SCREEN_WIDTH }]}>
+        {/* Scan line - full width */}
         <ScanLine
           scanProgress={scanProgress}
-          width={sizeConfig.logoWidth}
-          height={sizeConfig.fontSize * 1.2}
+          width={SCREEN_WIDTH}
+          height={sizeConfig.fontSize * 1.5}
         />
 
-        {/* Letters */}
+        {/* Letters with volume bars that rise from bottom */}
         <View style={styles.lettersRow}>
           {letters.map((letter, index) => (
             <AnimatedLetter
@@ -388,30 +262,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     position: 'relative',
   },
-  waveformBackground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.6,
-  },
-  fullWaveformContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  waveformBars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  waveformBar: {
-    width: 3,
-    marginHorizontal: 0.5,
-    borderRadius: 1.5,
-  },
   logoWrapper: {
     position: 'relative',
     zIndex: 1,
@@ -443,14 +293,12 @@ const styles = StyleSheet.create({
   logoLetter: {
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: 2,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    letterSpacing: 0,
     fontFamily: 'System',
   },
   vinylDWrapper: {
     position: 'relative',
+    alignItems: 'center',
   },
   vinylDContainer: {
     position: 'relative',
@@ -458,9 +306,6 @@ const styles = StyleSheet.create({
   vinylD: {
     fontWeight: '800',
     color: '#FFFFFF',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
     fontFamily: 'System',
   },
   needleContainer: {

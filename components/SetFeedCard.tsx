@@ -1159,43 +1159,38 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
         <Animated.View
           style={[
             styles.venueBadgeTopRight,
-            styles.venueBadgeWithFill,
-            isSelected && styles.venueBadgeSelected,
-            isSelected && {
-              shadowColor: Colors.dark.primary,
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: glowShadowOpacity,
-              shadowRadius: glowShadowRadius,
+            fillProgress && {
+              backgroundColor: fillProgress.interpolate({
+                inputRange: [0, 0.5, 0.8, 1],
+                outputRange: [Colors.dark.surface, Colors.dark.surface, '#C41E3A', '#C41E3A'],
+                extrapolate: 'clamp',
+              }),
+              borderColor: fillProgress.interpolate({
+                inputRange: [0, 0.5, 0.8, 1],
+                outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
+                extrapolate: 'clamp',
+              }),
             },
           ]}
         >
-          {/* Fill overlay - only when not selected, capped opacity for text visibility */}
-          {fillProgress && !isSelected && (
-            <Animated.View
+          <View style={styles.venueContentContainer}>
+            <Ticket size={venueFontSize} color={Colors.dark.primary} />
+            <Animated.Text
               style={[
-                styles.venueFillOverlay,
-                {
-                  opacity: fillProgress.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, 0.7],
+                styles.venueBadgeText,
+                { fontSize: venueFontSize },
+                fillProgress && {
+                  color: fillProgress.interpolate({
+                    inputRange: [0, 0.5, 0.8, 1],
+                    outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
                     extrapolate: 'clamp',
                   }),
                 },
               ]}
-            />
-          )}
-          <View style={styles.venueContentContainer}>
-            <Ticket size={venueFontSize} color={isSelected ? '#FFF8F0' : Colors.dark.primary} />
-            <Text
-              style={[
-                styles.venueBadgeText,
-                { fontSize: venueFontSize },
-                isSelected && styles.venueBadgeTextSelected,
-              ]}
               numberOfLines={1}
             >
               {displayVenue}
-            </Text>
+            </Animated.Text>
           </View>
         </Animated.View>
       )}
@@ -1285,43 +1280,39 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                             paddingHorizontal: artistChipStyle.paddingH,
                             paddingVertical: artistChipStyle.paddingV,
                           },
-                          isSelected && styles.artistChipSelected,
-                          isSelected && {
-                            shadowColor: Colors.dark.primary,
-                            shadowOffset: { width: 0, height: 2 },
-                            shadowOpacity: glowShadowOpacity,
-                            shadowRadius: glowShadowRadius,
+                          fillProgress && {
+                            backgroundColor: fillProgress.interpolate({
+                              inputRange: [0, 0.5, 0.8, 1],
+                              outputRange: [Colors.dark.surfaceLight, Colors.dark.surfaceLight, '#C41E3A', '#C41E3A'],
+                              extrapolate: 'clamp',
+                            }),
+                            borderColor: fillProgress.interpolate({
+                              inputRange: [0, 0.5, 0.8, 1],
+                              outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
+                              extrapolate: 'clamp',
+                            }),
                           },
                           pressed && styles.artistChipPressed
                         ]}
                       >
-                        {/* Fill overlay - only when not selected, capped opacity for text visibility */}
-                        {fillProgress && !isSelected && (
-                          <Animated.View
-                            style={[
-                              styles.chipFillOverlay,
-                              {
-                                opacity: fillProgress.interpolate({
-                                  inputRange: [0, 1],
-                                  outputRange: [0, 0.7],
-                                  extrapolate: 'clamp',
-                                }),
-                              },
-                            ]}
-                          />
-                        )}
                         <View style={styles.chipTextContainer}>
-                          <Text
+                          <Animated.Text
                             style={[
                               styles.artistText,
                               { fontSize: artistChipStyle.fontSize },
-                              isSelected && styles.artistTextSelected,
+                              fillProgress && {
+                                color: fillProgress.interpolate({
+                                  inputRange: [0, 0.5, 0.8, 1],
+                                  outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
+                                  extrapolate: 'clamp',
+                                }),
+                              },
                               pressed && styles.artistTextPressed
                             ]}
                             numberOfLines={1}
                           >
                             {artist}
-                          </Text>
+                          </Animated.Text>
                         </View>
                       </Animated.View>
                     )}
