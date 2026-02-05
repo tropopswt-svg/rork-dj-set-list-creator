@@ -58,11 +58,12 @@ const AnimatedLetter = ({
 
   const barWidth = fontSize * 0.08;
   const barMaxHeight = fontSize * 0.5;
-  // Apostrophe needs less width than other letters
-  const letterWidth = letter === "'" ? fontSize * 0.25 : fontSize * 0.6;
+  // Each letter gets width based on character - wider for A, C, K
+  const letterWidth = letter === "'" ? fontSize * 0.3 : fontSize * 0.65;
+  const letterSpacing = 2; // Gap between letters
 
   return (
-    <View style={[styles.letterContainer, { width: letterWidth }]}>
+    <View style={[styles.letterContainer, { width: letterWidth, marginHorizontal: letterSpacing }]}>
       {/* Volume bars behind the letter */}
       <View style={[styles.volumeBarsContainer, { height: barMaxHeight }]}>
         {barHeights.map((height, i) => (
@@ -99,7 +100,7 @@ const VinylD = ({ fontSize = 56 }: { fontSize?: number }) => {
   const needleArmLength = fontSize * 0.18;
 
   return (
-    <View style={[styles.vinylDWrapper, { width: fontSize * 0.65 }]}>
+    <View style={[styles.vinylDWrapper, { width: fontSize * 0.65, marginLeft: 2 }]}>
       <Text
         style={[
           styles.vinylD,
@@ -209,30 +210,29 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
 
   return (
     <View style={styles.container}>
-      {/* Logo with animated letters and scan line */}
-      <View style={[styles.logoWrapper, { width: SCREEN_WIDTH }]}>
-        {/* Scan line - full width */}
+      {/* Scan line - positioned to extend full screen width */}
+      <View style={styles.scanLineWrapper}>
         <ScanLine
           scanProgress={scanProgress}
           width={SCREEN_WIDTH}
           height={sizeConfig.fontSize * 1.5}
         />
+      </View>
 
-        {/* Letters with volume bars that rise from bottom */}
-        <View style={styles.lettersRow}>
-          {letters.map((letter, index) => (
-            <AnimatedLetter
-              key={index}
-              letter={letter}
-              fontSize={sizeConfig.fontSize}
-              scanProgress={scanProgress}
-              letterIndex={index}
-              totalLetters={totalLetters}
-            />
-          ))}
-          {/* D with needle */}
-          <VinylD fontSize={sizeConfig.fontSize} />
-        </View>
+      {/* Letters with volume bars that rise from bottom */}
+      <View style={styles.lettersRow}>
+        {letters.map((letter, index) => (
+          <AnimatedLetter
+            key={index}
+            letter={letter}
+            fontSize={sizeConfig.fontSize}
+            scanProgress={scanProgress}
+            letterIndex={index}
+            totalLetters={totalLetters}
+          />
+        ))}
+        {/* D with needle */}
+        <VinylD fontSize={sizeConfig.fontSize} />
       </View>
 
       {showTagline && (
@@ -261,16 +261,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
+    overflow: 'visible',
   },
-  logoWrapper: {
-    position: 'relative',
-    zIndex: 1,
-    overflow: 'hidden',
+  scanLineWrapper: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: -SCREEN_WIDTH / 2,
+    width: SCREEN_WIDTH,
+    justifyContent: 'center',
+    zIndex: 2,
+    pointerEvents: 'none',
   },
   lettersRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
+    zIndex: 1,
   },
   letterContainer: {
     alignItems: 'center',
