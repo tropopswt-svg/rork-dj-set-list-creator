@@ -813,8 +813,6 @@ export default function SetDetailScreen() {
         return <Youtube size={size} color="#FF0000" />;
       case 'soundcloud':
         return <Music2 size={size} color="#FF5500" />;
-      case '1001tracklists':
-        return <ListMusic size={size} color="#00D4AA" />;
       default:
         return <ExternalLink size={size} color={Colors.dark.textSecondary} />;
     }
@@ -824,7 +822,7 @@ export default function SetDetailScreen() {
     switch (platform) {
       case 'youtube': return 'YouTube';
       case 'soundcloud': return 'SoundCloud';
-      case '1001tracklists': return '1001Tracklists';
+      case '1001tracklists': return 'Tracklist';
       default: return 'Link';
     }
   };
@@ -899,11 +897,21 @@ export default function SetDetailScreen() {
               </Pressable>
             </View>
             
-            {setList.venue && (
-              <Text style={styles.venue}>{setList.venue}</Text>
-            )}
-
             <View style={styles.quickStats}>
+              {setList.venue && (
+                <>
+                  <Text style={styles.quickStatText}>{setList.venue}</Text>
+                  <Text style={styles.quickStatDot}>•</Text>
+                </>
+              )}
+              {setList.date && (
+                <>
+                  <Text style={styles.quickStatText}>
+                    {new Date(setList.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </Text>
+                  <Text style={styles.quickStatDot}>•</Text>
+                </>
+              )}
               {(setList.totalDuration || 0) > 0 ? (
                 <>
                   <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration)}</Text>
@@ -1632,7 +1640,7 @@ export default function SetDetailScreen() {
               </View>
             )}
 
-            {/* Unplaced Tracks Section - tracks from 1001tracklists without timestamps */}
+            {/* Unplaced Tracks Section - tracks without timestamps */}
             {unplacedTracks.length > 0 && (
               <View style={styles.unplacedSection}>
                 <View style={styles.unplacedHeader}>
@@ -1647,7 +1655,7 @@ export default function SetDetailScreen() {
                       ? 'Drag tracks up to place them in gaps above'
                       : tracklistItems.length > 0
                       ? 'Add a YouTube or SoundCloud source to place these in the timeline'
-                      : 'From 1001Tracklists - add a source to get timestamps'}
+                      : 'Add a source to get timestamps'}
                   </Text>
                 </View>
                 {unplacedTracks.map((track, index) => (
@@ -1997,12 +2005,13 @@ const styles = StyleSheet.create({
   venue: {
     fontSize: 14,
     color: Colors.dark.textSecondary,
-    marginTop: 8,
+    marginTop: 6,
   },
   quickStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 12,
+    flexWrap: 'wrap',
+    marginTop: 8,
   },
   quickStatText: {
     fontSize: 13,

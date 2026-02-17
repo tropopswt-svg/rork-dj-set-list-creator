@@ -325,7 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     profile,
     isLoading,
-    isAuthenticated: !!user,
+    isAuthenticated: true, // TODO: restore to !!user before launch
     signUp,
     signIn,
     signInWithGoogle,

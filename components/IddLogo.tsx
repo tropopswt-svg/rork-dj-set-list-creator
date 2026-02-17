@@ -184,7 +184,7 @@ export default function IddLogo({ size = 'medium', showTagline = false }: IddLog
     large: { fontSize: 72, spacing: 4, waveHeight: 110, logoWidth: 340 },
   }[size];
 
-  const letters = ['T', 'R', 'A', 'C', 'K', "'"];
+  const letters = ['T', 'R', 'A', 'C', 'K'];
   const totalLetters = letters.length + 1; // +1 for D
 
   useEffect(() => {
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   },
   logoLetter: {
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0A0A0A',
     letterSpacing: 0,
     fontFamily: 'System',
   },
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   },
   vinylD: {
     fontWeight: '800',
-    color: '#FFFFFF',
+    color: '#0A0A0A',
     fontFamily: 'System',
   },
   needleContainer: {

@@ -13,6 +13,26 @@ function formatTimestamp(seconds) {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+// Extract YouTube video ID from various URL formats
+function extractYouTubeVideoId(url) {
+  if (!url) return null;
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+    /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+// Generate YouTube thumbnail URL from video ID
+function getYouTubeThumbnail(videoId) {
+  if (!videoId) return null;
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+}
+
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -131,7 +151,7 @@ export default async function handler(req, res) {
       date: set.event_date || set.created_at,
       totalDuration: set.duration_seconds || 0,
       trackCount: set.track_count || tracks.length,
-      coverUrl: null,
+      coverUrl: set.cover_url || getYouTubeThumbnail(extractYouTubeVideoId(set.youtube_url)),
       sourceLinks: [
         set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
         set.youtube_url && { platform: 'youtube', url: set.youtube_url },

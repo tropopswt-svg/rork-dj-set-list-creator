@@ -9,7 +9,7 @@ import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Animated Vinyl FAB with TRACK'D text - TRACK wraps around, D in center
+// Animated Vinyl FAB with "trackd" text in center
 const VinylFAB = ({ onPress }: { onPress: () => void }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const spinCircleOpacity = useRef(new Animated.Value(0)).current;
@@ -85,13 +85,6 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
     outputRange: ['0deg', '360deg', '720deg', '1080deg'],
   });
 
-  // Letters for TRACK' centered at top of button
-  const trackLetters = ['T', 'R', 'A', 'C', 'K', "'"];
-  const radius = 24; // Distance from center to letters
-  const angleSpan = 100; // Smaller arc centered at top
-  const startAngle = -90 - (angleSpan / 2); // Center around top (-90 degrees)
-  const angleStep = angleSpan / (trackLetters.length - 1);
-
   return (
     <Pressable style={styles.fab} onPress={onPress}>
       {/* Multiple vinyl grooves (static) */}
@@ -108,33 +101,9 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
           },
         ]}
       />
-      {/* TRACK' letters wrapped around the center */}
-      {trackLetters.map((letter, index) => {
-        const angle = startAngle + (index * angleStep);
-        const angleRad = (angle * Math.PI) / 180;
-        const x = Math.cos(angleRad) * radius;
-        const y = Math.sin(angleRad) * radius;
-        return (
-          <Text
-            key={index}
-            style={[
-              styles.trackLetter,
-              {
-                transform: [
-                  { translateX: x },
-                  { translateY: y },
-                  { rotate: `${angle + 90}deg` },
-                ],
-              },
-            ]}
-          >
-            {letter}
-          </Text>
-        );
-      })}
-      {/* Center with D - pulses */}
+      {/* Center with trackd - pulses */}
       <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.fabText}>D</Text>
+        <Text style={styles.fabText}>track<Text style={styles.fabTextD}>d</Text></Text>
       </Animated.View>
     </Pressable>
   );
@@ -217,8 +186,8 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: Colors.dark.primary,
-        tabBarInactiveTintColor: Colors.dark.textMuted,
+        tabBarActiveTintColor: '#FFFFFF',
+        tabBarInactiveTintColor: 'rgba(255, 255, 255, 0.5)',
         tabBarShowLabel: true,
         tabBarLabelStyle: styles.tabBarLabel,
       }}
@@ -369,14 +338,12 @@ const styles = StyleSheet.create({
   },
   fabText: {
     color: Colors.dark.background,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: -0.5,
-  },
-  trackLetter: {
-    position: 'absolute',
-    color: '#DC2626',
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  fabTextD: {
+    fontWeight: '900',
+    fontSize: 12,
   },
 });

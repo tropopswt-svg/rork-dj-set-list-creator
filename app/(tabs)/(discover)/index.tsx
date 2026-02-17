@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import SetFeedCard from '@/components/SetFeedCard';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
-import IddLogo from '@/components/IddLogo';
+import TrackdLogo from '@/components/TrackdLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
@@ -484,9 +484,16 @@ export default function DiscoverScreen() {
   }, [quickMenuSet, router]);
 
   // Fetch sets from database
-  const fetchSets = useCallback(async () => {
+  const fetchSets = useCallback(async (searchTerm?: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/sets?limit=50&sort=${activeFilter === 'trending' ? 'popular' : 'recent'}`);
+      const params = new URLSearchParams({
+        limit: '200',
+        sort: activeFilter === 'trending' ? 'popular' : 'recent',
+      });
+      if (searchTerm && searchTerm.length >= 2) {
+        params.set('search', searchTerm);
+      }
+      const response = await fetch(`${API_BASE_URL}/api/sets?${params}`);
       const data = await response.json();
 
       if (data.success && data.sets) {
@@ -523,6 +530,15 @@ export default function DiscoverScreen() {
   useEffect(() => {
     fetchSets();
   }, [fetchSets]);
+
+  // Re-fetch from database when search query changes (for full DB search)
+  useEffect(() => {
+    if (debouncedSearchQuery.length >= 2) {
+      fetchSets(debouncedSearchQuery);
+    } else if (debouncedSearchQuery.length === 0) {
+      fetchSets();
+    }
+  }, [debouncedSearchQuery]);
 
   // Combine database sets with any local/mock sets
   useEffect(() => {
@@ -851,7 +867,7 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={Colors.dark.primary} />
             )}
           </Pressable>
-          <IddLogo />
+          <TrackdLogo />
           <View style={styles.headerSpacer} />
         </View>
 
@@ -1327,7 +1343,7 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: Colors.dark.background,
   },
   safeArea: {
     flex: 1,
@@ -1423,7 +1439,7 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
-    color: '#F5E6D3',
+    color: '#FFFFFF',
   },
   filterRow: {
     flexDirection: 'row',
@@ -1466,9 +1482,9 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#141414',
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: '#1A1A1A',
   },
   filterChipActive: {
     backgroundColor: Colors.dark.primary,
@@ -1477,7 +1493,7 @@ const styles = StyleSheet.create({
   filterText: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.dark.textSecondary,
+    color: '#FFFFFF',
   },
   filterTextActive: {
     color: Colors.dark.background,
@@ -1531,9 +1547,9 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#141414',
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: '#1A1A1A',
   },
   filterButtonActive: {
     backgroundColor: Colors.dark.primary,
@@ -1541,7 +1557,7 @@ const styles = StyleSheet.create({
   },
   filterButtonText: {
     fontSize: 14,
-    color: Colors.dark.text,
+    color: '#FFFFFF',
     fontWeight: '700' as const,
   },
   filterButtonTextActive: {

@@ -282,31 +282,28 @@ export default function ArtistProfileScreen() {
                     style={styles.setItem}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      // Navigate to set if we have external_id
-                      if (set.external_id) {
-                        router.push(`/(tabs)/(discover)/${set.external_id}`);
-                      }
+                      router.push(`/(tabs)/(discover)/${set.id}`);
                     }}
                   >
-                    {set.cover_url && (
+                    {(set.cover_url || set.youtube_url) && (
                       <Image
-                        source={{ uri: set.cover_url }}
+                        source={{ uri: set.cover_url || (set.youtube_url ? `https://img.youtube.com/vi/${set.youtube_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1]}/mqdefault.jpg` : undefined) }}
                         style={styles.setCover}
                         contentFit="cover"
                       />
                     )}
                     <View style={styles.setInfo}>
                       <Text style={styles.setName} numberOfLines={1}>
-                        {set.name}
+                        {set.title || set.name}
                       </Text>
                       <Text style={styles.setMeta}>
                         {set.venue || 'Unknown Venue'}
-                        {set.set_date && ` • ${new Date(set.set_date).getFullYear()}`}
+                        {set.event_date && ` • ${new Date(set.event_date).getFullYear()}`}
                       </Text>
                     </View>
                     <View style={styles.setStats}>
                       <Music size={12} color={Colors.dark.textMuted} />
-                      <Text style={styles.setTracksCount}>{set.tracks_count}</Text>
+                      <Text style={styles.setTracksCount}>{set.track_count || 0}</Text>
                     </View>
                   </Pressable>
                 ))

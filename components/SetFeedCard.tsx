@@ -2,7 +2,7 @@ import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { View, Text, StyleSheet, Pressable, Modal, Animated, Easing, Alert } from 'react-native';
 import EventBadge, { detectEvent, EVENT_BADGES } from './EventBadge';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, ListMusic, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, HelpCircle } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, HelpCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
@@ -1063,11 +1063,9 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
       const iconProps = { size: 16 };
       switch (platform) {
         case 'youtube':
-          return <Youtube key={index} {...iconProps} color="#FF0000" />;
+          return null;
         case 'soundcloud':
           return <Music2 key={index} {...iconProps} color="#FF5500" />;
-        case '1001tracklists':
-          return <ListMusic key={index} {...iconProps} color={Colors.dark.primary} />;
         default:
           return null;
       }
@@ -1363,7 +1361,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
           <View style={styles.nameContainer}>
             <View style={[styles.nameAccent, isSelected && styles.nameAccentSelected]} />
             <Text
-              style={[styles.name, isSelected && styles.nameSelected]}
+              style={[styles.name, isIdentified && styles.nameTrackd, isSelected && styles.nameSelected]}
               numberOfLines={2}
             >
               {formatDisplayName().length > 50
@@ -1583,10 +1581,17 @@ const styles = StyleSheet.create({
   },
   coverContainer: {
     position: 'relative',
-    width: 80,
-    height: 80,
+    width: 84,
+    height: 84,
     borderRadius: 10,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(245, 230, 211, 0.15)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   cover: {
     width: '100%',
@@ -1800,13 +1805,19 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 12,
-    fontWeight: '600' as const,
+    fontSize: 14,
+    fontWeight: '700' as const,
     color: '#F5E6D3',
-    lineHeight: 15,
+    lineHeight: 18,
+  },
+  nameTrackd: {
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(255, 255, 255, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 4,
   },
   nameSelected: {
-    color: '#C41E3A', // Circoloco red
+    color: '#C41E3A',
     fontWeight: '700' as const,
   },
   // Location row - more prominent
@@ -1931,12 +1942,12 @@ const styles = StyleSheet.create({
     height: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(107, 114, 128, 0.3)',
+    backgroundColor: 'rgba(220, 38, 38, 0.5)',
     borderRadius: 2,
   },
   unanalyzedBadgeText: {
     fontSize: 7,
-    color: Colors.dark.textMuted,
+    color: '#fff',
     fontWeight: '700' as const,
   },
   needsSourceBadge: {

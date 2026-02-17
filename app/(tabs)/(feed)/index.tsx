@@ -2,6 +2,8 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator, Animated, Easing, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn, MapPin, Headphones, Archive } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -10,7 +12,7 @@ import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFollowing, useNotifications, useLikeSet, useFollowArtist } from '@/hooks/useSocial';
-import IDentifiedLogo from '@/components/IDentifiedLogo';
+// Logo removed from feed header
 import { getPopularVenues, type VenueInfo } from '@/lib/supabase/venueService';
 import { getPopularArtists, getArtistSets, type DbArtist } from '@/lib/supabase/artistService';
 
@@ -333,7 +335,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
               <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
               {item.set.duration && <View style={styles.feedSetDivider} />}
               <View style={styles.feedTracksRow}>
-                <Music size={12} color={Colors.dark.textMuted} />
+                <Music size={12} color="rgba(0,0,0,0.4)" />
                 <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
               </View>
             </View>
@@ -350,7 +352,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
         >
           <Heart
             size={20}
-            color={isLiked ? '#EF4444' : Colors.dark.textMuted}
+            color={isLiked ? '#EF4444' : 'rgba(0,0,0,0.4)'}
             fill={isLiked ? '#EF4444' : 'none'}
           />
           <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
@@ -359,18 +361,21 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
         </Pressable>
 
         <Pressable style={styles.actionButton} onPress={handleComment}>
-          <MessageCircle size={20} color={Colors.dark.textMuted} />
+          <MessageCircle size={20} color="rgba(0,0,0,0.4)" />
           <Text style={styles.actionText}>Comment</Text>
         </Pressable>
 
         <Pressable style={styles.actionButton} onPress={handleShare}>
-          <Share2 size={20} color={Colors.dark.textMuted} />
+          <Share2 size={20} color="rgba(0,0,0,0.4)" />
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
       </View>
     </View>
   );
 }
+
+// API base URL for fetching recent sets
+const FEED_API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -383,11 +388,13 @@ export default function FeedScreen() {
   const [discoverArtists, setDiscoverArtists] = useState<DbArtist[]>([]);
   const [discoverTab, setDiscoverTab] = useState<'artists' | 'venues'>('artists');
   const [followedArtistSets, setFollowedArtistSets] = useState<any[]>([]);
+  const [recentDbSets, setRecentDbSets] = useState<any[]>([]);
   const [loadingSets, setLoadingSets] = useState(false);
 
-  // Load popular venues and artists
+  // Load popular venues, artists, and recent sets
   useEffect(() => {
     loadDiscoverData();
+    loadRecentSets();
   }, []);
 
   // Load sets from database for followed artists
@@ -396,6 +403,19 @@ export default function FeedScreen() {
       loadFollowedArtistSets();
     }
   }, [user, followedArtists, followingLoading]);
+
+  // Load recent sets from database (fallback for all users)
+  const loadRecentSets = async () => {
+    try {
+      const response = await fetch(`${FEED_API_BASE_URL}/api/sets?limit=20&sort=recent`);
+      const data = await response.json();
+      if (data.success && data.sets) {
+        setRecentDbSets(data.sets);
+      }
+    } catch (error) {
+      console.error('[Feed] Error loading recent sets:', error);
+    }
+  };
 
   const loadFollowedArtistSets = async () => {
     setLoadingSets(true);
@@ -459,36 +479,67 @@ export default function FeedScreen() {
       .filter(Boolean) as string[];
   }, [user, followedArtists]);
 
-  // Use database sets from followed artists, fall back to local sets
+  // Helper to generate YouTube thumbnail from URL
+  const getYTThumb = (url?: string) => {
+    if (!url) return null;
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg` : null;
+  };
+
+  // Use database sets from followed artists, fall back to recent DB sets
   const realFeedItems = useMemo(() => {
     // If user is logged in and we have sets from followed artists in database
     if (user && followedArtistSets.length > 0) {
       return followedArtistSets
-        .sort((a, b) => new Date(b.created_at || b.date).getTime() - new Date(a.created_at || a.date).getTime())
+        .sort((a, b) => new Date(b.created_at || b.event_date).getTime() - new Date(a.created_at || a.event_date).getTime())
         .slice(0, 20)
         .map(set => ({
           id: set.id,
           type: 'new_set' as const,
           artist: {
-            id: set.dj_name || set.artist_name,
-            name: set.dj_name || set.artist_name,
-            image: set.cover_url || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+            id: set.dj_name,
+            name: set.dj_name,
+            image: getYTThumb(set.youtube_url) || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
             following: true,
           },
           set: {
             id: set.id,
-            name: set.name,
+            name: set.title || set.name,
             venue: set.venue || '',
-            date: formatDate(new Date(set.created_at || set.date)),
-            image: set.cover_url || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-            duration: set.duration ? formatDuration(set.duration) : '',
-            tracksIdentified: set.tracks_count || 0,
+            date: formatDate(new Date(set.created_at || set.event_date)),
+            image: getYTThumb(set.youtube_url) || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+            duration: set.duration_seconds ? formatDuration(set.duration_seconds) : '',
+            tracksIdentified: set.track_count || 0,
           },
-          timestamp: new Date(set.created_at || set.date),
+          timestamp: new Date(set.created_at || set.event_date),
         }));
     }
 
-    // Fall back to local sets (show all if not logged in)
+    // Fall back to recent database sets (works for all users)
+    if (recentDbSets.length > 0) {
+      return recentDbSets.map(set => ({
+        id: set.id,
+        type: 'new_set' as const,
+        artist: {
+          id: set.artist,
+          name: set.artist,
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&h=200&fit=crop',
+          following: false,
+        },
+        set: {
+          id: set.id,
+          name: set.name,
+          venue: set.venue || '',
+          date: formatDate(new Date(set.date)),
+          image: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
+          duration: set.totalDuration ? formatDuration(set.totalDuration) : '',
+          tracksIdentified: set.trackCount || 0,
+        },
+        timestamp: new Date(set.date),
+      }));
+    }
+
+    // Final fallback to local context sets
     return sets
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 20)
@@ -512,7 +563,7 @@ export default function FeedScreen() {
         },
         timestamp: set.date,
       }));
-  }, [sets, user, followedArtistSets]);
+  }, [sets, user, followedArtistSets, recentDbSets]);
 
   // Artists the user follows
   const followedArtistsList = useMemo(() => {
@@ -537,6 +588,7 @@ export default function FeedScreen() {
     setRefreshing(true);
     await Promise.all([
       loadDiscoverData(),
+      loadRecentSets(),
       user && followedArtists.length > 0 ? loadFollowedArtistSets() : Promise.resolve(),
     ]);
     setRefreshing(false);
@@ -553,10 +605,17 @@ export default function FeedScreen() {
 
   return (
     <View style={styles.container}>
+      {/* White glass effect background with soft color accents */}
+      <View style={styles.glassBackground} pointerEvents="none">
+        <View style={[styles.glassOrb, styles.glassOrb1]} />
+        <View style={[styles.glassOrb, styles.glassOrb2]} />
+        <View style={[styles.glassOrb, styles.glassOrb3]} />
+        <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
+      </View>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerLeft} />
-          <IDentifiedLogo size="medium" />
+          <Text style={styles.headerTitle}>Feed</Text>
           <View style={styles.headerRight}>
             {!user && (
               <Pressable
@@ -568,7 +627,7 @@ export default function FeedScreen() {
               </Pressable>
             )}
             <Pressable style={styles.notifButton} onPress={handleNotifications}>
-              <Bell size={22} color={Colors.dark.text} />
+              <Bell size={22} color="#1A1A1A" />
               {unreadCount > 0 && (
                 <View style={styles.notifBadge}>
                   <Text style={styles.notifBadgeText}>
@@ -592,31 +651,6 @@ export default function FeedScreen() {
             />
           }
         >
-          {/* Quick Navigation Buttons */}
-          <View style={styles.quickNavSection}>
-            <Pressable
-              style={styles.quickNavButton}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/(tabs)/(discover)');
-              }}
-            >
-              <Music size={14} color="#fff" />
-              <Text style={styles.quickNavText}>Sets</Text>
-            </Pressable>
-
-            <Pressable
-              style={styles.quickNavButton}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/(tabs)/(social)');
-              }}
-            >
-              <Archive size={14} color="#fff" />
-              <Text style={styles.quickNavText}>Crate</Text>
-            </Pressable>
-          </View>
-
           {/* Discover Section - Artists & Venues */}
           <View style={styles.discoverSection}>
             <View style={styles.discoverHeaderRow}>
@@ -711,13 +745,13 @@ export default function FeedScreen() {
                     />
                   ) : (
                     <View style={[styles.discoverImage, styles.discoverImagePlaceholder]}>
-                      <MapPin size={18} color={Colors.dark.textMuted} />
+                      <MapPin size={18} color="rgba(0,0,0,0.4)" />
                     </View>
                   )}
                   <View style={styles.discoverInfo}>
                     <Text style={styles.discoverName} numberOfLines={2}>{venue.name}</Text>
                   </View>
-                  <ChevronRight size={16} color={Colors.dark.textMuted} />
+                  <ChevronRight size={16} color="rgba(0,0,0,0.4)" />
                 </Pressable>
               ))}
               {discoverTab === 'venues' && popularVenues.length === 0 && (
@@ -731,7 +765,7 @@ export default function FeedScreen() {
           {/* Recent Activity Feed */}
           <View style={styles.feedSection}>
             <Text style={styles.feedTitle}>
-              {user && followedArtists.length > 0 ? 'From Artists You Follow' : 'Recent Activity'}
+              {user && followedArtistSets.length > 0 ? 'From Artists You Follow' : 'For You'}
             </Text>
             {loadingSets ? (
               <View style={styles.loadingFeed}>
@@ -782,7 +816,36 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#F0EDE8',
+  },
+  glassBackground: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  glassOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  glassOrb1: {
+    width: 300,
+    height: 300,
+    top: -80,
+    left: -50,
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
+  },
+  glassOrb2: {
+    width: 250,
+    height: 250,
+    top: 250,
+    right: -80,
+    backgroundColor: 'rgba(160, 50, 180, 0.1)',
+  },
+  glassOrb3: {
+    width: 200,
+    height: 200,
+    bottom: 80,
+    left: 10,
+    backgroundColor: 'rgba(50, 100, 200, 0.08)',
   },
   safeArea: {
     flex: 1,
@@ -794,6 +857,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 12,
+  },
+  headerTitle: {
+    color: '#1A1A1A',
+    fontSize: 18,
+    fontWeight: '700' as const,
   },
   headerLeft: {
     width: 90, // Match headerRight width for centering
@@ -823,11 +891,11 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   notifBadge: {
     position: 'absolute',
@@ -884,11 +952,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
   },
   sectionCount: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
   },
   followingContainer: {
     paddingHorizontal: 16,
@@ -904,12 +972,12 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     marginBottom: 6,
     borderWidth: 2,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   followingName: {
     fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
     textAlign: 'center',
   },
   discoverSection: {
@@ -926,11 +994,11 @@ const styles = StyleSheet.create({
   },
   discoverToggle: {
     flexDirection: 'row',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
     borderRadius: 20,
     padding: 3,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
   },
   toggleButton: {
     paddingHorizontal: 14,
@@ -943,7 +1011,7 @@ const styles = StyleSheet.create({
   toggleButtonText: {
     fontSize: 13,
     fontWeight: '500' as const,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.45)',
   },
   toggleButtonTextActive: {
     color: '#fff',
@@ -964,12 +1032,12 @@ const styles = StyleSheet.create({
   discoverCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
     borderRadius: 12,
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
     gap: 10,
     minWidth: 180,
     maxWidth: 220,
@@ -990,11 +1058,11 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   vinylContainer: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#2a2a2a',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#333',
+    borderColor: '#444',
   },
   vinylLabel: {
     backgroundColor: '#DC2626',
@@ -1016,7 +1084,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
     borderWidth: 1.5,
-    borderColor: Colors.dark.surface,
+    borderColor: '#FFFFFF',
   },
   b2bBadgeText: {
     fontSize: 8,
@@ -1030,12 +1098,12 @@ const styles = StyleSheet.create({
   discoverName: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
     lineHeight: 16,
   },
   discoverType: {
     fontSize: 10,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
     marginTop: 2,
   },
   followedBadge: {
@@ -1057,7 +1125,7 @@ const styles = StyleSheet.create({
   },
   discoverEmptyText: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
   },
   feedSection: {
     paddingHorizontal: 16,
@@ -1065,17 +1133,17 @@ const styles = StyleSheet.create({
   feedTitle: {
     fontSize: 17,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
     marginBottom: 14,
     paddingHorizontal: 4,
   },
   feedCard: {
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.55)',
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
   },
   feedHeader: {
     flexDirection: 'row',
@@ -1094,16 +1162,16 @@ const styles = StyleSheet.create({
   feedArtistName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
   },
   feedAction: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(0, 0, 0, 0.5)',
     marginTop: 1,
   },
   feedTime: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
   },
   feedContent: {
     flexDirection: 'row',
@@ -1146,13 +1214,13 @@ const styles = StyleSheet.create({
   feedSetName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#1A1A1A',
     lineHeight: 20,
     marginBottom: 4,
   },
   feedSetVenue: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(0, 0, 0, 0.5)',
     marginBottom: 10,
   },
   feedSetStats: {
@@ -1161,14 +1229,14 @@ const styles = StyleSheet.create({
   },
   feedSetDuration: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
     fontWeight: '500' as const,
   },
   feedSetDivider: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: Colors.dark.textMuted,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
     marginHorizontal: 8,
   },
   feedTracksRow: {
@@ -1178,14 +1246,14 @@ const styles = StyleSheet.create({
   },
   feedSetTracks: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
     fontWeight: '500' as const,
   },
   socialActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: Colors.dark.border,
+    borderTopColor: 'rgba(0, 0, 0, 0.08)',
     marginTop: 12,
     paddingTop: 12,
   },
@@ -1198,7 +1266,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.45)',
     fontWeight: '500',
   },
   actionTextActive: {
@@ -1211,12 +1279,12 @@ const styles = StyleSheet.create({
   emptyFeedText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1A',
     marginBottom: 8,
   },
   emptyFeedSubtext: {
     fontSize: 14,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
   },
   browseButton: {
     marginTop: 16,
@@ -1237,6 +1305,6 @@ const styles = StyleSheet.create({
   },
   loadingFeedText: {
     fontSize: 14,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0, 0, 0, 0.4)',
   },
 });

@@ -4,223 +4,176 @@ import Colors from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// TRACK'D Logo with spinning vinyl grooves inside the C and tonearm needle
-
 interface TrackdLogoProps {
   size?: 'small' | 'medium' | 'large';
   showTagline?: boolean;
 }
 
-// The letter C that spins like a vinyl record - spins once, then waits
-const VinylC = ({
-  size = 28,
-}: {
-  size?: number;
-}) => {
-  const spinAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Spin once slowly, wait 5 seconds, repeat
-    const spinSequence = () => {
-      Animated.sequence([
-        // Spin one full rotation slowly (like a vinyl)
-        Animated.timing(spinAnim, {
-          toValue: 1,
-          duration: 2500, // Slow vinyl spin
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        // Wait 5 seconds
-        Animated.delay(5000),
-        // Reset instantly
-        Animated.timing(spinAnim, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ]).start(() => spinSequence());
-    };
-
-    spinSequence();
-  }, []);
-
-  const rotation = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const fontSize = size * 0.85;
-  const centerSize = size * 0.32; // Vinyl center label size
-  const needleSize = size * 0.12;
-  const needleArmLength = size * 0.18;
-
-  return (
-    <View style={[styles.vinylCContainer, { width: size, height: size }]}>
-      {/* The spinning C */}
-      <Animated.Text
-        style={[
-          styles.letterC,
-          {
-            fontSize,
-            lineHeight: size,
-            transform: [{ rotate: rotation }],
-          },
-        ]}
-      >
-        C
-      </Animated.Text>
-      {/* Vinyl center label */}
-      <View style={[styles.vinylCenter, { width: centerSize, height: centerSize, borderRadius: centerSize / 2 }]}>
-        <View style={[styles.vinylCenterDot, { width: centerSize * 0.3, height: centerSize * 0.3, borderRadius: centerSize * 0.15 }]} />
-      </View>
-      {/* Vinyl needle */}
-      <View style={[styles.needleContainer, { width: size, height: size }]}>
-        <View
-          style={[
-            styles.needleArm,
-            {
-              width: needleArmLength,
-              height: 2,
-              top: size * 0.48,
-              left: size * 0.35,
-            },
-          ]}
-        />
-        <View
-          style={[
-            styles.needleHead,
-            {
-              width: needleSize,
-              height: needleSize,
-              borderRadius: needleSize / 2,
-              top: size * 0.44,
-              left: size * 0.32,
-            },
-          ]}
-        />
-      </View>
-    </View>
-  );
+// Seeded random for consistent waveform generation
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed * 9999) * 10000;
+  return x - Math.floor(x);
 };
 
-// Animated waveform that runs continuously
-const WaveformUnderlay = ({ width = 200, height = 12 }: { width?: number; height?: number }) => {
-  const waveAnim = useRef(new Animated.Value(0)).current;
+// Individual letter with volume bars that animate from bottom
+const AnimatedLetter = ({
+  letter,
+  fontSize,
+  scanProgress,
+  letterIndex,
+  totalLetters,
+}: {
+  letter: string;
+  fontSize: number;
+  scanProgress: Animated.Value;
+  letterIndex: number;
+  totalLetters: number;
+}) => {
+  const letterStart = letterIndex / totalLetters;
+  const letterEnd = (letterIndex + 1) / totalLetters;
+  const letterMid = (letterStart + letterEnd) / 2;
 
-  useEffect(() => {
-    // Continuous scrolling waveform
-    Animated.loop(
-      Animated.timing(waveAnim, {
-        toValue: 1,
-        duration: 8000, // Slow continuous scroll
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    ).start();
-  }, []);
+  const barHeights = useRef(
+    Array.from({ length: 5 }, (_, i) => 0.3 + seededRandom(letterIndex * 10 + i) * 0.7)
+  ).current;
 
-  const translateX = waveAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-width * 0.3, width * 0.1],
+  const barScales = barHeights.map(() => {
+    return scanProgress.interpolate({
+      inputRange: [
+        Math.max(0, letterStart - 0.05),
+        letterStart,
+        letterMid,
+        letterEnd,
+        Math.min(1, letterEnd + 0.1),
+      ],
+      outputRange: [0, 0.2, 1, 0.8, 0],
+      extrapolate: 'clamp',
+    });
   });
 
-  // Generate wave bars - taller
-  const barCount = Math.floor(width / 5);
-  const bars = Array.from({ length: barCount * 2 }, (_, i) => {
-    const progress = i / barCount;
-    const waveHeight = Math.sin(progress * Math.PI * 3) * 0.6 + 0.4;
-    return { height: waveHeight * height };
-  });
+  const barWidth = fontSize * 0.08;
+  const barMaxHeight = fontSize * 0.5;
+  const letterWidth = fontSize * 0.5;
+  const letterSpacing = 0;
 
   return (
-    <View style={[styles.waveformContainer, { width, height, overflow: 'hidden' }]}>
-      <Animated.View
-        style={[
-          styles.waveformBars,
-          { transform: [{ translateX }] },
-        ]}
-      >
-        {bars.map((bar, i) => (
-          <View
+    <View style={[styles.letterContainer, { width: letterWidth, marginHorizontal: letterSpacing }]}>
+      <View style={[styles.volumeBarsContainer, { height: barMaxHeight }]}>
+        {barHeights.map((height, i) => (
+          <Animated.View
             key={i}
             style={[
-              styles.waveformBar,
+              styles.volumeBar,
               {
-                height: bar.height,
-                width: 2,
+                width: barWidth,
+                height: barMaxHeight * height,
+                transform: [{ scaleY: barScales[i] }],
                 marginHorizontal: 1,
-                backgroundColor: `rgba(196, 30, 58, ${0.08 + (bar.height / height) * 0.1})`,
               },
             ]}
           />
         ))}
-      </Animated.View>
+      </View>
+      <Text
+        style={[
+          styles.logoLetter,
+          { fontSize, lineHeight: fontSize },
+        ]}
+      >
+        {letter}
+      </Text>
     </View>
   );
 };
 
+// Scan line component
+const ScanLine = ({
+  scanProgress,
+  width,
+  height,
+}: {
+  scanProgress: Animated.Value;
+  width: number;
+  height: number;
+}) => {
+  const translateX = scanProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, width],
+  });
+
+  const opacity = scanProgress.interpolate({
+    inputRange: [0, 0.02, 0.98, 1],
+    outputRange: [0, 1, 1, 0],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.scanLine,
+        {
+          height,
+          transform: [{ translateX }],
+          opacity,
+        },
+      ]}
+    />
+  );
+};
+
 export default function TrackdLogo({ size = 'medium', showTagline = false }: TrackdLogoProps) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const scanProgress = useRef(new Animated.Value(0)).current;
 
   const sizeConfig = {
-    small: { fontSize: 28, letterSpacing: 6, vinylSize: 32, waveHeight: 40 },
-    medium: { fontSize: 38, letterSpacing: 8, vinylSize: 44, waveHeight: 50 },
-    large: { fontSize: 52, letterSpacing: 12, vinylSize: 60, waveHeight: 60 },
+    small: { fontSize: 42 },
+    medium: { fontSize: 56 },
+    large: { fontSize: 72 },
   }[size];
 
+  const letters = ['t', 'r', 'a', 'c', 'k', 'd'];
+  const totalLetters = letters.length;
+
   useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.02, duration: 3000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 3000, useNativeDriver: true }),
-      ])
-    ).start();
+    const runScan = () => {
+      scanProgress.setValue(0);
+      Animated.timing(scanProgress, {
+        toValue: 1,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    runScan();
+    const interval = setInterval(runScan, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ scale: pulseAnim }] }]}>
-      {/* Waveform underlay - full width, very subtle */}
-      <View style={styles.waveformUnderlayWrapper}>
-        <WaveformUnderlay width={SCREEN_WIDTH} height={sizeConfig.waveHeight} />
+    <View style={styles.container}>
+      <View style={styles.scanLineWrapper}>
+        <ScanLine
+          scanProgress={scanProgress}
+          width={SCREEN_WIDTH}
+          height={sizeConfig.fontSize * 1.5}
+        />
       </View>
 
-      <View style={styles.logoWrapper}>
-        {/* TRAC */}
-        <Text style={[styles.logoText, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
-          TRA
-        </Text>
-
-        {/* Vinyl C */}
-        <VinylC size={sizeConfig.vinylSize} />
-
-        {/* K */}
-        <Text style={[styles.logoText, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
-          K
-        </Text>
-
-        {/* 'D */}
-        <Text style={[styles.logoTextApostrophe, { fontSize: sizeConfig.fontSize, letterSpacing: sizeConfig.letterSpacing }]}>
-          'D
-        </Text>
+      <View style={styles.lettersRow}>
+        {letters.map((letter, index) => (
+          <AnimatedLetter
+            key={index}
+            letter={letter}
+            fontSize={sizeConfig.fontSize}
+            scanProgress={scanProgress}
+            letterIndex={index}
+            totalLetters={totalLetters}
+          />
+        ))}
       </View>
 
       {showTagline && (
         <Text style={styles.tagline}>Every track. Every set.</Text>
       )}
-    </Animated.View>
-  );
-}
-
-// Simple text badge for compact spaces
-export function TrackdBadge({ size = 'small' }: { size?: 'small' | 'medium' }) {
-  const sizeConfig = {
-    small: { fontSize: 10, padding: 4 },
-    medium: { fontSize: 12, padding: 6 },
-  }[size];
-
-  return (
-    <View style={[styles.badge, { paddingHorizontal: sizeConfig.padding + 2, paddingVertical: sizeConfig.padding }]}>
-      <Text style={[styles.badgeText, { fontSize: sizeConfig.fontSize }]}>TRACK'D</Text>
     </View>
   );
 }
@@ -229,89 +182,64 @@ const styles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
+    position: 'relative',
+    overflow: 'visible',
   },
-  waveformUnderlayWrapper: {
+  scanLineWrapper: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    left: 0,
-    right: 0,
+    left: -SCREEN_WIDTH / 2,
+    width: SCREEN_WIDTH,
     justifyContent: 'center',
-    alignItems: 'center',
-    opacity: 0.5,
-    zIndex: 0,
-  },
-  waveformContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  waveformBars: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  waveformBar: {
-    borderRadius: 1,
-  },
-  logoWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    zIndex: 1,
-  },
-  logoText: {
-    fontWeight: '900',
-    color: Colors.dark.text,
-  },
-  logoTextApostrophe: {
-    fontWeight: '900',
-    color: Colors.dark.text,
-    marginLeft: -2,
-  },
-  vinylCContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  letterC: {
-    fontWeight: '900',
-    color: Colors.dark.text,
-  },
-  vinylCenter: {
-    position: 'absolute',
-    backgroundColor: Colors.dark.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vinylCenterDot: {
-    backgroundColor: Colors.dark.background,
-  },
-  needleContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
+    zIndex: 2,
     pointerEvents: 'none',
   },
-  needleArm: {
-    position: 'absolute',
-    backgroundColor: '#6B6B6B', // Grey arm
-    transform: [{ rotate: '-35deg' }],
+  lettersRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    zIndex: 1,
   },
-  needleHead: {
+  letterContainer: {
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  volumeBarsContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
     position: 'absolute',
-    backgroundColor: '#9E1830', // Dark red cartridge (Circoloco dark)
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  volumeBar: {
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 2,
+    transformOrigin: 'bottom',
+  },
+  logoLetter: {
+    fontWeight: '800',
+    color: Colors.dark.primary,
+    letterSpacing: -0.3,
+    fontFamily: 'System',
+  },
+  scanLine: {
+    position: 'absolute',
+    width: 3,
+    backgroundColor: Colors.dark.primary,
+    zIndex: 10,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
   },
   tagline: {
-    marginTop: 8,
-    fontSize: 11,
+    marginTop: 12,
+    fontSize: 12,
     color: Colors.dark.textMuted,
-    letterSpacing: 1,
+    letterSpacing: 2,
     textTransform: 'uppercase',
-  },
-  badge: {
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 4,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontWeight: '900',
-    letterSpacing: 0.5,
   },
 });
