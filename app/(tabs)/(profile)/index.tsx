@@ -12,7 +12,7 @@ import {
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn } from 'lucide-react-native';
+import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
@@ -50,7 +50,7 @@ export default function ProfileScreen() {
       return {
         displayName: profile.display_name || profile.username || 'User',
         username: profile.username || 'user',
-        avatarUrl: profile.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+        avatarUrl: profile.avatar_url || null,
         bio: profile.bio,
         favoriteGenres: profile.favorite_genres || [],
         totalPoints: profile.points || 0,
@@ -64,7 +64,7 @@ export default function ProfileScreen() {
     }
     return {
       ...mockCurrentUser,
-      avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+      avatarUrl: null,
     };
   }, [isAuthenticated, profile]);
 
@@ -197,7 +197,13 @@ export default function ProfileScreen() {
         </View>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
-          <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          {user.avatarUrl ? (
+            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
+          ) : (
+            <View style={[styles.avatar, styles.avatarPlaceholder]}>
+              <User size={32} color="rgba(255,255,255,0.5)" />
+            </View>
+          )}
           <Text style={styles.displayName}>{user.displayName}</Text>
           <Text style={styles.username}>@{user.username}</Text>
           {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
@@ -550,6 +556,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 3,
     borderColor: Colors.dark.primary,
+  },
+  avatarPlaceholder: {
+    backgroundColor: '#1A1A1A',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   displayName: {
     fontSize: 22,

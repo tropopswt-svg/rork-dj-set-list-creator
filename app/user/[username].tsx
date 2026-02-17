@@ -88,7 +88,7 @@ export default function UserProfileScreen() {
         {/* Profile Header */}
         <View style={styles.header}>
           <Image
-            source={{ uri: profile.avatar_url || 'https://via.placeholder.com/100' }}
+            source={{ uri: profile.avatar_url || undefined }}
             style={styles.avatar}
           />
 
@@ -165,7 +165,7 @@ export default function UserProfileScreen() {
                   ]}
                 >
                   <Image
-                    source={{ uri: follower.avatar_url || 'https://via.placeholder.com/24' }}
+                    source={{ uri: follower.avatar_url || undefined }}
                     style={styles.mutualAvatarImage}
                   />
                 </View>
@@ -296,7 +296,7 @@ export default function UserProfileScreen() {
                   onPress={() => router.push(`/(tabs)/(discover)/${like.set?.id}`)}
                 >
                   <Image
-                    source={{ uri: like.set?.cover_url || 'https://via.placeholder.com/50' }}
+                    source={{ uri: like.set?.cover_url || undefined }}
                     style={styles.likedSetCover}
                   />
                   <View style={styles.likedSetInfo}>

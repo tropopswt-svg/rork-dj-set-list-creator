@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error && error.code === 'PGRST116') {
         // Profile doesn't exist, create it
-        console.log('[Auth] Profile not found, creating...');
+        if (__DEV__) console.log('[Auth] Profile not found, creating...');
         const newProfile = {
           id: userId,
           username: userData?.user_metadata?.username || userData?.email?.split('@')[0] || null,
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .single();
 
         if (createError) {
-          console.error('[Auth] Error creating profile:', createError);
+          if (__DEV__) console.error('[Auth] Error creating profile:', createError);
           return null;
         }
 
@@ -95,13 +95,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (error) {
-        console.error('[Auth] Error fetching profile:', error);
+        if (__DEV__) console.error('[Auth] Error fetching profile:', error);
         return null;
       }
 
       return data as Profile;
     } catch (error) {
-      console.error('[Auth] Error fetching profile:', error);
+      if (__DEV__) console.error('[Auth] Error fetching profile:', error);
       return null;
     }
   }, []);
@@ -130,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[Auth] Auth state changed:', event);
+      if (__DEV__) console.log('[Auth] Auth state changed:', event);
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -174,7 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error };
     } catch (error) {
-      console.error('[Auth] Sign up error:', error);
+      if (__DEV__) console.error('[Auth] Sign up error:', error);
       return { error: error as AuthError };
     }
   };
@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error };
     } catch (error) {
-      console.error('[Auth] Sign in error:', error);
+      if (__DEV__) console.error('[Auth] Sign in error:', error);
       return { error: error as AuthError };
     }
   };
@@ -208,7 +208,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error };
     } catch (error) {
-      console.error('[Auth] Google sign in error:', error);
+      if (__DEV__) console.error('[Auth] Google sign in error:', error);
       return { error: error as AuthError };
     }
   };
@@ -227,7 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error };
     } catch (error) {
-      console.error('[Auth] Apple sign in error:', error);
+      if (__DEV__) console.error('[Auth] Apple sign in error:', error);
       return { error: error as AuthError };
     }
   };
@@ -243,7 +243,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Clear any cached data
       await AsyncStorage.removeItem('supabase.auth.token');
     } catch (error) {
-      console.error('[Auth] Sign out error:', error);
+      if (__DEV__) console.error('[Auth] Sign out error:', error);
     }
   };
 
@@ -258,7 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error };
     } catch (error) {
-      console.error('[Auth] Reset password error:', error);
+      if (__DEV__) console.error('[Auth] Reset password error:', error);
       return { error: error as AuthError };
     }
   };
@@ -277,7 +277,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', user.id);
 
       if (profileError) {
-        console.error('[Auth] Error deleting profile:', profileError);
+        if (__DEV__) console.error('[Auth] Error deleting profile:', profileError);
         return { error: new Error(profileError.message) };
       }
 
@@ -286,7 +286,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error: null };
     } catch (error) {
-      console.error('[Auth] Delete account error:', error);
+      if (__DEV__) console.error('[Auth] Delete account error:', error);
       return { error: error as Error };
     }
   };
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       return { error: null };
     } catch (error) {
-      console.error('[Auth] Update profile error:', error);
+      if (__DEV__) console.error('[Auth] Update profile error:', error);
       return { error: error as Error };
     }
   };
@@ -325,7 +325,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     profile,
     isLoading,
-    isAuthenticated: true, // TODO: restore to !!user before launch
+    isAuthenticated: !!user,
     signUp,
     signIn,
     signInWithGoogle,

@@ -9,6 +9,7 @@ import {
   Platform,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, User, AtSign } from 'lucide-react-native';
@@ -203,9 +204,9 @@ export default function SignupScreen() {
 
           <Text style={styles.termsText}>
             By signing up, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text>
+            <Text style={styles.termsLink} onPress={() => Linking.openURL('https://trackd.app/terms')}>Terms of Service</Text>
             {' '}and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            <Text style={styles.termsLink} onPress={() => Linking.openURL('https://trackd.app/privacy')}>Privacy Policy</Text>
           </Text>
 
           <Pressable

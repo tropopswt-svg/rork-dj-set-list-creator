@@ -68,7 +68,7 @@ function calculateSimilarity(str1: string, str2: string): number {
  */
 export async function findArtist(name: string): Promise<ArtistMatch | null> {
   if (!isSupabaseConfigured()) {
-    console.warn('[ArtistService] Supabase not configured');
+    if (__DEV__) console.warn('[ArtistService] Supabase not configured');
     return null;
   }
 
@@ -211,7 +211,7 @@ export async function getArtist(id: string): Promise<DbArtist | null> {
     .single();
   
   if (error) {
-    console.error('[ArtistService] Error fetching artist:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching artist:', error);
     return null;
   }
   
@@ -231,7 +231,7 @@ export async function getArtistBySlug(slug: string): Promise<DbArtist | null> {
     .single();
   
   if (error) {
-    console.error('[ArtistService] Error fetching artist by slug:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching artist by slug:', error);
     return null;
   }
   
@@ -249,7 +249,7 @@ export async function createArtist(input: CreateArtistInput): Promise<DbArtist |
   // Check if slug already exists
   const existing = await getArtistBySlug(slug);
   if (existing) {
-    console.warn('[ArtistService] Artist with this slug already exists:', slug);
+    if (__DEV__) console.warn('[ArtistService] Artist with this slug already exists:', slug);
     return existing;
   }
   
@@ -273,7 +273,7 @@ export async function createArtist(input: CreateArtistInput): Promise<DbArtist |
     .single();
   
   if (error) {
-    console.error('[ArtistService] Error creating artist:', error);
+    if (__DEV__) console.error('[ArtistService] Error creating artist:', error);
     return null;
   }
   
@@ -305,7 +305,7 @@ export async function addArtistAliases(artistId: string, aliases: string[]): Pro
     .upsert(aliasRecords, { onConflict: 'alias_lower' });
   
   if (error) {
-    console.error('[ArtistService] Error adding aliases:', error);
+    if (__DEV__) console.error('[ArtistService] Error adding aliases:', error);
   }
 }
 
@@ -346,7 +346,7 @@ export async function getArtists(page: number = 0, limit: number = 50): Promise<
     .range(page * limit, (page + 1) * limit - 1);
   
   if (error) {
-    console.error('[ArtistService] Error fetching artists:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching artists:', error);
     return [];
   }
   
@@ -367,7 +367,7 @@ export async function searchArtists(query: string, limit: number = 20): Promise<
     .limit(limit);
   
   if (error) {
-    console.error('[ArtistService] Error searching artists:', error);
+    if (__DEV__) console.error('[ArtistService] Error searching artists:', error);
     return [];
   }
   
@@ -388,7 +388,7 @@ export async function getArtistTracks(artistId: string, limit: number = 50): Pro
     .limit(limit);
   
   if (error) {
-    console.error('[ArtistService] Error fetching artist tracks:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching artist tracks:', error);
     return [];
   }
   
@@ -414,7 +414,7 @@ export async function getArtistSets(artistId: string, limit: number = 50): Promi
     .limit(limit);
 
   if (error) {
-    console.error('[ArtistService] Error fetching artist sets:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching artist sets:', error);
     return [];
   }
 
@@ -509,7 +509,7 @@ export async function browseArtists(options: BrowseArtistsOptions = {}): Promise
   const { data, error } = await query;
 
   if (error) {
-    console.error('[ArtistService] Error browsing artists:', error);
+    if (__DEV__) console.error('[ArtistService] Error browsing artists:', error);
     return { data: [], count: 0 };
   }
 
@@ -536,7 +536,7 @@ export async function getPopularArtists(limit: number = 20): Promise<DbArtist[]>
     .limit(limit * 3);
 
   if (error) {
-    console.error('[ArtistService] Error fetching popular artists:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching popular artists:', error);
     return [];
   }
 
@@ -556,7 +556,7 @@ export async function getArtistGenres(): Promise<string[]> {
     .not('genres', 'is', null);
 
   if (error) {
-    console.error('[ArtistService] Error fetching genres:', error);
+    if (__DEV__) console.error('[ArtistService] Error fetching genres:', error);
     return [];
   }
 

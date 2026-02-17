@@ -68,7 +68,7 @@ function SavedSetCard({ savedSet, onPress }: { savedSet: any; onPress: () => voi
   return (
     <Pressable style={styles.savedSetCard} onPress={onPress}>
       <Image
-        source={{ uri: set.cover_url || 'https://via.placeholder.com/64' }}
+        source={{ uri: set.cover_url || undefined }}
         style={styles.savedSetImage}
         contentFit="cover"
       />

@@ -28,7 +28,7 @@ function ArtistCard({
   return (
     <Pressable style={styles.artistCard} onPress={onPress}>
       <Image
-        source={{ uri: artist.image_url || 'https://via.placeholder.com/56' }}
+        source={{ uri: artist.image_url || undefined }}
         style={styles.artistAvatar}
         contentFit="cover"
       />

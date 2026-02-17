@@ -67,7 +67,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       previousAuthState.current = isAuthenticated;
 
       if (justLoggedIn && user && !hasSyncedRef.current) {
-        console.log('[UserContext] User logged in, checking for points to sync...');
+        if (__DEV__) console.log('[UserContext] User logged in, checking for points to sync...');
         await migrateAnonymousPoints();
       }
 
@@ -116,7 +116,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         setPoints(newPoints);
       }
     } catch (error) {
-      console.error('[UserContext] Error loading user data:', error);
+      if (__DEV__) console.error('[UserContext] Error loading user data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -131,7 +131,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
    */
   const migrateAnonymousPoints = async () => {
     if (!user || !points.history.length) {
-      console.log('[UserContext] No points to migrate');
+      if (__DEV__) console.log('[UserContext] No points to migrate');
       return;
     }
 
@@ -139,13 +139,13 @@ export const [UserProvider, useUser] = createContextHook(() => {
     const syncedKey = `${POINTS_SYNCED_KEY}_${user.id}`;
     const alreadySynced = await AsyncStorage.getItem(syncedKey);
     if (alreadySynced) {
-      console.log('[UserContext] Points already synced for this user');
+      if (__DEV__) console.log('[UserContext] Points already synced for this user');
       hasSyncedRef.current = true;
       return;
     }
 
     setSyncState('syncing');
-    console.log('[UserContext] Migrating anonymous points to database...');
+    if (__DEV__) console.log('[UserContext] Migrating anonymous points to database...');
 
     try {
       const result = await syncAnonymousPoints(
@@ -163,7 +163,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       );
 
       if (result.success) {
-        console.log(`[UserContext] Synced ${result.syncedCount} transactions`);
+        if (__DEV__) console.log(`[UserContext] Synced ${result.syncedCount} transactions`);
         // Mark as synced
         await AsyncStorage.setItem(syncedKey, 'true');
         hasSyncedRef.current = true;
@@ -188,11 +188,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
         setSyncState('synced');
       } else {
-        console.error('[UserContext] Sync failed:', result.error);
+        if (__DEV__) console.error('[UserContext] Sync failed:', result.error);
         setSyncState('error');
       }
     } catch (error) {
-      console.error('[UserContext] Migration error:', error);
+      if (__DEV__) console.error('[UserContext] Migration error:', error);
       setSyncState('error');
     }
   };
@@ -254,7 +254,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
         savePoints(newPoints);
       }
 
-      console.log('[UserContext] Points added locally:', amount, reason);
+      if (__DEV__) console.log('[UserContext] Points added locally:', amount, reason);
       return newPoints;
     });
 
@@ -271,11 +271,11 @@ export const [UserProvider, useUser] = createContextHook(() => {
       );
 
       if (result.success) {
-        console.log('[UserContext] Points synced to database:', amount, reason);
+        if (__DEV__) console.log('[UserContext] Points synced to database:', amount, reason);
         // Refresh profile to update displayed totals
         refreshProfile();
       } else {
-        console.error('[UserContext] Failed to sync points:', result.error);
+        if (__DEV__) console.error('[UserContext] Failed to sync points:', result.error);
         // Points are still saved locally, will sync on next login
       }
     }

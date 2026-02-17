@@ -215,7 +215,7 @@ export async function browseVenues(options: BrowseVenuesOptions = {}): Promise<{
     const { data: rawData, error } = await query;
 
     if (error) {
-      console.error('[VenueService] Error fetching venues:', error);
+      if (__DEV__) console.error('[VenueService] Error fetching venues:', error);
       return { data: [], count: 0 };
     }
 
@@ -256,7 +256,7 @@ export async function browseVenues(options: BrowseVenuesOptions = {}): Promise<{
 
     return { data: venues, count: totalCount };
   } catch (err) {
-    console.error('[VenueService] Unexpected error:', err);
+    if (__DEV__) console.error('[VenueService] Unexpected error:', err);
     return { data: [], count: 0 };
   }
 }
@@ -273,7 +273,7 @@ export async function getPopularVenues(limit: number = 10): Promise<VenueInfo[]>
     });
     return data;
   } catch (err) {
-    console.error('[VenueService] Error getting popular venues:', err);
+    if (__DEV__) console.error('[VenueService] Error getting popular venues:', err);
     return [];
   }
 }
@@ -293,13 +293,13 @@ export async function getVenueSets(venueName: string, limit: number = 50, offset
       .range(offset, offset + limit - 1);
 
     if (error) {
-      console.error('[VenueService] Error fetching venue sets:', error);
+      if (__DEV__) console.error('[VenueService] Error fetching venue sets:', error);
       return { data: [], count: 0 };
     }
 
     return { data: data || [], count: count || 0 };
   } catch (err) {
-    console.error('[VenueService] Unexpected error fetching venue sets:', err);
+    if (__DEV__) console.error('[VenueService] Unexpected error fetching venue sets:', err);
     return { data: [], count: 0 };
   }
 }
@@ -330,7 +330,7 @@ export async function getVenueWithSets(venueName: string, setsLimit: number = 20
       recentSets: sets,
     };
   } catch (err) {
-    console.error('[VenueService] Error getting venue with sets:', err);
+    if (__DEV__) console.error('[VenueService] Error getting venue with sets:', err);
     return null;
   }
 }
@@ -348,7 +348,7 @@ export async function searchVenues(query: string, limit: number = 10): Promise<V
     });
     return data;
   } catch (err) {
-    console.error('[VenueService] Error searching venues:', err);
+    if (__DEV__) console.error('[VenueService] Error searching venues:', err);
     return [];
   }
 }

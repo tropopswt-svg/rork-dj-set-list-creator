@@ -48,9 +48,9 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       if (trackRepoJson) {
         const oldTracks = JSON.parse(trackRepoJson) as Track[];
         if (oldTracks.length > 0) {
-          console.log('[SetsContext] Migrating', oldTracks.length, 'tracks to new library...');
+          if (__DEV__) console.log('[SetsContext] Migrating', oldTracks.length, 'tracks to new library...');
           const result = await trackLibrary.bulkAddTracks(oldTracks);
-          console.log('[SetsContext] Migration complete:', result.success, 'added,', result.failed, 'duplicates');
+          if (__DEV__) console.log('[SetsContext] Migration complete:', result.success, 'added,', result.failed, 'duplicates');
           // Keep old storage for now, can remove later
         }
       }
@@ -89,9 +89,9 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       // Load tracks from new library
       const libraryTracks = await trackLibrary.getAllTracks();
       setTrackRepository(libraryTracks);
-      console.log('[SetsContext] Loaded', libraryTracks.length, 'tracks from library');
+      if (__DEV__) console.log('[SetsContext] Loaded', libraryTracks.length, 'tracks from library');
     } catch (error) {
-      console.error('[SetsContext] Error loading saved data:', error);
+      if (__DEV__) console.error('[SetsContext] Error loading saved data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -148,7 +148,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     const duplicate = findDuplicateSet(sourceUrl, newSet.artist, newSet.name);
 
     if (duplicate) {
-      console.log('[SetsContext] Duplicate set found:', duplicate.name);
+      if (__DEV__) console.log('[SetsContext] Duplicate set found:', duplicate.name);
       return { success: false, duplicate, set: duplicate };
     }
 
@@ -177,7 +177,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
         if (alreadyExists) return prev;
         const updated = [...prev, newArtist];
         AsyncStorage.setItem(ARTISTS_STORAGE_KEY, JSON.stringify(updated));
-        console.log('[SetsContext] New artist created:', newArtist.name);
+        if (__DEV__) console.log('[SetsContext] New artist created:', newArtist.name);
         return updated;
       });
     } else {
@@ -193,7 +193,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       });
     }
 
-    console.log('[SetsContext] Set added:', setWithId.name);
+    if (__DEV__) console.log('[SetsContext] Set added:', setWithId.name);
     return { success: true, set: setWithId };
   }, [findDuplicateSet, allArtists]);
 
@@ -205,7 +205,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       const updated = prev.map(set => {
         if (set.id === setId) {
           const updatedSet = { ...set, ...updates };
-          console.log('[SetsContext] Set updated:', setId, Object.keys(updates));
+          if (__DEV__) console.log('[SetsContext] Set updated:', setId, Object.keys(updates));
           return updatedSet;
         }
         return set;
@@ -272,7 +272,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     const existing = allArtists.find(a => a.name.toLowerCase().trim() === normalizedName);
     
     if (existing) {
-      console.log('[SetsContext] Artist already exists:', existing.name);
+      if (__DEV__) console.log('[SetsContext] Artist already exists:', existing.name);
       return existing;
     }
 
@@ -290,7 +290,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       return updated;
     });
 
-    console.log('[SetsContext] Artist added:', newArtist.name);
+    if (__DEV__) console.log('[SetsContext] Artist added:', newArtist.name);
     return newArtist;
   }, [allArtists]);
 
@@ -330,7 +330,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
         });
       }
 
-      console.log('[SetsContext] Added', newTracks.length, 'tracks to set:', setId);
+      if (__DEV__) console.log('[SetsContext] Added', newTracks.length, 'tracks to set:', setId);
       return updated;
     });
   }, []);
@@ -348,7 +348,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       }
     });
 
-    console.log('[SetsContext] Bulk import complete:', success, 'success,', failed, 'failed');
+    if (__DEV__) console.log('[SetsContext] Bulk import complete:', success, 'success,', failed, 'failed');
     return { success, failed };
   }, [addSet]);
 
@@ -367,7 +367,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     // Update local state
     const libraryTracks = await trackLibrary.getAllTracks();
     setTrackRepository(libraryTracks);
-    console.log('[SetsContext] Bulk track import complete:', result.success, 'success,', result.failed, 'duplicates');
+    if (__DEV__) console.log('[SetsContext] Bulk track import complete:', result.success, 'success,', result.failed, 'duplicates');
     return { success: result.success, failed: result.failed };
   }, []);
 
@@ -383,7 +383,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     await trackLibrary.removeTrack(trackId);
     const libraryTracks = await trackLibrary.getAllTracks();
     setTrackRepository(libraryTracks);
-    console.log('[SetsContext] Track removed from repository:', trackId);
+    if (__DEV__) console.log('[SetsContext] Track removed from repository:', trackId);
   }, []);
 
   // ==========================================
@@ -405,7 +405,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
           votes: c.votes.map(v => ({ ...v, votedAt: new Date(v.votedAt) })),
         }));
         setConflicts(parsed);
-        console.log('[SetsContext] Loaded', parsed.length, 'conflicts');
+        if (__DEV__) console.log('[SetsContext] Loaded', parsed.length, 'conflicts');
       }
     });
   }, []);
@@ -494,11 +494,11 @@ export const [SetsProvider, useSets] = createContextHook(() => {
         });
       }
 
-      console.log('[SetsContext] Added source to set:', platform, 'Stats:', result.mergeResult?.stats);
+      if (__DEV__) console.log('[SetsContext] Added source to set:', platform, 'Stats:', result.mergeResult?.stats);
       return { success: true, stats: result.mergeResult?.stats };
 
     } catch (error: any) {
-      console.error('[SetsContext] Error adding source:', error);
+      if (__DEV__) console.error('[SetsContext] Error adding source:', error);
       return { success: false, error: error.message || 'Failed to import' };
     }
   }, [sets, saveConflicts]);
@@ -607,7 +607,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       }
     }
 
-    console.log('[SetsContext] Vote recorded on conflict:', conflictId, resolved ? '(RESOLVED)' : '');
+    if (__DEV__) console.log('[SetsContext] Vote recorded on conflict:', conflictId, resolved ? '(RESOLVED)' : '');
     return { success: true, resolved, winnerId };
   }, [conflicts, saveConflicts]);
 
@@ -644,20 +644,20 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   }> => {
     // Find all sets with YouTube sources (check both sets and submittedSets)
     const allSets = [...sets, ...submittedSets.filter(s => !sets.find(set => set.id === s.id))];
-    console.log('[SetsContext] Total sets to check:', allSets.length, '(sets:', sets.length, ', submitted:', submittedSets.length, ')');
+    if (__DEV__) console.log('[SetsContext] Total sets to check:', allSets.length, '(sets:', sets.length, ', submitted:', submittedSets.length, ')');
 
     const setsWithYouTube = allSets.filter(set =>
       set.sourceLinks?.some(s => s.platform === 'youtube')
     );
 
     if (setsWithYouTube.length === 0) {
-      console.log('[SetsContext] No YouTube sets to refresh');
-      console.log('[SetsContext] Sample set sourceLinks:', allSets[0]?.sourceLinks);
+      if (__DEV__) console.log('[SetsContext] No YouTube sets to refresh');
+      if (__DEV__) console.log('[SetsContext] Sample set sourceLinks:', allSets[0]?.sourceLinks);
       return { updated: 0, failed: 0, updatedSets: [], failedSets: [] };
     }
 
-    console.log('[SetsContext] Refreshing metadata for', setsWithYouTube.length, 'YouTube sets');
-    console.log('[SetsContext] Sets to refresh:', setsWithYouTube.map(s => ({ id: s.id, name: s.name })));
+    if (__DEV__) console.log('[SetsContext] Refreshing metadata for', setsWithYouTube.length, 'YouTube sets');
+    if (__DEV__) console.log('[SetsContext] Sets to refresh:', setsWithYouTube.map(s => ({ id: s.id, name: s.name })));
 
     try {
       const requestBody = {
@@ -667,8 +667,8 @@ export const [SetsProvider, useSets] = createContextHook(() => {
           sourceLinks: set.sourceLinks,
         })),
       };
-      console.log('[SetsContext] Sending request to:', `${API_BASE_URL}/api/import`);
-      console.log('[SetsContext] Request body:', JSON.stringify(requestBody).substring(0, 500));
+      if (__DEV__) console.log('[SetsContext] Sending request to:', `${API_BASE_URL}/api/import`);
+      if (__DEV__) console.log('[SetsContext] Request body:', JSON.stringify(requestBody).substring(0, 500));
 
       const response = await fetch(`${API_BASE_URL}/api/import`, {
         method: 'POST',
@@ -677,19 +677,19 @@ export const [SetsProvider, useSets] = createContextHook(() => {
       });
 
       const responseText = await response.text();
-      console.log('[SetsContext] Raw response:', responseText.substring(0, 500));
+      if (__DEV__) console.log('[SetsContext] Raw response:', responseText.substring(0, 500));
 
       let result;
       try {
         result = JSON.parse(responseText);
       } catch (e) {
-        console.error('[SetsContext] Failed to parse response:', e);
+        if (__DEV__) console.error('[SetsContext] Failed to parse response:', e);
         return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
       }
 
       if (!result.success) {
-        console.error('[SetsContext] Batch refresh failed:', result.error);
-        console.error('[SetsContext] Full result:', result);
+        if (__DEV__) console.error('[SetsContext] Batch refresh failed:', result.error);
+        if (__DEV__) console.error('[SetsContext] Full result:', result);
         return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
       }
 
@@ -730,7 +730,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
             updateSet(item.setId, updates);
             updated++;
             updatedSets.push({ setId: item.setId, setName, updates: updateDetails });
-            console.log('[SetsContext] Updated metadata for set:', item.setId, updates);
+            if (__DEV__) console.log('[SetsContext] Updated metadata for set:', item.setId, updates);
           }
         } else {
           failed++;
@@ -738,11 +738,11 @@ export const [SetsProvider, useSets] = createContextHook(() => {
         }
       }
 
-      console.log('[SetsContext] Metadata refresh complete:', updated, 'updated,', failed, 'failed');
+      if (__DEV__) console.log('[SetsContext] Metadata refresh complete:', updated, 'updated,', failed, 'failed');
       return { updated, failed, updatedSets, failedSets };
 
     } catch (error: any) {
-      console.error('[SetsContext] Error refreshing metadata:', error);
+      if (__DEV__) console.error('[SetsContext] Error refreshing metadata:', error);
       return { updated: 0, failed: setsWithYouTube.length, updatedSets: [], failedSets: [] };
     }
   }, [sets, submittedSets, updateSet]);

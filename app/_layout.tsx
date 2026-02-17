@@ -26,7 +26,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="user/[username]" options={{ headerShown: false }} />
-      <Stack.Screen name="dev-tools" options={{ presentation: 'modal', headerShown: false }} />
+      {__DEV__ && <Stack.Screen name="dev-tools" options={{ presentation: 'modal', headerShown: false }} />}
     </Stack>
   );
 }

@@ -84,7 +84,7 @@ export async function getArtistImageMusicBrainz(artistName: string): Promise<str
 
     return null;
   } catch (error) {
-    console.error('[ArtistImages] MusicBrainz error:', error);
+    if (__DEV__) console.error('[ArtistImages] MusicBrainz error:', error);
     return null;
   }
 }

@@ -28,7 +28,7 @@ export default function LibraryScreen() {
       const sets = await getSavedSets();
       setSavedSets(sets);
     } catch (error) {
-      console.error('Error loading saved sets:', error);
+      if (__DEV__) console.error('Error loading saved sets:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -91,7 +91,7 @@ export default function LibraryScreen() {
                   onPress={() => handleSetPress(setList)}
                 >
                   <Image 
-                    source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop' }} 
+                    source={{ uri: setList.coverUrl || undefined }} 
                     style={styles.setCover}
                   />
                   <View style={styles.setInfo}>

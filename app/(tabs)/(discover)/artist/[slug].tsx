@@ -68,7 +68,7 @@ export default function ArtistProfileScreen() {
         setSets(artistSets || []);
       }
     } catch (error) {
-      console.error('[ArtistProfile] Error loading artist:', error);
+      if (__DEV__) console.error('[ArtistProfile] Error loading artist:', error);
     } finally {
       setIsLoading(false);
     }

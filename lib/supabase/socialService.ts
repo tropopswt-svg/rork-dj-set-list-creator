@@ -712,7 +712,7 @@ async function createActivity(activity: Partial<Omit<Activity, 'id' | 'created_a
     .insert(activity);
 
   if (error) {
-    console.error('[Social] Error creating activity:', error);
+    if (__DEV__) console.error('[Social] Error creating activity:', error);
   }
 }
 

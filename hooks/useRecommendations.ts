@@ -13,7 +13,7 @@ try {
   Crypto = require('expo-crypto');
 } catch (e) {
   // Contact sync will be disabled if dependencies are not installed
-  console.log('[Recommendations] expo-contacts or expo-crypto not installed. Contact sync disabled.');
+  if (__DEV__) console.log('[Recommendations] expo-contacts or expo-crypto not installed. Contact sync disabled.');
 }
 
 // Re-export types
@@ -175,7 +175,7 @@ export function useContactSync() {
 
       return granted;
     } catch (error) {
-      console.error('[ContactSync] Permission error:', error);
+      if (__DEV__) console.error('[ContactSync] Permission error:', error);
       setState(prev => ({
         ...prev,
         isLoading: false,
@@ -254,7 +254,7 @@ export function useContactSync() {
         contactMatches: matches || [],
       }));
     } catch (error) {
-      console.error('[ContactSync] Sync error:', error);
+      if (__DEV__) console.error('[ContactSync] Sync error:', error);
       setState(prev => ({
         ...prev,
         isSyncing: false,
@@ -271,7 +271,7 @@ export function useContactSync() {
       const hash = await hashPhoneNumber(phoneNumber);
       await recommendationService.updateUserPhoneHash(user.id, hash);
     } catch (error) {
-      console.error('[ContactSync] Error setting phone hash:', error);
+      if (__DEV__) console.error('[ContactSync] Error setting phone hash:', error);
     }
   }, [user, isAvailable]);
 

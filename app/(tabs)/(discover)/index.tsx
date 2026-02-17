@@ -9,7 +9,6 @@ import SetFeedCard from '@/components/SetFeedCard';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
 import TrackdLogo from '@/components/TrackdLogo';
 import ImportSetModal from '@/components/ImportSetModal';
-import { mockSetLists } from '@/mocks/tracks';
 import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
@@ -279,13 +278,13 @@ export default function DiscoverScreen() {
 
   // Handle press in - start long press detection after 2 taps
   const handleHiddenPressIn = useCallback(() => {
-    console.log('[Admin] Press in, tap count:', hiddenTapCount.current);
+    if (__DEV__) console.log('[Admin] Press in, tap count:', hiddenTapCount.current);
 
     // If we've tapped twice, start long press timer
     if (hiddenTapCount.current >= 2) {
-      console.log('[Admin] Starting long press detection...');
+      if (__DEV__) console.log('[Admin] Starting long press detection...');
       longPressTimer.current = setTimeout(() => {
-        console.log('[Admin] Long press triggered! Opening menu...');
+        if (__DEV__) console.log('[Admin] Long press triggered! Opening menu...');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         hiddenTapCount.current = 0;
         setShowAdminMenu(true);
@@ -304,7 +303,7 @@ export default function DiscoverScreen() {
   // Handle tap
   const handleHiddenTap = useCallback(() => {
     hiddenTapCount.current += 1;
-    console.log('[Admin] Tap count:', hiddenTapCount.current);
+    if (__DEV__) console.log('[Admin] Tap count:', hiddenTapCount.current);
 
     // Light haptic on each tap
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -316,7 +315,7 @@ export default function DiscoverScreen() {
 
     // Reset count after 2 seconds of no activity
     hiddenTapTimer.current = setTimeout(() => {
-      console.log('[Admin] Resetting tap count');
+      if (__DEV__) console.log('[Admin] Resetting tap count');
       hiddenTapCount.current = 0;
     }, 2000);
   }, []);
@@ -333,9 +332,9 @@ export default function DiscoverScreen() {
     );
 
     try {
-      console.log('[Admin] Starting metadata refresh...');
+      if (__DEV__) console.log('[Admin] Starting metadata refresh...');
       const result = await refreshSetsMetadata();
-      console.log('[Admin] Refresh complete:', result);
+      if (__DEV__) console.log('[Admin] Refresh complete:', result);
 
       // Store the results for viewing later
       setLastRefreshResults(result);
@@ -348,7 +347,7 @@ export default function DiscoverScreen() {
         );
       }, 500);
     } catch (error: any) {
-      console.error('[Admin] Refresh error:', error);
+      if (__DEV__) console.error('[Admin] Refresh error:', error);
       Alert.alert('Error', `Failed to refresh metadata: ${error.message || 'Unknown error'}`);
     } finally {
       setIsRefreshingMetadata(false);
@@ -506,7 +505,7 @@ export default function DiscoverScreen() {
           location: set.location,
           date: new Date(set.date),
           totalDuration: set.totalDuration || 0,
-          coverUrl: set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+          coverUrl: set.coverUrl || null,
           plays: set.trackCount * 10, // Estimate plays from track count
           tracks: [],
           sourceLinks: set.sourceLinks || [],
@@ -515,10 +514,10 @@ export default function DiscoverScreen() {
         }));
         setDbSets(transformedSets);
         setDbStats({ sets: data.total || transformedSets.length, tracks: 0 });
-        console.log('[Discover] Loaded', transformedSets.length, 'sets from database');
+        if (__DEV__) console.log('[Discover] Loaded', transformedSets.length, 'sets from database');
       }
     } catch (error) {
-      console.error('[Discover] Failed to fetch sets:', error);
+      if (__DEV__) console.error('[Discover] Failed to fetch sets:', error);
       // Fallback to mock data if API fails
       setDbSets([]);
     } finally {
@@ -540,15 +539,9 @@ export default function DiscoverScreen() {
     }
   }, [debouncedSearchQuery]);
 
-  // Combine database sets with any local/mock sets
+  // Update set lists when database sets change
   useEffect(() => {
-    // Prioritize database sets, add mock sets as fallback demos
-    const combined = [...dbSets];
-    // Only add mock sets if we have no database sets
-    if (combined.length === 0) {
-      combined.push(...mockSetLists);
-    }
-    setSetLists(combined);
+    setSetLists([...dbSets]);
   }, [dbSets]);
 
   // Haptic feedback when scrolling through cards - throttled for natural feel
@@ -855,12 +848,14 @@ export default function DiscoverScreen() {
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
-          {/* Hidden admin button - tap 2 times, then hold */}
+          {/* Hidden admin button - dev only */}
           <Pressable
             style={styles.hiddenTapArea}
-            onPress={handleHiddenTap}
-            onPressIn={handleHiddenPressIn}
-            onPressOut={handleHiddenPressOut}
+            {...(__DEV__ ? {
+              onPress: handleHiddenTap,
+              onPressIn: handleHiddenPressIn,
+              onPressOut: handleHiddenPressOut,
+            } : {})}
             hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
           >
             {isRefreshingMetadata && (

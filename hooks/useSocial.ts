@@ -34,7 +34,7 @@ export function useFollowUser(userId: string) {
         setIsFollowing(true);
       }
     } catch (error) {
-      console.error('Follow error:', error);
+      if (__DEV__) console.error('Follow error:', error);
     }
     setIsLoading(false);
   }, [user, userId, isFollowing]);
@@ -66,7 +66,7 @@ export function useFollowArtist(artistId: string) {
         setIsFollowing(true);
       }
     } catch (error) {
-      console.error('Follow error:', error);
+      if (__DEV__) console.error('Follow error:', error);
     }
     setIsLoading(false);
   }, [user, artistId, isFollowing]);
@@ -146,7 +146,7 @@ export function useLikeSet(setId: string) {
         setIsLiked(true);
       }
     } catch (error) {
-      console.error('Like error:', error);
+      if (__DEV__) console.error('Like error:', error);
     }
     setIsLoading(false);
   }, [user, setId, isLiked]);
@@ -287,7 +287,7 @@ export function useSaveSet(setId: string) {
         setIsSaved(true);
       }
     } catch (error) {
-      console.error('Save error:', error);
+      if (__DEV__) console.error('Save error:', error);
     }
     setIsLoading(false);
   }, [user, setId, isSaved]);

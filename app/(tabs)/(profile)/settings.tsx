@@ -47,7 +47,7 @@ export default function SettingsScreen() {
     username: authProfile?.username || '',
     email: user?.email || '',
     bio: authProfile?.bio || '',
-    avatarUrl: authProfile?.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+    avatarUrl: authProfile?.avatar_url || null,
   });
 
   // Update local state when authProfile changes
@@ -58,7 +58,7 @@ export default function SettingsScreen() {
         username: authProfile.username || '',
         email: user?.email || '',
         bio: authProfile.bio || '',
-        avatarUrl: authProfile.avatar_url || 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop',
+        avatarUrl: authProfile.avatar_url || null,
       });
     }
   }, [authProfile, user]);
@@ -198,7 +198,13 @@ export default function SettingsScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
-            <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+            {profile.avatarUrl ? (
+              <Image source={{ uri: profile.avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={[styles.avatar, { backgroundColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center' }]}>
+                <User size={32} color="rgba(255,255,255,0.5)" />
+              </View>
+            )}
             <Pressable style={styles.cameraButton}>
               <Camera size={18} color="#FFFFFF" />
             </Pressable>

@@ -39,7 +39,6 @@ import TrackDetailModal from '@/components/TrackDetailModal';
 import AudioPreviewModal from '@/components/AudioPreviewModal';
 import IdentifyTrackModal from '@/components/IdentifyTrackModal';
 import CommentsSection from '@/components/CommentsSection';
-import { mockSetLists } from '@/mocks/tracks';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
 import { useSets } from '@/contexts/SetsContext';
@@ -65,6 +64,7 @@ export default function SetDetailScreen() {
   // Database set state
   const [dbSet, setDbSet] = useState<SetList | null>(null);
   const [isLoadingSet, setIsLoadingSet] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -114,7 +114,7 @@ export default function SetDetailScreen() {
             venue: data.set.venue,
             date: new Date(data.set.date),
             totalDuration: data.set.totalDuration || 0,
-            coverUrl: data.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+            coverUrl: data.set.coverUrl || null,
             plays: data.set.trackCount * 10,
             sourceLinks: data.set.sourceLinks || [],
             tracks: data.set.tracks?.map((t: any) => ({
@@ -135,10 +135,10 @@ export default function SetDetailScreen() {
             gapCount: data.set.gapCount,
           };
           setDbSet(transformedSet);
-          console.log('[SetDetail] Loaded set from API:', transformedSet.name, 'with', transformedSet.tracks?.length, 'tracks');
+          if (__DEV__) console.log('[SetDetail] Loaded set from API:', transformedSet.name, 'with', transformedSet.tracks?.length, 'tracks');
         }
       } catch (error) {
-        console.error('[SetDetail] Failed to fetch set:', error);
+        setLoadError('Failed to load set. Check your connection and try again.');
       } finally {
         setIsLoadingSet(false);
       }
@@ -156,15 +156,9 @@ export default function SetDetailScreen() {
     // Then try real sets from context
     const realSet = sets.find(s => s.id === id);
     if (realSet) {
-      console.log('[SetDetail] Found real set:', realSet.name, 'with', realSet.tracks?.length, 'tracks');
       return realSet;
     }
-    // Fallback to mock data for demo
-    const mockSet = mockSetLists.find(s => s.id === id);
-    if (mockSet) {
-      console.log('[SetDetail] Using mock set:', mockSet.name);
-    }
-    return mockSet;
+    return undefined;
   }, [id, sets, dbSet]); // Re-run when sets or id changes
   
   // Tracks come directly from setList (no separate state needed for reactivity)
@@ -241,7 +235,7 @@ export default function SetDetailScreen() {
       // Skip tracks with timestamps beyond set duration (invalid data from comments)
       const timestamp = track.timestamp || 0;
       if (timestamp > maxValidTimestamp) {
-        console.log('[TrackFilter] Skipping track with invalid timestamp:', track.title, 'at', timestamp, '(max:', maxValidTimestamp, ')');
+        if (__DEV__) console.log('[TrackFilter] Skipping track with invalid timestamp:', track.title, 'at', timestamp, '(max:', maxValidTimestamp, ')');
         return false;
       }
       return true;
@@ -513,7 +507,7 @@ export default function SetDetailScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
     } catch (error) {
-      console.error('Error saving/removing set:', error);
+      if (__DEV__) console.error('Error saving/removing set:', error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }, [setList, isSaved]);
@@ -525,7 +519,7 @@ export default function SetDetailScreen() {
           const saved = await isSetSaved(id);
           setIsSaved(saved);
         } catch (error) {
-          console.error('Error checking saved status:', error);
+          if (__DEV__) console.error('Error checking saved status:', error);
         } finally {
           setLoadingSaved(false);
         }
@@ -534,12 +528,48 @@ export default function SetDetailScreen() {
     checkSavedStatus();
   }, [id]);
 
-  // Show loading state with ID badge while fetching
+  // Show loading / error / not found state
   if (isLoadingSet || !setList) {
     return (
       <View style={styles.loadingContainer}>
         <IDentifiedLogo size="large" />
-        {!isLoadingSet && !setList && (
+        {!isLoadingSet && loadError && (
+          <View style={{ alignItems: 'center', marginTop: 16, paddingHorizontal: 32 }}>
+            <Text style={styles.loadingText}>{loadError}</Text>
+            <Pressable
+              style={{ marginTop: 12, backgroundColor: Colors.dark.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
+              onPress={() => {
+                setLoadError(null);
+                setIsLoadingSet(true);
+                fetch(`${API_BASE_URL}/api/sets/${id}`)
+                  .then(r => r.json())
+                  .then(data => {
+                    if (data.success && data.set) {
+                      const transformedSet: SetList = {
+                        id: data.set.id, name: data.set.name, artist: data.set.artist,
+                        venue: data.set.venue, date: new Date(data.set.date),
+                        totalDuration: data.set.totalDuration || 0, coverUrl: data.set.coverUrl || null,
+                        plays: data.set.trackCount * 10, sourceLinks: data.set.sourceLinks || [],
+                        tracks: data.set.tracks?.map((t: any) => ({
+                          id: t.id, title: t.title, artist: t.artist, duration: 0, coverUrl: '',
+                          addedAt: new Date(t.addedAt || Date.now()), source: t.source || 'database',
+                          timestamp: t.timestamp || 0, timestampStr: t.timestampStr,
+                          verified: t.verified || !t.isId, confidence: t.isId ? 0 : 1, isId: t.isId,
+                        })) || [],
+                        hasGaps: data.set.hasGaps, gapCount: data.set.gapCount,
+                      };
+                      setDbSet(transformedSet);
+                    }
+                  })
+                  .catch(() => setLoadError('Failed to load set. Check your connection and try again.'))
+                  .finally(() => setIsLoadingSet(false));
+              }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>Retry</Text>
+            </Pressable>
+          </View>
+        )}
+        {!isLoadingSet && !loadError && !setList && (
           <Text style={styles.loadingText}>Set not found</Text>
         )}
       </View>
@@ -602,7 +632,7 @@ export default function SetDetailScreen() {
       duration: trackData.duration || 0,
       bpm: trackData.bpm,
       key: trackData.key,
-      coverUrl: trackData.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: trackData.coverUrl || null,
       addedAt: new Date(),
       source: 'manual',
       timestamp: trackData.timestamp,
@@ -661,7 +691,7 @@ export default function SetDetailScreen() {
 
     // If we found a close enough gap, place the track there
     if (closestGap && closestDistance < 300) {
-      console.log('[Drop] Placing track at timestamp:', closestGap.timestamp);
+      if (__DEV__) console.log('[Drop] Placing track at timestamp:', closestGap.timestamp);
 
       // Create a new track with the timestamp
       const placedTrack: Track = {
@@ -757,7 +787,7 @@ export default function SetDetailScreen() {
         await addPoints('track_confirmed', setList.id);
       }
     } catch (error) {
-      console.error('Failed to identify track:', error);
+      if (__DEV__) console.error('Failed to identify track:', error);
     }
   };
 
@@ -844,7 +874,7 @@ export default function SetDetailScreen() {
         <View style={styles.headerImage}>
           <Image
             key={setList.coverUrl || 'default-cover'}
-            source={{ uri: setList.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=600&fit=crop' }}
+            source={{ uri: setList.coverUrl || undefined }}
             style={styles.coverImage}
             cachePolicy="none"
           />
@@ -1009,7 +1039,7 @@ export default function SetDetailScreen() {
                 const needsAnalysis = ytLink && !hasTimestamps;
 
                 // Debug logging
-                console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasTimestamps:', hasTimestamps, 'needsAnalysis:', needsAnalysis);
+                if (__DEV__) console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasTimestamps:', hasTimestamps, 'needsAnalysis:', needsAnalysis);
 
                 return ytLink ? (
                   <View style={styles.linkCardWrapper}>
@@ -1068,7 +1098,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || null,
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -1191,7 +1221,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || null,
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -1769,7 +1799,7 @@ export default function SetDetailScreen() {
                   }),
                 });
                 const updateResult = await updateResponse.json();
-                console.log('[AddSource] Updated tracks:', updateResult);
+                if (__DEV__) console.log('[AddSource] Updated tracks:', updateResult);
               }
 
               // Save the source URL to the database
@@ -1786,7 +1816,7 @@ export default function SetDetailScreen() {
 
               if (!addSourceResult.success) {
                 // URL might already exist, but scraping worked
-                console.log('Add source warning:', addSourceResult.error);
+                if (__DEV__) console.log('Add source warning:', addSourceResult.error);
               }
 
               // Update local state to reflect the new source and coverUrl immediately
@@ -1808,7 +1838,7 @@ export default function SetDetailScreen() {
                   venue: refreshData.set.venue,
                   date: new Date(refreshData.set.date),
                   totalDuration: refreshData.set.totalDuration || 0,
-                  coverUrl: refreshData.set.coverUrl || 'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400',
+                  coverUrl: refreshData.set.coverUrl || null,
                   plays: refreshData.set.trackCount * 10,
                   sourceLinks: refreshData.set.sourceLinks || [],
                   tracks: refreshData.set.tracks?.map((t: any) => ({

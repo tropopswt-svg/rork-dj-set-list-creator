@@ -182,7 +182,7 @@ export default function SubmitScreen() {
       });
 
       const result = await response.json();
-      console.log('[Submit] Import result:', result);
+      if (__DEV__) console.log('[Submit] Import result:', result);
 
       if (result.success && result.setList) {
         const setList = result.setList;
@@ -275,7 +275,7 @@ export default function SubmitScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     } catch (error: any) {
-      console.error('[Submit] Import error:', error);
+      if (__DEV__) console.error('[Submit] Import error:', error);
       setImportProgress({
         step: 'error',
         message: error.message || 'Failed to connect to server',
@@ -340,7 +340,7 @@ export default function SubmitScreen() {
           unreleased: unreleasedCount,
         });
         
-        console.log(`[Submit] Background match: ${linkedCount} linked, ${unreleasedCount} unreleased`);
+        if (__DEV__) console.log(`[Submit] Background match: ${linkedCount} linked, ${unreleasedCount} unreleased`);
         
         // If set was already submitted, update it in context
         if (submittedSetIdRef.current) {
@@ -350,7 +350,7 @@ export default function SubmitScreen() {
             artist: t.artist,
             timestamp: parseTimestamp(t.timestamp),
             duration: 0,
-            coverUrl: scrapedThumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+            coverUrl: scrapedThumbnail || null,
             addedAt: new Date(),
             source: 'manual' as const,
             verified: false,
@@ -366,20 +366,20 @@ export default function SubmitScreen() {
               unreleased: unreleasedCount,
             },
           });
-          console.log(`[Submit] Updated set ${submittedSetIdRef.current} with matching results`);
+          if (__DEV__) console.log(`[Submit] Updated set ${submittedSetIdRef.current} with matching results`);
         }
         
         // Also check artist
         if (form.values.artistName) {
           const artistCheck = await artistExists(form.values.artistName);
           if (artistCheck.exists) {
-            console.log(`[Submit] Artist ${form.values.artistName} found in database`);
+            if (__DEV__) console.log(`[Submit] Artist ${form.values.artistName} found in database`);
           }
         }
         
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } catch (error) {
-        console.warn('[Submit] Background matching error:', error);
+        if (__DEV__) console.warn('[Submit] Background matching error:', error);
         // If set was submitted, mark matching as done even on error
         if (submittedSetIdRef.current) {
           updateSet(submittedSetIdRef.current, {
@@ -506,7 +506,7 @@ export default function SubmitScreen() {
       artist: t.artist,
       timestamp: parseTimestamp(t.timestamp),
       duration: 0,
-      coverUrl: scrapedThumbnail || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: scrapedThumbnail || null,
       addedAt: new Date(),
       source: 'manual' as const,
       verified: false,
@@ -665,7 +665,7 @@ export default function SubmitScreen() {
             label="DJ / Artist"
             onSelectArtist={(artist) => {
               // Optionally store the artist ID for linking
-              console.log('[Submit] Selected artist:', artist.name, artist.id);
+              if (__DEV__) console.log('[Submit] Selected artist:', artist.name, artist.id);
             }}
           />
           <View style={styles.inputGroup}>
@@ -707,7 +707,7 @@ export default function SubmitScreen() {
                 titlePlaceholder="Track name"
                 artistPlaceholder="Artist name"
                 onSelectTrack={(track) => {
-                  console.log('[Submit] Selected track:', track.title, track.id);
+                  if (__DEV__) console.log('[Submit] Selected track:', track.title, track.id);
                 }}
               />
               <View style={styles.formRow}>

@@ -105,7 +105,7 @@ export async function getNotifications(
     .range(offset, offset + limit - 1);
 
   if (error) {
-    console.error('[Notifications] Error getting notifications:', error);
+    if (__DEV__) console.error('[Notifications] Error getting notifications:', error);
     return { data: null, error };
   }
 
@@ -123,7 +123,7 @@ export async function getUnreadCount(userId: string): Promise<{ count: number; e
     .eq('is_read', false);
 
   if (error) {
-    console.error('[Notifications] Error getting unread count:', error);
+    if (__DEV__) console.error('[Notifications] Error getting unread count:', error);
     return { count: 0, error };
   }
 
@@ -148,7 +148,7 @@ export async function markAsRead(
     .eq('user_id', userId);
 
   if (error) {
-    console.error('[Notifications] Error marking as read:', error);
+    if (__DEV__) console.error('[Notifications] Error marking as read:', error);
     return { success: false, error };
   }
 
@@ -173,7 +173,7 @@ export async function markMultipleAsRead(
     .eq('user_id', userId);
 
   if (error) {
-    console.error('[Notifications] Error marking multiple as read:', error);
+    if (__DEV__) console.error('[Notifications] Error marking multiple as read:', error);
     return { success: false, error };
   }
 
@@ -191,7 +191,7 @@ export async function markAllAsRead(userId: string): Promise<{ success: boolean;
     .eq('is_read', false);
 
   if (error) {
-    console.error('[Notifications] Error marking all as read:', error);
+    if (__DEV__) console.error('[Notifications] Error marking all as read:', error);
     return { success: false, error };
   }
 
@@ -237,7 +237,7 @@ export async function createNotification(
     .single();
 
   if (error) {
-    console.error('[Notifications] Error creating notification:', error);
+    if (__DEV__) console.error('[Notifications] Error creating notification:', error);
     return { data: null, error };
   }
 
@@ -336,7 +336,7 @@ export async function deleteOldNotifications(userId: string): Promise<{ success:
     .lt('created_at', thirtyDaysAgo);
 
   if (error) {
-    console.error('[Notifications] Error deleting old notifications:', error);
+    if (__DEV__) console.error('[Notifications] Error deleting old notifications:', error);
     return { success: false, error };
   }
 

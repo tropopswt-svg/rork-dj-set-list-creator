@@ -327,7 +327,7 @@ export default function ArtistsScreen() {
                 onPress={() => router.push(`/(tabs)/(discover)/artist/${item.artist_slug}`)}
               >
                 <Image
-                  source={{ uri: item.artist_image_url || 'https://via.placeholder.com/80' }}
+                  source={{ uri: item.artist_image_url || undefined }}
                   style={styles.recommendedImage}
                   contentFit="cover"
                 />

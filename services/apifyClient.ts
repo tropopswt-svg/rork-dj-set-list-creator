@@ -102,6 +102,18 @@ export interface InstagramScraperOptions {
   oldestPostDate?: string;
 }
 
+export interface TikTokHashtagSearchOptions {
+  maxVideos?: number;
+  includeComments?: boolean;
+  maxComments?: number;
+}
+
+export interface InstagramHashtagSearchOptions {
+  maxPosts?: number;
+  includeComments?: boolean;
+  maxComments?: number;
+}
+
 /**
  * Check if Apify is configured
  */
@@ -378,14 +390,135 @@ export async function testConnection(): Promise<{
   }
 }
 
+// ============================================
+// Hashtag Search — TikTok
+// ============================================
+
+/**
+ * Run TikTok hashtag search
+ *
+ * Uses the same clockworks/free-tiktok-scraper actor with hashtag URLs
+ */
+export async function runTikTokHashtagSearch(
+  hashtag: string,
+  options: TikTokHashtagSearchOptions = {}
+): Promise<ApifyActorRun> {
+  // Clean hashtag (remove # if present)
+  const cleanHashtag = hashtag.replace(/^#/, '');
+
+  const includeComments = options.includeComments ?? false;
+  const input = {
+    hashtags: [`https://www.tiktok.com/tag/${cleanHashtag}`],
+    resultsPerPage: options.maxVideos || 50,
+    shouldDownloadVideos: false,
+    shouldDownloadCovers: false,
+    shouldDownloadSubtitles: false,
+    shouldDownloadSlideshowImages: false,
+    fetchComments: includeComments,
+    commentsPerPost: includeComments ? (options.maxComments || 50) : 0,
+    maxComments: includeComments ? (options.maxComments || 50) : 0,
+    includeComments: includeComments,
+  };
+
+  console.log(`[Apify] Starting TikTok hashtag search for #${cleanHashtag}`);
+
+  const actorId = 'clockworks~free-tiktok-scraper';
+
+  const result = await apifyRequest<{ data: ApifyActorRun }>(
+    `/acts/${actorId}/runs`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }
+  );
+
+  console.log(`[Apify] TikTok hashtag search started: ${result.data.id}`);
+  return result.data;
+}
+
+/**
+ * Convenience: Search TikTok hashtag and wait for results
+ */
+export async function searchTikTokHashtag(
+  hashtag: string,
+  options: TikTokHashtagSearchOptions = {}
+): Promise<TikTokVideo[]> {
+  const run = await runTikTokHashtagSearch(hashtag, options);
+  await waitForActorCompletion(run.id, {
+    onProgress: (status) => console.log(`[Apify] TikTok hashtag search status: ${status}`),
+  });
+  return getActorRunResults<TikTokVideo>(run.id);
+}
+
+// ============================================
+// Hashtag Search — Instagram
+// ============================================
+
+/**
+ * Run Instagram hashtag search
+ *
+ * Uses apify/instagram-scraper with explore/tags URL
+ */
+export async function runInstagramHashtagSearch(
+  hashtag: string,
+  options: InstagramHashtagSearchOptions = {}
+): Promise<ApifyActorRun> {
+  // Clean hashtag (remove # if present)
+  const cleanHashtag = hashtag.replace(/^#/, '');
+
+  const input = {
+    directUrls: [`https://www.instagram.com/explore/tags/${cleanHashtag}/`],
+    resultsType: 'posts',
+    resultsLimit: options.maxPosts || 50,
+    addParentData: true,
+    ...(options.includeComments && {
+      scrapeComments: true,
+      maxComments: options.maxComments || 50,
+    }),
+  };
+
+  console.log(`[Apify] Starting Instagram hashtag search for #${cleanHashtag}`);
+
+  const actorId = 'apify~instagram-scraper';
+
+  const result = await apifyRequest<{ data: ApifyActorRun }>(
+    `/acts/${actorId}/runs`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }
+  );
+
+  console.log(`[Apify] Instagram hashtag search started: ${result.data.id}`);
+  return result.data;
+}
+
+/**
+ * Convenience: Search Instagram hashtag and wait for results
+ */
+export async function searchInstagramHashtag(
+  hashtag: string,
+  options: InstagramHashtagSearchOptions = {}
+): Promise<InstagramPost[]> {
+  const run = await runInstagramHashtagSearch(hashtag, options);
+  await waitForActorCompletion(run.id, {
+    onProgress: (status) => console.log(`[Apify] Instagram hashtag search status: ${status}`),
+  });
+  return getActorRunResults<InstagramPost>(run.id);
+}
+
 export default {
   isApifyConfigured,
   testConnection,
   runTikTokProfileScraper,
   runInstagramProfileScraper,
+  runTikTokHashtagSearch,
+  runInstagramHashtagSearch,
   getActorRunStatus,
   waitForActorCompletion,
   getActorRunResults,
   scrapeTikTokProfile,
   scrapeInstagramProfile,
+  searchTikTokHashtag,
+  searchInstagramHashtag,
 };

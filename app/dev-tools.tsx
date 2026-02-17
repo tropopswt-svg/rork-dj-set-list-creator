@@ -138,11 +138,11 @@ export default function DevToolsScreen() {
     onSuccess: (data) => {
       if (data.success) {
         setSoundcloudResults(data.results);
-        console.log('[DevTools] SoundCloud search returned', data.results.length, 'results');
+        if (__DEV__) console.log('[DevTools] SoundCloud search returned', data.results.length, 'results');
       }
     },
     onError: (error) => {
-      console.error('[DevTools] SoundCloud search error:', error);
+      if (__DEV__) console.error('[DevTools] SoundCloud search error:', error);
       Alert.alert('Search Error', 'Failed to search SoundCloud. Please try again.');
     },
   });
@@ -263,10 +263,10 @@ export default function DevToolsScreen() {
       const result = addSet(newSet);
       if (result.success) {
         success++;
-        console.log('[DevTools] Set imported:', ps.name);
+        if (__DEV__) console.log('[DevTools] Set imported:', ps.name);
       } else {
         failed++;
-        console.log('[DevTools] Set duplicate:', ps.name);
+        if (__DEV__) console.log('[DevTools] Set duplicate:', ps.name);
       }
     });
 
@@ -311,7 +311,7 @@ export default function DevToolsScreen() {
     }));
 
     addTracksToSet(selectedSetId, newTracks);
-    console.log('[DevTools] Tracks imported:', newTracks.length, 'to set:', set.name);
+    if (__DEV__) console.log('[DevTools] Tracks imported:', newTracks.length, 'to set:', set.name);
     
     Alert.alert(
       'Import Complete',
@@ -333,7 +333,7 @@ export default function DevToolsScreen() {
 
   const handleSoundCloudSearch = useCallback(() => {
     if (!soundcloudQuery.trim()) return;
-    console.log('[DevTools] Searching SoundCloud for:', soundcloudQuery);
+    if (__DEV__) console.log('[DevTools] Searching SoundCloud for:', soundcloudQuery);
     searchSoundCloud.mutate({ query: soundcloudQuery });
   }, [soundcloudQuery, searchSoundCloud]);
 
