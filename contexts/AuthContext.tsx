@@ -46,6 +46,7 @@ interface AuthContextType {
   signInWithApple: () => Promise<{ error: AuthError | null }>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error: AuthError | null }>;
+  deleteAccount: () => Promise<{ error: Error | null }>;
 
   // Profile actions
   updateProfile: (updates: Partial<Profile>) => Promise<{ error: Error | null }>;
@@ -262,6 +263,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Delete account
+  const deleteAccount = async () => {
+    if (!user) {
+      return { error: new Error('Not authenticated') };
+    }
+
+    try {
+      // Delete user's profile first (cascade should handle related data)
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.error('[Auth] Error deleting profile:', profileError);
+        return { error: new Error(profileError.message) };
+      }
+
+      // Sign out the user (Supabase admin API would be needed to fully delete auth user)
+      await signOut();
+
+      return { error: null };
+    } catch (error) {
+      console.error('[Auth] Delete account error:', error);
+      return { error: error as Error };
+    }
+  };
+
   // Update profile
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!user) {
@@ -303,6 +332,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signInWithApple,
     signOut,
     resetPassword,
+    deleteAccount,
     updateProfile,
     refreshProfile,
   };

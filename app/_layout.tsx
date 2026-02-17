@@ -9,6 +9,7 @@ import { trpc, trpcClient } from "@/lib/trpc";
 import { SetsProvider } from "@/contexts/SetsContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,6 +25,7 @@ function RootLayoutNav() {
     >
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      <Stack.Screen name="user/[username]" options={{ headerShown: false }} />
       <Stack.Screen name="dev-tools" options={{ presentation: 'modal', headerShown: false }} />
     </Stack>
   );
@@ -35,19 +37,21 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <AuthProvider>
-            <UserProvider>
-              <SetsProvider>
-                <StatusBar style="light" />
-                <RootLayoutNav />
-              </SetsProvider>
-            </UserProvider>
-          </AuthProvider>
-        </GestureHandlerRootView>
-      </QueryClientProvider>
-    </trpc.Provider>
+    <ErrorBoundary>
+      <trpc.Provider client={trpcClient} queryClient={queryClient}>
+        <QueryClientProvider client={queryClient}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <AuthProvider>
+              <UserProvider>
+                <SetsProvider>
+                  <StatusBar style="light" />
+                  <RootLayoutNav />
+                </SetsProvider>
+              </UserProvider>
+            </AuthProvider>
+          </GestureHandlerRootView>
+        </QueryClientProvider>
+      </trpc.Provider>
+    </ErrorBoundary>
   );
 }

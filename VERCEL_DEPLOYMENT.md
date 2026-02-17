@@ -29,9 +29,18 @@ ACRCLOUD_ACCESS_KEY=your_acrcloud_access_key
 ACRCLOUD_ACCESS_SECRET=your_acrcloud_access_secret
 ACRCLOUD_HOST=identify-us-west-2.acrcloud.com
 
+# ACRCloud Custom Bucket (for unreleased track fingerprinting)
+ACRCLOUD_BUCKET_NAME=your-bucket-id
+ACRCLOUD_BUCKET_HOST=api-v2.acrcloud.com
+ACRCLOUD_BEARER_TOKEN=your-personal-access-token
+
 # Optional but recommended
 SOUNDCLOUD_CLIENT_ID=your_soundcloud_client_id
 YOUTUBE_API_KEY=your_youtube_api_key
+
+# Optional - Spotify release checking for unreleased tracks
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 ```
 
 #### For Frontend (if deploying web version):
