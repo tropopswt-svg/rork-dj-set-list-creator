@@ -36,43 +36,33 @@ export default function AnimatedSetCard({
   // Use prop directly - no local state to avoid re-renders
   const isSelected = isSelectedProp;
 
-  // 3-point input range for animations
-  const inputRange = [
-    scrollYWhenCentered - CARD_HEIGHT,  // One card away
-    scrollYWhenCentered,                 // Centered
-    scrollYWhenCentered + CARD_HEIGHT,  // One card away
+  // 5-point input range for scroll wheel effect
+  const wideInputRange = [
+    scrollYWhenCentered - CARD_HEIGHT * 2,  // Two cards away
+    scrollYWhenCentered - CARD_HEIGHT,       // One card away
+    scrollYWhenCentered,                      // Centered
+    scrollYWhenCentered + CARD_HEIGHT,       // One card away
+    scrollYWhenCentered + CARD_HEIGHT * 2,   // Two cards away
   ];
 
-  // Scale - subtle difference, surrounding cards still prominent
+  // Scale - centered card pops, neighbors slightly smaller
   const scale = scrollY.interpolate({
-    inputRange,
-    outputRange: [0.95, 1.05, 0.95],
+    inputRange: wideInputRange,
+    outputRange: [0.92, 0.96, 1.05, 0.96, 0.92],
     extrapolate: 'clamp',
   });
 
-  // Opacity - surrounding cards more visible
+  // Opacity - fade out further from center
   const opacity = scrollY.interpolate({
-    inputRange,
-    outputRange: [0.7, 1, 0.7],
+    inputRange: wideInputRange,
+    outputRange: [0.5, 0.75, 1, 0.75, 0.5],
     extrapolate: 'clamp',
   });
 
-  // Lift effect - subtle float
+  // Scroll wheel curve - neighbors tilt away, center lifts up
   const translateY = scrollY.interpolate({
-    inputRange,
-    outputRange: [0, -6, 0],
-    extrapolate: 'clamp',
-  });
-
-  // Fill progress with wider "locked in" range - stays at 1 within 45px of center
-  const fillProgress = scrollY.interpolate({
-    inputRange: [
-      scrollYWhenCentered - CARD_HEIGHT,
-      scrollYWhenCentered - 45,
-      scrollYWhenCentered + 45,
-      scrollYWhenCentered + CARD_HEIGHT,
-    ],
-    outputRange: [0, 1, 1, 0],
+    inputRange: wideInputRange,
+    outputRange: [14, 6, -8, 6, 14],
     extrapolate: 'clamp',
   });
 
@@ -90,7 +80,6 @@ export default function AnimatedSetCard({
         onArtistPress={onArtistPress}
         onEventPress={onEventPress}
         isSelected={isSelected}
-        fillProgress={fillProgress}
       />
     </Animated.View>
   );

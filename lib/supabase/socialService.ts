@@ -706,7 +706,7 @@ export interface ActivityWithDetails extends Activity {
 }
 
 // Create an activity (internal use)
-async function createActivity(activity: Omit<Activity, 'id' | 'created_at'>) {
+async function createActivity(activity: Partial<Omit<Activity, 'id' | 'created_at'>> & { user_id: string; activity_type: string }) {
   const { error } = await supabase
     .from('activity')
     .insert(activity);

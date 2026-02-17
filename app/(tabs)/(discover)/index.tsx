@@ -181,14 +181,14 @@ export default function DiscoverScreen() {
   // Auto-scroll feature - starts after 20 seconds of inactivity
   const AUTO_SCROLL_DELAY = 20000; // 20 seconds before auto-scroll starts
   const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds per set
-  const inactivityTimer = useRef<NodeJS.Timeout | null>(null);
-  const autoScrollTimer = useRef<NodeJS.Timeout | null>(null);
+  const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isAutoScrolling, setIsAutoScrolling] = useState(false);
 
   // Hidden admin menu - tap 2 times, then hold to open
   const hiddenTapCount = useRef(0);
-  const hiddenTapTimer = useRef<NodeJS.Timeout | null>(null);
-  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+  const hiddenTapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showAdminMenu, setShowAdminMenu] = useState(false);
   const [isRefreshingMetadata, setIsRefreshingMetadata] = useState(false);
   const [adminMode, setAdminMode] = useState<'none' | 'remove' | 'edit' | 'badge'>('none');
@@ -535,15 +535,19 @@ export default function DiscoverScreen() {
     setSetLists(combined);
   }, [dbSets]);
 
-  // Haptic feedback when scrolling through cards - no state updates for performance
+  // Haptic feedback when scrolling through cards - throttled for natural feel
   useEffect(() => {
     const listenerId = scrollY.addListener(({ value }) => {
       const centeredIndex = Math.round((value + CENTER_OFFSET) / CARD_HEIGHT);
 
       if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
         lastCenteredIndex.current = centeredIndex;
-        // Only haptic - no state update during scroll for smooth performance
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        // Throttle haptics to max once per 120ms so fast scrolls don't feel sticky
+        const now = Date.now();
+        if (now - lastHapticTime.current > 120) {
+          lastHapticTime.current = now;
+          Haptics.selectionAsync();
+        }
       }
     });
 
@@ -602,7 +606,7 @@ export default function DiscoverScreen() {
     );
     // Check if it's been AI processed or has tracks with timestamps
     const hasBeenAnalyzed = set.aiProcessed || (set.tracksIdentified && set.tracksIdentified > 0);
-    return hasAnalyzableSource && hasBeenAnalyzed;
+    return !!(hasAnalyzableSource && hasBeenAnalyzed);
   };
 
   // Check if a set needs a source (no YouTube or SoundCloud)
@@ -677,16 +681,13 @@ export default function DiscoverScreen() {
 
   // Calculate snap positions - each card should snap when it's in the "centered" (raised) position
   const snapOffsets = useMemo(() => {
-    const offsets: number[] = [];
+    const offsets: number[] = [0];
     filteredSets.forEach((_, index) => {
       const offset = index * CARD_HEIGHT - CENTER_OFFSET;
-      if (offset >= 0) {
+      if (offset > 0) {
         offsets.push(offset);
       }
     });
-    if (offsets.length === 0 || offsets[0] !== 0) {
-      offsets.unshift(0);
-    }
     return offsets;
   }, [filteredSets.length]);
 
@@ -778,9 +779,10 @@ export default function DiscoverScreen() {
   const toggleFilter = (type: keyof Filters, value: string) => {
     setSelectedFilters(prev => {
       const current = prev[type];
-      const updated = current.includes(value)
-        ? current.filter(v => v !== value)
-        : [...current, value];
+      const arr = Array.isArray(current) ? current : [current].filter(Boolean);
+      const updated = arr.includes(value)
+        ? arr.filter((v: string) => v !== value)
+        : [...arr, value];
       return { ...prev, [type]: updated };
     });
   };
@@ -850,34 +852,7 @@ export default function DiscoverScreen() {
             )}
           </Pressable>
           <IddLogo />
-          <View style={styles.headerSpacer}>
-            <Pressable
-              style={styles.vinylButton}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                setShowImportModal(true);
-              }}
-            >
-              {/* Multiple vinyl grooves (static) */}
-              <View style={styles.vinylGroove1} />
-              <View style={styles.vinylGroove2} />
-              <View style={styles.vinylGroove3} />
-              {/* Spinning accent circle that appears every 30s */}
-              <Animated.View
-                style={[
-                  styles.vinylSpinCircle,
-                  {
-                    opacity: vinylSpinCircleOpacity,
-                    transform: [{ rotate: vinylSpinCircleSpin }],
-                  },
-                ]}
-              />
-              {/* Center icon - pulses */}
-              <Animated.View style={[styles.vinylCenter, { transform: [{ scale: vinylPulseAnim }] }]}>
-                <Link2 size={16} color={Colors.dark.background} />
-              </Animated.View>
-            </Pressable>
-          </View>
+          <View style={styles.headerSpacer} />
         </View>
 
         <View style={styles.searchContainer}>
@@ -948,75 +923,6 @@ export default function DiscoverScreen() {
         {/* Filter Dropdown */}
         {showFilterDropdown && (
           <Animated.View style={[styles.filterDropdown]}>
-            {/* TRACK'D status toggle */}
-            <View style={styles.identifiedFilterRow}>
-              <Sparkles size={14} color={Colors.dark.primary} />
-              <Text style={styles.identifiedFilterLabel}>Status:</Text>
-              <View style={styles.identifiedToggleGroup}>
-                <Pressable
-                  style={[
-                    styles.identifiedToggle,
-                    selectedFilters.identified === 'all' && styles.identifiedToggleActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedFilters(prev => ({ ...prev, identified: 'all' }));
-                  }}
-                >
-                  <Text style={[
-                    styles.identifiedToggleText,
-                    selectedFilters.identified === 'all' && styles.identifiedToggleTextActive,
-                  ]}>All</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.identifiedToggle,
-                    selectedFilters.identified === 'identified' && styles.identifiedToggleActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedFilters(prev => ({ ...prev, identified: 'identified' }));
-                  }}
-                >
-                  <Text style={[
-                    styles.identifiedToggleText,
-                    selectedFilters.identified === 'identified' && styles.identifiedToggleTextActive,
-                  ]}>TRACK'D</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.identifiedToggle,
-                    selectedFilters.identified === 'unidentified' && styles.identifiedToggleActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedFilters(prev => ({ ...prev, identified: 'unidentified' }));
-                  }}
-                >
-                  <Text style={[
-                    styles.identifiedToggleText,
-                    selectedFilters.identified === 'unidentified' && styles.identifiedToggleTextActive,
-                  ]}>Unanalyzed</Text>
-                </Pressable>
-                <Pressable
-                  style={[
-                    styles.identifiedToggle,
-                    styles.needsSourceToggle,
-                    selectedFilters.identified === 'needs-source' && styles.needsSourceToggleActive,
-                  ]}
-                  onPress={() => {
-                    Haptics.selectionAsync();
-                    setSelectedFilters(prev => ({ ...prev, identified: 'needs-source' }));
-                  }}
-                >
-                  <Text style={[
-                    styles.identifiedToggleText,
-                    selectedFilters.identified === 'needs-source' && styles.needsSourceToggleTextActive,
-                  ]}>Needs Source</Text>
-                </Pressable>
-              </View>
-            </View>
-
             {/* Filter section buttons */}
             <View style={styles.filterSectionButtons}>
               <Pressable
@@ -1125,20 +1031,13 @@ export default function DiscoverScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={16}
-          decelerationRate={0.985}
+          decelerationRate="fast"
+          snapToOffsets={snapOffsets}
+          snapToAlignment="start"
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
-          onMomentumScrollEnd={(e) => {
-            // Snap to nearest card when scroll ends
-            const y = e.nativeEvent.contentOffset.y;
-            const nearestIndex = Math.round(y / CARD_HEIGHT);
-            const snapY = nearestIndex * CARD_HEIGHT;
-            if (Math.abs(y - snapY) > 1) {
-              scrollViewRef.current?.scrollTo({ y: snapY, animated: true });
-            }
-          }}
           onScrollBeginDrag={resetInactivityTimer}
           onTouchStart={resetInactivityTimer}
           refreshControl={
@@ -1428,7 +1327,7 @@ export default function DiscoverScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#0A0A0A',
   },
   safeArea: {
     flex: 1,
@@ -1511,18 +1410,20 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#141414',
     marginHorizontal: 20,
     marginBottom: 16,
     paddingHorizontal: 14,
     borderRadius: 12,
     height: 46,
+    borderWidth: 1,
+    borderColor: '#1A1A1A',
   },
   searchInput: {
     flex: 1,
     marginLeft: 10,
     fontSize: 15,
-    color: Colors.dark.text,
+    color: '#F5E6D3',
   },
   filterRow: {
     flexDirection: 'row',

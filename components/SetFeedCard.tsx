@@ -126,7 +126,6 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'The Warehouse Project': 'Manchester, UK',
   'Motion': 'Bristol, UK',
   'Creamfields': 'UK',
-  'BBC Radio 1': 'UK',
   // New York
   'Brooklyn Mirage': 'New York, USA',
   'Avant Gardner': 'New York, USA',
@@ -201,9 +200,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Zamna': 'Tulum, Mexico',
   'Exit Festival': 'Serbia',
   // Radio Shows
-  'BBC Radio 1': 'London, UK',
   'BBC Radio 1 Dance': 'London, UK',
-  'Essential Mix': 'London, UK',
   'Radio 1 Essential Mix': 'London, UK',
   'Pete Tong': 'London, UK',
   'Danny Howard': 'London, UK',
@@ -270,7 +267,6 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'Paradise': 'Ibiza, Spain',
   'Solid Grooves': 'Ibiza, Spain',
   'FUSE': 'London, UK',
-  'Printworks': 'London, UK',
 };
 
 export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, fillProgress, fillDirection }: SetFeedCardProps) {
@@ -864,7 +860,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const { cleanName, eventDate, venue: parsedVenue, location: parsedLocation } = parseSetName(setList.name, artists);
 
   // Stage to parent festival mapping
-  const STAGE_TO_FESTIVAL: Record<string, string> = {
+  const STAGE_TO_FESTIVAL: Record<string, string | null> = {
     'yuma': 'Coachella',
     'yuma stage': 'Coachella',
     'yuma tent': 'Coachella',
@@ -1148,12 +1144,19 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+      style={({ pressed }) => [styles.container, isIdentified && styles.containerAnalyzed, pressed && styles.pressed]}
       onPress={handlePress}
       onLongPress={onLongPress}
       delayLongPress={400}
       accessibilityLabel={searchableText}
     >
+      {/* TRACKD badge - top left corner, floating like venue badge */}
+      {isIdentified && (
+        <Pressable onPress={handleTrackdBadgePress} hitSlop={4} style={styles.trackdBadgeFloating}>
+          <Text style={styles.trackdBadgeFloatingText}>TRACKD</Text>
+        </Pressable>
+      )}
+
       {/* Venue badge - top right corner */}
       {displayVenue && (
         <Animated.View
@@ -1429,17 +1432,8 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                       onPress={onEventPress}
                     />
                   )}
-                  {/* Status badge */}
-                  {isIdentified ? (
-                    <Pressable onPress={handleTrackdBadgePress} hitSlop={4}>
-                      <View style={[styles.trackdBadge, {
-                        width: dynamicBadgeSize.trackdWidth,
-                        height: dynamicBadgeSize.trackdHeight,
-                      }]}>
-                        <Text style={[styles.trackdBadgeText, { fontSize: dynamicBadgeSize.trackdFont }]}>T'D</Text>
-                      </View>
-                    </Pressable>
-                  ) : (
+                  {/* Unanalyzed badge - only show when NOT identified */}
+                  {!isIdentified && (
                     <Pressable onPress={handleUnanalyzedBadgePress} hitSlop={4}>
                       <View style={[styles.unanalyzedBadge, {
                         width: dynamicBadgeSize.unanalyzedSize,
@@ -1495,17 +1489,41 @@ const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
     marginBottom: 12,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#0A0A0A',
     borderRadius: 14,
     overflow: 'visible',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: '#1A1A1A',
     position: 'relative',
+  },
+  containerAnalyzed: {
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+  },
+  trackdBadgeFloating: {
+    position: 'absolute',
+    top: -6,
+    left: 10,
+    zIndex: 10,
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 4,
+  },
+  trackdBadgeFloatingText: {
+    fontSize: 7,
+    color: '#fff',
+    fontWeight: '900' as const,
+    letterSpacing: 0.5,
   },
   venueBadgeTopRight: {
     position: 'absolute',
@@ -1515,12 +1533,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#C41E3A',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.dark.primary,
+    borderColor: '#A01830',
     maxWidth: 120,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
@@ -1662,7 +1680,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   artistChip: {
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: '#C41E3A',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
@@ -1720,7 +1738,7 @@ const styles = StyleSheet.create({
   artistText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.dark.primary,
+    color: '#FFFFFF',
     letterSpacing: 0.3,
   },
   artistTextSelected: {
@@ -1768,7 +1786,7 @@ const styles = StyleSheet.create({
   nameAccent: {
     width: 3,
     minHeight: 16,
-    backgroundColor: Colors.dark.border,
+    backgroundColor: '#2A2A2A',
     borderRadius: 2,
     marginRight: 8,
     alignSelf: 'stretch',
@@ -1784,7 +1802,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     lineHeight: 15,
   },
   nameSelected: {
@@ -1823,7 +1841,7 @@ const styles = StyleSheet.create({
   },
   venueBadgeText: {
     fontSize: 10,
-    color: Colors.dark.primary,
+    color: '#FFFFFF',
     fontWeight: '600' as const,
   },
   footer: {
@@ -1879,29 +1897,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  // Tracks count badge - cream color
+  // Tracks count badge
   tracksBadge: {
-    backgroundColor: '#FFF8F0',
+    backgroundColor: 'rgba(245, 230, 211, 0.12)',
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
   tracksBadgeText: {
     fontSize: 8,
-    color: '#8B7355',
+    color: '#D4C4B0',
     fontWeight: '700' as const,
   },
-  // TRACK'D badge - square logo style
+  // TRACKD badge - inline small pill
   trackdBadge: {
-    width: 16,
-    height: 14,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: Colors.dark.primary,
     borderRadius: 3,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   trackdBadgeText: {
-    fontSize: 6,
+    fontSize: 7,
     color: '#fff',
     fontWeight: '900' as const,
     letterSpacing: -0.5,

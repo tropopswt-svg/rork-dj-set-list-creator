@@ -49,9 +49,9 @@ const EVENT_BADGES: Record<string, {
   'boiler-room': {
     label: 'Boiler Room',
     shortLabel: 'BR',
-    backgroundColor: '#000000',
-    textColor: '#00FF00', // Classic green terminal style
-    borderColor: '#00FF00',
+    backgroundColor: '#0a0a0a',
+    textColor: '#33FF33', // CRT phosphor green
+    borderColor: '#1a3a1a', // Dim green border like a monitor bezel
   },
   'cercle': {
     label: 'Cercle',
@@ -83,33 +83,32 @@ const EVENT_BADGES: Record<string, {
   'time-warp': {
     label: 'Time Warp',
     shortLabel: 'TW',
-    backgroundColor: '#1A0033',
-    textColor: '#FF00FF',
-    borderColor: '#FF00FF',
+    backgroundColor: '#0D001A', // Deep void black-purple
+    textColor: '#FF44FF', // Hot neon magenta
+    borderColor: '#CC00CC', // Neon border glow
   },
   'tomorrowland': {
     label: 'Tomorrowland',
-    shortLabel: '🏰', // Castle representing the iconic mainstage
+    shortLabel: 'TML',
     backgroundColor: '#1A0A2E', // Deep purple/dark fantasy
-    textColor: '#FFD700',
-    borderColor: '#FFD700',
-    isEmoji: true,
+    textColor: '#FFD700', // Royal gold
+    borderColor: '#8B6914', // Aged gold border
+    isWide: true,
   },
   'burning-man': {
     label: 'Burning Man',
-    shortLabel: '🏜️', // Desert
-    backgroundColor: '#D2691E', // Desert brown/orange
-    textColor: '#FFD700',
-    borderColor: '#FF6B00',
-    isEmoji: true,
+    shortLabel: ')(',
+    backgroundColor: '#C4956A', // Playa dust tan
+    textColor: '#1A0A00', // Charred black
+    borderColor: '#A07850', // Dusty border
   },
   'lollapalooza': {
     label: 'Lollapalooza',
-    shortLabel: '🏙️', // Chicago skyline
+    shortLabel: 'LOLLA',
     backgroundColor: '#1C1C1C',
     textColor: '#00D4FF',
     borderColor: '#00D4FF',
-    isEmoji: true,
+    isWide: true,
   },
   'ultra': {
     label: 'Ultra',
@@ -205,16 +204,16 @@ const EVENT_BADGES: Record<string, {
   'berghain': {
     label: 'Berghain',
     shortLabel: 'B',
-    backgroundColor: '#0A0A0A', // Very dark, minimalist
-    textColor: '#FFFFFF',
-    borderColor: '#333333',
+    backgroundColor: '#2C2C2C', // Raw concrete gray
+    textColor: '#E0E0E0', // Washed out white like faded paint on concrete
+    borderColor: '#2C2C2C', // No visible border - brutalist
   },
   'tresor': {
     label: 'Tresor',
     shortLabel: 'T',
-    backgroundColor: '#000000',
-    textColor: '#00FF00', // Green like old-school terminal
-    borderColor: '#00FF00',
+    backgroundColor: '#0A0A0A',
+    textColor: '#FF8C00', // Industrial amber/orange - vault warning lights
+    borderColor: '#4A2800', // Dark amber border
   },
   'house-calls': {
     label: 'House Calls',
@@ -302,11 +301,10 @@ const EVENT_BADGES: Record<string, {
   },
   'elrow': {
     label: 'Elrow',
-    shortLabel: '🎪',
-    backgroundColor: '#FF1493', // Hot pink
-    textColor: '#FFD700',
-    borderColor: '#00CED1',
-    isEmoji: true,
+    shortLabel: 'EL',
+    backgroundColor: '#FFE500', // Loud yellow like their branding
+    textColor: '#FF1493', // Hot pink text
+    borderColor: '#00CED1', // Turquoise border - clashing on purpose
   },
   'afterlife': {
     label: 'Afterlife',

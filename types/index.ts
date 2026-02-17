@@ -21,11 +21,14 @@ export interface Track {
   key?: string;
   coverUrl: string;
   addedAt: Date;
-  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database';
+  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database' | '1001tracklists' | 'youtube' | 'soundcloud' | 'user';
   timestamp?: number;
   contributedBy?: string;
   verified?: boolean;
   isUnreleased?: boolean;
+  isId?: boolean;
+  hasConflict?: boolean;
+  conflictId?: string;
   trackLinks?: TrackLink[];
   featuredIn?: FeaturedInSet[];
   // Multi-source identification
@@ -43,7 +46,7 @@ export interface TrackSource {
 }
 
 export interface SourceLink {
-  platform: 'youtube' | 'soundcloud' | '1001tracklists';
+  platform: 'youtube' | 'soundcloud' | '1001tracklists' | 'mixcloud';
   url: string;
   label?: string;
 }
@@ -66,7 +69,9 @@ export interface SetList {
   tracksIdentified?: number;
   trackCount?: number;
   hasGaps?: boolean;
+  gapCount?: number;
   plays?: number;
+  sourcePlatform?: string;
   // Multi-source merging
   conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes
   // TRACK'D matching state

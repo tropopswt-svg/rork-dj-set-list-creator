@@ -53,10 +53,38 @@ export {
 export type { DbPointTransaction } from './pointsService';
 
 // Social service
-export * from './socialService';
+export {
+  followUser,
+  unfollowUser,
+  followArtist,
+  unfollowArtist,
+  isFollowingUser,
+  isFollowingArtist,
+  getFollowers,
+  getFollowing,
+  likeSet,
+  unlikeSet,
+  hasLikedSet,
+  getSetLikesCount,
+  addComment,
+  getComments,
+  getUserContributions,
+} from './socialService';
+export type { Activity } from './socialService';
 
 // Recommendation service
 export * from './recommendationService';
 
 // Notification service (enhanced)
-export * from './notificationService';
+export {
+  subscribeToNotifications,
+  unsubscribeFromNotifications,
+  getNotifications,
+  createNotification,
+  createFollowNotification,
+  createCommentReplyNotification,
+  createContributionVerifiedNotification,
+  createArtistNewSetNotification,
+  deleteOldNotifications,
+} from './notificationService';
+export type { Notification, NotificationWithUser, NotificationCallback } from './notificationService';

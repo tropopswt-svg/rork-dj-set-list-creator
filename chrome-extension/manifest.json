@@ -16,7 +16,8 @@
     "*://www.soundcloud.com/*"
   ],
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": "icons/icon48.png"
   },
   "content_scripts": [
     {
@@ -26,16 +27,24 @@
         "*://www.1001tracklists.com/charts/*",
         "*://www.1001tracklists.com/dj/*"
       ],
-      "js": ["extractors/1001tracklists.js"],
-      "css": ["styles.css"]
+      "js": [
+        "extractors/1001tracklists.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
     },
     {
       "matches": [
         "*://www.beatport.com/*",
         "*://beatport.com/*"
       ],
-      "js": ["extractors/beatport.js"],
-      "css": ["styles.css"]
+      "js": [
+        "extractors/beatport.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
     },
     {
       "matches": [
@@ -44,11 +53,20 @@
         "*://soundcloud.com/charts/*",
         "*://soundcloud.com/discover/*"
       ],
-      "js": ["extractors/soundcloud.js"],
-      "css": ["styles.css"]
+      "js": [
+        "extractors/soundcloud.js"
+      ],
+      "css": [
+        "styles.css"
+      ]
     }
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }

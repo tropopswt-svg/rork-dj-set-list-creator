@@ -299,8 +299,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBar: {
-    backgroundColor: Colors.dark.surface,
-    borderTopColor: Colors.dark.border,
+    backgroundColor: '#0A0A0A',
+    borderTopColor: '#1A1A1A',
     borderTopWidth: 1,
     paddingTop: 8,
     height: 85,

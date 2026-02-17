@@ -23,7 +23,8 @@ export interface DbArtist {
   // Stats
   tracks_count: number;
   sets_count: number;
-  
+  followers_count?: number;
+
   // Verification
   verified: boolean;
   verified_at: string | null;

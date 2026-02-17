@@ -81,7 +81,7 @@ export async function GET() {
     // Recent users (last 10)
     const { data: recentUsers } = await supabase
       .from('profiles')
-      .select('id, username, display_name, email, created_at')
+      .select('id, username, display_name, created_at')
       .order('created_at', { ascending: false })
       .limit(10);
 

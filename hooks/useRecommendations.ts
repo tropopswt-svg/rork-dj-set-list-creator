@@ -5,8 +5,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import * as recommendationService from '@/lib/supabase/recommendationService';
 
 // Lazy imports for optional contact sync dependencies
-let Contacts: typeof import('expo-contacts') | null = null;
-let Crypto: typeof import('expo-crypto') | null = null;
+let Contacts: any = null;
+let Crypto: any = null;
 
 try {
   Contacts = require('expo-contacts');

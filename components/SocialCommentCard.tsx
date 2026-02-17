@@ -11,18 +11,20 @@ interface SocialCommentCardProps {
   onAddTrack?: () => void;
 }
 
-const platformColors = {
+const platformColors: Record<string, string> = {
   instagram: Colors.dark.platforms.instagram,
   tiktok: Colors.dark.platforms.tiktok,
   twitter: Colors.dark.platforms.twitter,
   youtube: Colors.dark.platforms.youtube,
+  soundcloud: Colors.dark.platforms.soundcloud,
 };
 
-const platformNames = {
+const platformNames: Record<string, string> = {
   instagram: 'Instagram',
   tiktok: 'TikTok',
   twitter: 'Twitter',
   youtube: 'YouTube',
+  soundcloud: 'SoundCloud',
 };
 
 export default function SocialCommentCard({ comment, onAddTrack }: SocialCommentCardProps) {

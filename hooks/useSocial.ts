@@ -551,9 +551,9 @@ export function useFollowersList(userId: string, pageSize = 20) {
 
     if (!error && data) {
       if (refresh) {
-        setFollowers(data as FollowerItem[]);
+        setFollowers(data as unknown as FollowerItem[]);
       } else {
-        setFollowers(prev => [...prev, ...(data as FollowerItem[])]);
+        setFollowers(prev => [...prev, ...(data as unknown as FollowerItem[])]);
       }
       setHasMore(data.length >= pageSize);
       setOffset(currentOffset + data.length);
@@ -611,9 +611,9 @@ export function useFollowingList(userId: string, pageSize = 20) {
 
     if (!error && data) {
       if (refresh) {
-        setFollowing(data as FollowingItem[]);
+        setFollowing(data as unknown as FollowingItem[]);
       } else {
-        setFollowing(prev => [...prev, ...(data as FollowingItem[])]);
+        setFollowing(prev => [...prev, ...(data as unknown as FollowingItem[])]);
       }
       setHasMore(data.length >= pageSize);
       setOffset(currentOffset + data.length);
