@@ -51,3 +51,12 @@ export {
   getCategoryFromReason,
 } from './pointsService';
 export type { DbPointTransaction } from './pointsService';
+
+// Social service
+export * from './socialService';
+
+// Recommendation service
+export * from './recommendationService';
+
+// Notification service (enhanced)
+export * from './notificationService';

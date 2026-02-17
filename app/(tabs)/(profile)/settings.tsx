@@ -38,7 +38,7 @@ type SettingSection = 'main' | 'edit-profile' | 'privacy' | 'notifications';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { user, profile: authProfile, signOut, updateProfile } = useAuth();
+  const { user, profile: authProfile, signOut, updateProfile, deleteAccount } = useAuth();
   const [currentSection, setCurrentSection] = useState<SettingSection>('main');
   const [isSaving, setIsSaving] = useState(false);
 
@@ -118,7 +118,18 @@ export default function SettingsScreen() {
       'This action cannot be undone. All your data will be permanently deleted.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => console.log('Account deleted') },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await deleteAccount();
+            if (error) {
+              Alert.alert('Error', 'Failed to delete account. Please try again.');
+            } else {
+              router.replace('/(tabs)/(discover)');
+            }
+          },
+        },
       ]
     );
   };

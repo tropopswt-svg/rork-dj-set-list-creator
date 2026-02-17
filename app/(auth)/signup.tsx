@@ -69,8 +69,11 @@ export default function SignupScreen() {
     if (signUpError) {
       setError(signUpError.message);
     } else {
-      // Show success message and redirect to login
-      router.replace('/(auth)/verify-email');
+      // Show success message and redirect to verify email with email param
+      router.replace({
+        pathname: '/(auth)/verify-email',
+        params: { email },
+      });
     }
   };
 

@@ -36,7 +36,7 @@ export default function AnimatedSetCard({
   // Use prop directly - no local state to avoid re-renders
   const isSelected = isSelectedProp;
 
-  // 3-point input range - simpler, smoother transitions
+  // 3-point input range for animations
   const inputRange = [
     scrollYWhenCentered - CARD_HEIGHT,  // One card away
     scrollYWhenCentered,                 // Centered
@@ -64,10 +64,15 @@ export default function AnimatedSetCard({
     extrapolate: 'clamp',
   });
 
-  // Simplified fill progress
+  // Fill progress with wider "locked in" range - stays at 1 within 45px of center
   const fillProgress = scrollY.interpolate({
-    inputRange,
-    outputRange: [0, 1, 0],
+    inputRange: [
+      scrollYWhenCentered - CARD_HEIGHT,
+      scrollYWhenCentered - 45,
+      scrollYWhenCentered + 45,
+      scrollYWhenCentered + CARD_HEIGHT,
+    ],
+    outputRange: [0, 1, 1, 0],
     extrapolate: 'clamp',
   });
 

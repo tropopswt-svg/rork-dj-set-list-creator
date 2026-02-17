@@ -483,3 +483,239 @@ export function useSearchUsers(query: string) {
 
   return { results, isLoading };
 }
+
+// ============================================
+// PAGINATED FOLLOWERS/FOLLOWING LISTS
+// ============================================
+
+export interface FollowerItem {
+  id: string;
+  created_at: string;
+  follower: {
+    id: string;
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    bio: string | null;
+    followers_count: number;
+    following_count: number;
+  };
+}
+
+export interface FollowingItem {
+  id: string;
+  created_at: string;
+  following_user_id: string | null;
+  following_artist_id: string | null;
+  following_user?: {
+    id: string;
+    username: string | null;
+    display_name: string | null;
+    avatar_url: string | null;
+    bio: string | null;
+    followers_count: number;
+  };
+  following_artist?: {
+    id: string;
+    name: string;
+    slug: string;
+    image_url: string | null;
+    bio: string | null;
+    followers_count: number;
+  };
+}
+
+export function useFollowersList(userId: string, pageSize = 20) {
+  const [followers, setFollowers] = useState<FollowerItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  const loadFollowers = useCallback(async (refresh = false) => {
+    if (!userId) {
+      setFollowers([]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (refresh) {
+      setIsLoading(true);
+      setOffset(0);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    const currentOffset = refresh ? 0 : offset;
+    const { data, error } = await socialService.getFollowersList(userId, pageSize, currentOffset);
+
+    if (!error && data) {
+      if (refresh) {
+        setFollowers(data as FollowerItem[]);
+      } else {
+        setFollowers(prev => [...prev, ...(data as FollowerItem[])]);
+      }
+      setHasMore(data.length >= pageSize);
+      setOffset(currentOffset + data.length);
+    }
+
+    setIsLoading(false);
+    setIsLoadingMore(false);
+  }, [userId, pageSize, offset]);
+
+  useEffect(() => {
+    loadFollowers(true);
+  }, [userId]);
+
+  const refresh = useCallback(() => loadFollowers(true), [loadFollowers]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoading && !isLoadingMore && hasMore) {
+      loadFollowers(false);
+    }
+  }, [isLoading, isLoadingMore, hasMore, loadFollowers]);
+
+  return {
+    followers,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    loadMore,
+  };
+}
+
+export function useFollowingList(userId: string, pageSize = 20) {
+  const [following, setFollowing] = useState<FollowingItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+
+  const loadFollowing = useCallback(async (refresh = false) => {
+    if (!userId) {
+      setFollowing([]);
+      setIsLoading(false);
+      return;
+    }
+
+    if (refresh) {
+      setIsLoading(true);
+      setOffset(0);
+    } else {
+      setIsLoadingMore(true);
+    }
+
+    const currentOffset = refresh ? 0 : offset;
+    const { data, error } = await socialService.getFollowingList(userId, pageSize, currentOffset);
+
+    if (!error && data) {
+      if (refresh) {
+        setFollowing(data as FollowingItem[]);
+      } else {
+        setFollowing(prev => [...prev, ...(data as FollowingItem[])]);
+      }
+      setHasMore(data.length >= pageSize);
+      setOffset(currentOffset + data.length);
+    }
+
+    setIsLoading(false);
+    setIsLoadingMore(false);
+  }, [userId, pageSize, offset]);
+
+  useEffect(() => {
+    loadFollowing(true);
+  }, [userId]);
+
+  const refresh = useCallback(() => loadFollowing(true), [loadFollowing]);
+
+  const loadMore = useCallback(() => {
+    if (!isLoading && !isLoadingMore && hasMore) {
+      loadFollowing(false);
+    }
+  }, [isLoading, isLoadingMore, hasMore, loadFollowing]);
+
+  // Separate users and artists for convenience
+  const followingUsers = following.filter(f => f.following_user_id);
+  const followingArtists = following.filter(f => f.following_artist_id);
+
+  return {
+    following,
+    followingUsers,
+    followingArtists,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+    refresh,
+    loadMore,
+  };
+}
+
+// ============================================
+// USER CONTRIBUTIONS HOOK
+// ============================================
+
+export function useContributions() {
+  const { user } = useAuth();
+  const [contributions, setContributions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setContributions([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    const { data } = await socialService.getUserContributions(user.id);
+    setContributions(data || []);
+    setIsLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  // Filter to just track IDs (most relevant for "My Identified Tracks")
+  const identifiedTracks = contributions.filter(c => c.contribution_type === 'track_id');
+
+  return { contributions, identifiedTracks, isLoading, refresh };
+}
+
+// ============================================
+// MUTUAL FOLLOWERS HOOK
+// ============================================
+
+export function useMutualFollowers(targetUserId: string, limit = 10) {
+  const { user } = useAuth();
+  const [mutualFollowers, setMutualFollowers] = useState<any[]>([]);
+  const [mutualCount, setMutualCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMutual = async () => {
+      if (!user || !targetUserId || user.id === targetUserId) {
+        setMutualFollowers([]);
+        setMutualCount(0);
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+
+      const [{ count }, { data }] = await Promise.all([
+        socialService.getMutualFollowersCount(user.id, targetUserId),
+        socialService.getMutualFollowers(user.id, targetUserId, limit),
+      ]);
+
+      setMutualCount(count || 0);
+      setMutualFollowers(data || []);
+      setIsLoading(false);
+    };
+
+    fetchMutual();
+  }, [user?.id, targetUserId, limit]);
+
+  return { mutualFollowers, mutualCount, isLoading };
+}

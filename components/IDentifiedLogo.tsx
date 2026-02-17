@@ -63,17 +63,53 @@ const AnimatedBar = ({ index, baseHeight }: { index: number; baseHeight: number 
 };
 
 export default function IDentifiedLogo({ size = 'medium' }: IDentifiedLogoProps) {
+  const scanProgress = useRef(new Animated.Value(0)).current;
+
   const sizeConfig = {
-    small: { fontSize: 12, paddingH: 6, borderRadius: 6 },
-    medium: { fontSize: 14, paddingH: 8, borderRadius: 8 },
-    large: { fontSize: 18, paddingH: 10, borderRadius: 10 },
-    xlarge: { fontSize: 26, paddingH: 14, borderRadius: 12 },
+    small: { fontSize: 12, paddingH: 6, borderRadius: 6, width: 70 },
+    medium: { fontSize: 14, paddingH: 8, borderRadius: 8, width: 85 },
+    large: { fontSize: 18, paddingH: 10, borderRadius: 10, width: 105 },
+    xlarge: { fontSize: 26, paddingH: 14, borderRadius: 12, width: 145 },
   }[size];
 
-  // Generate unique base heights for each bar
-  const barHeights = [...Array(20)].map((_, i) =>
-    35 + seededRandom(i * 41) * 15
+  // Generate unique base heights for each bar (shorter since they're behind text)
+  const barHeights = [...Array(16)].map((_, i) =>
+    15 + seededRandom(i * 41) * 10
   );
+
+  // Scan animation - runs every 15 seconds
+  useEffect(() => {
+    const runScan = () => {
+      scanProgress.setValue(0);
+      Animated.timing(scanProgress, {
+        toValue: 1,
+        duration: 2500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    // Initial scan after a delay
+    const initialTimeout = setTimeout(runScan, 2000);
+
+    // Repeat every 15 seconds
+    const interval = setInterval(runScan, 15000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const scanLineTranslate = scanProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-30, sizeConfig.width + 30],
+  });
+
+  const scanLineOpacity = scanProgress.interpolate({
+    inputRange: [0, 0.05, 0.95, 1],
+    outputRange: [0, 1, 1, 0],
+  });
 
   return (
     <View
@@ -85,12 +121,7 @@ export default function IDentifiedLogo({ size = 'medium' }: IDentifiedLogoProps)
         },
       ]}
     >
-      {/* Text */}
-      <Text style={[styles.text, { fontSize: sizeConfig.fontSize }]}>
-        TRACK'D
-      </Text>
-
-      {/* Row of animated red bars at the bottom */}
+      {/* Row of animated red bars behind text */}
       <View style={styles.barsRow}>
         {barHeights.map((height, i) => (
           <AnimatedBar
@@ -100,6 +131,22 @@ export default function IDentifiedLogo({ size = 'medium' }: IDentifiedLogoProps)
           />
         ))}
       </View>
+
+      {/* Scan line */}
+      <Animated.View
+        style={[
+          styles.scanLine,
+          {
+            transform: [{ translateX: scanLineTranslate }],
+            opacity: scanLineOpacity,
+          },
+        ]}
+      />
+
+      {/* Text on top of bars */}
+      <Text style={[styles.text, { fontSize: sizeConfig.fontSize }]}>
+        TRACK'D
+      </Text>
     </View>
   );
 }
@@ -110,24 +157,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Colors.dark.border,
     overflow: 'hidden',
-    paddingTop: 8,
+    paddingVertical: 6,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   text: {
-    fontWeight: '800',
+    fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
-    marginBottom: 4,
+    zIndex: 1,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   barsRow: {
+    position: 'absolute',
+    bottom: 2,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'flex-end',
     justifyContent: 'center',
     gap: 2,
-    height: 50,
+    opacity: 0.5,
+    zIndex: 0,
   },
   bar: {
     width: 3,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#C41E3A',
     borderRadius: 1,
+    transformOrigin: 'bottom',
+  },
+  scanLine: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 2,
+    backgroundColor: Colors.dark.primary,
+    zIndex: 2,
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 6,
   },
 });

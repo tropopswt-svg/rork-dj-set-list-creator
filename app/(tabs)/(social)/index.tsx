@@ -2,13 +2,13 @@ import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Heart, MessageCircle, Music, Clock, CheckCircle, Users, Share2, Bell, UserPlus } from 'lucide-react-native';
+import { Heart, Music, Clock, Bookmark, ChevronRight, Disc, Settings, User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import IDentifiedLogo from '@/components/IDentifiedLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFeed, useFollowing, useNotifications, ActivityWithDetails } from '@/hooks/useSocial';
+import { useSavedSets, useLikedSets, useContributions } from '@/hooks/useSocial';
 
 function formatTimeAgo(dateString: string) {
   const date = new Date(dateString);
@@ -23,139 +23,107 @@ function formatTimeAgo(dateString: string) {
   return `${days}d ago`;
 }
 
-function getActivityIcon(type: string) {
-  switch (type) {
-    case 'like_set':
-      return <Heart size={14} color={Colors.dark.error} fill={Colors.dark.error} />;
-    case 'track_id':
-      return <Music size={14} color={Colors.dark.primary} />;
-    case 'new_set':
-      return <Music size={14} color={Colors.dark.success} />;
-    case 'follow_user':
-    case 'follow_artist':
-      return <UserPlus size={14} color={Colors.dark.primary} />;
-    default:
-      return <MessageCircle size={14} color={Colors.dark.textSecondary} />;
-  }
+function formatTimestamp(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function getActivityText(activity: ActivityWithDetails) {
-  switch (activity.activity_type) {
-    case 'like_set':
-      return 'liked a set';
-    case 'track_id':
-      return 'track\'d a song';
-    case 'new_set':
-      return 'new set added';
-    case 'follow_user':
-      return `started following ${activity.target_user?.display_name || activity.target_user?.username}`;
-    case 'follow_artist':
-      return `started following ${activity.artist?.name}`;
-    default:
-      return '';
-  }
-}
-
-function ActivityCard({ activity, onPress }: { activity: ActivityWithDetails; onPress: () => void }) {
-  const [liked, setLiked] = useState(false);
-
-  const toggleLike = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setLiked(!liked);
-  };
-
+// Identified Track Card Component
+function IdentifiedTrackCard({ contribution, onPress }: { contribution: any; onPress: () => void }) {
   return (
-    <Pressable style={styles.activityCard} onPress={onPress}>
-      <View style={styles.activityHeader}>
-        <Image
-          source={{ uri: activity.user?.avatar_url || 'https://via.placeholder.com/40' }}
-          style={styles.activityAvatar}
-          contentFit="cover"
-        />
-        <View style={styles.activityHeaderText}>
-          <View style={styles.activityNameRow}>
-            <Text style={styles.activityFriendName}>
-              {activity.user?.display_name || activity.user?.username || 'User'}
-            </Text>
-            {getActivityIcon(activity.activity_type)}
-          </View>
-          <Text style={styles.activityAction}>{getActivityText(activity)}</Text>
+    <Pressable style={styles.trackCard} onPress={onPress}>
+      <View style={styles.trackCardHeader}>
+        <View style={styles.trackIconContainer}>
+          <Music size={16} color={Colors.dark.primary} />
         </View>
-        <Text style={styles.activityTime}>{formatTimeAgo(activity.created_at)}</Text>
+        <Text style={styles.trackTimestamp}>
+          {contribution.timestamp_seconds ? formatTimestamp(contribution.timestamp_seconds) : '--:--'}
+        </Text>
       </View>
-
-      {activity.set && (
-        <View style={styles.activityContent}>
-          <Image
-            source={{ uri: activity.set.cover_url || 'https://via.placeholder.com/64' }}
-            style={styles.activitySetImage}
-            contentFit="cover"
-          />
-          <View style={styles.activitySetInfo}>
-            <Text style={styles.activitySetName} numberOfLines={1}>
-              {activity.set.name}
-            </Text>
-            <Text style={styles.activitySetArtist}>{activity.set.artist_name}</Text>
-            {activity.metadata?.track_title && (
-              <View style={styles.trackBadge}>
-                <Music size={11} color={Colors.dark.primary} />
-                <Text style={styles.trackBadgeText}>
-                  {activity.metadata.track_artist} - {activity.metadata.track_title}
-                </Text>
-                {activity.metadata.timestamp && (
-                  <View style={styles.trackTimestamp}>
-                    <Clock size={10} color={Colors.dark.textMuted} />
-                    <Text style={styles.trackTimestampText}>
-                      {Math.floor(activity.metadata.timestamp / 60)}:{(activity.metadata.timestamp % 60).toString().padStart(2, '0')}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </View>
+      <Text style={styles.trackTitle} numberOfLines={2}>
+        {contribution.track_title || 'Unknown Track'}
+      </Text>
+      <Text style={styles.trackArtist} numberOfLines={1}>
+        {contribution.track_artist || 'Unknown Artist'}
+      </Text>
+      {contribution.set && (
+        <View style={styles.trackSetInfo}>
+          <Disc size={10} color={Colors.dark.textMuted} />
+          <Text style={styles.trackSetName} numberOfLines={1}>
+            {contribution.set.name}
+          </Text>
         </View>
       )}
-
-      <View style={styles.activityActions}>
-        <Pressable
-          style={styles.actionButton}
-          onPress={(e) => {
-            e.stopPropagation();
-            toggleLike();
-          }}
-        >
-          <Heart
-            size={18}
-            color={liked ? Colors.dark.error : Colors.dark.textMuted}
-            fill={liked ? Colors.dark.error : 'transparent'}
-          />
-        </Pressable>
-        <Pressable style={styles.actionButton}>
-          <MessageCircle size={18} color={Colors.dark.textMuted} />
-        </Pressable>
-        <Pressable style={styles.actionButton}>
-          <Share2 size={18} color={Colors.dark.textMuted} />
-        </Pressable>
-      </View>
+      <Text style={styles.trackDate}>{formatTimeAgo(contribution.created_at)}</Text>
     </Pressable>
   );
 }
 
-export default function SocialScreen() {
+// Saved Set Card Component
+function SavedSetCard({ savedSet, onPress }: { savedSet: any; onPress: () => void }) {
+  const set = savedSet.set;
+  if (!set) return null;
+
+  return (
+    <Pressable style={styles.savedSetCard} onPress={onPress}>
+      <Image
+        source={{ uri: set.cover_url || 'https://via.placeholder.com/64' }}
+        style={styles.savedSetImage}
+        contentFit="cover"
+      />
+      <View style={styles.savedSetInfo}>
+        <Text style={styles.savedSetName} numberOfLines={1}>
+          {set.name}
+        </Text>
+        <Text style={styles.savedSetArtist} numberOfLines={1}>
+          {set.artist_name}
+        </Text>
+        <View style={styles.savedSetMeta}>
+          <Text style={styles.savedSetDate}>
+            Saved {formatTimeAgo(savedSet.created_at)}
+          </Text>
+        </View>
+      </View>
+      <ChevronRight size={20} color={Colors.dark.textMuted} />
+    </Pressable>
+  );
+}
+
+// Stats Card Component
+function StatsCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
+  return (
+    <View style={styles.statCard}>
+      <View style={[styles.statIconContainer, { backgroundColor: `${color}20` }]}>
+        <Icon size={18} color={color} />
+      </View>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+export default function MyStuffScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
-  const { feed, isLoading, isRefreshing, refresh } = useFeed();
-  const { followedUsers, followedArtists, isLoading: followingLoading } = useFollowing();
-  const { unreadCount } = useNotifications();
+  const { savedSets, isLoading: savedLoading, refresh: refreshSaved } = useSavedSets();
+  const { likedSets, isLoading: likedLoading, refresh: refreshLiked } = useLikedSets();
+  const { identifiedTracks, isLoading: contributionsLoading, refresh: refreshContributions } = useContributions();
 
-  const handleRefresh = useCallback(() => {
-    refresh();
-  }, [refresh]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    await Promise.all([refreshSaved(), refreshLiked(), refreshContributions()]);
+    setIsRefreshing(false);
+  }, [refreshSaved, refreshLiked, refreshContributions]);
 
   const navigateToSet = (setId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(`/(tabs)/(discover)/${setId}`);
   };
+
+  const isLoading = savedLoading || likedLoading || contributionsLoading;
 
   // Not logged in view
   if (!isAuthenticated) {
@@ -171,9 +139,9 @@ export default function SocialScreen() {
             <View style={styles.loginLogoWrapper}>
               <IDentifiedLogo size="xlarge" />
             </View>
-            <Text style={styles.loginPromptTitle}>Connect with friends</Text>
+            <Text style={styles.loginPromptTitle}>Your personal crate</Text>
             <Text style={styles.loginPromptText}>
-              Log in to follow friends, see their activity, and share your contributions
+              Log in to save sets, track your identified songs, and build your crate
             </Text>
             <Pressable
               style={styles.loginButton}
@@ -198,34 +166,16 @@ export default function SocialScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.header}>
           <View style={styles.headerSpacer} />
-          <IDentifiedLogo size="medium" />
-          <View style={styles.headerButtons}>
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => {
-                Haptics.selectionAsync();
-                // TODO: Navigate to notifications
-              }}
-            >
-              <Bell size={22} color={Colors.dark.text} />
-              {unreadCount > 0 && (
-                <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationCount}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-            <Pressable
-              style={styles.headerButton}
-              onPress={() => {
-                Haptics.selectionAsync();
-                // TODO: Navigate to find friends
-              }}
-            >
-              <Users size={22} color={Colors.dark.text} />
-            </Pressable>
-          </View>
+          <Text style={styles.headerTitle}>Crate</Text>
+          <Pressable
+            style={styles.headerButton}
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push('/(tabs)/(profile)');
+            }}
+          >
+            <User size={22} color={Colors.dark.text} />
+          </Pressable>
         </View>
 
         <ScrollView
@@ -240,106 +190,170 @@ export default function SocialScreen() {
             />
           }
         >
-          {/* Following Section */}
-          <View style={styles.followingSection}>
+          {/* Quick Stats */}
+          <View style={styles.statsSection}>
+            <StatsCard
+              icon={Music}
+              label="Track'd"
+              value={identifiedTracks.length}
+              color={Colors.dark.primary}
+            />
+            <StatsCard
+              icon={Bookmark}
+              label="Saved"
+              value={savedSets.length}
+              color={Colors.dark.success}
+            />
+            <StatsCard
+              icon={Heart}
+              label="Liked"
+              value={likedSets.length}
+              color={Colors.dark.error}
+            />
+          </View>
+
+          {/* Identified Tracks Section */}
+          <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Following</Text>
-              <Text style={styles.sectionCount}>
-                {followedUsers.length + followedArtists.length}
-              </Text>
+              <View style={styles.sectionTitleRow}>
+                <Music size={18} color={Colors.dark.primary} />
+                <Text style={styles.sectionTitle}>My Identified Tracks</Text>
+              </View>
+              {identifiedTracks.length > 0 && (
+                <Text style={styles.sectionCount}>{identifiedTracks.length}</Text>
+              )}
             </View>
-            {followingLoading ? (
+
+            {contributionsLoading ? (
               <ActivityIndicator color={Colors.dark.primary} style={styles.sectionLoader} />
-            ) : followedUsers.length === 0 && followedArtists.length === 0 ? (
-              <View style={styles.emptyFollowing}>
-                <Text style={styles.emptyFollowingText}>
-                  You're not following anyone yet
+            ) : identifiedTracks.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Music size={32} color={Colors.dark.textMuted} />
+                <Text style={styles.emptyTitle}>No identified tracks yet</Text>
+                <Text style={styles.emptyText}>
+                  Use Shazam or contribute track IDs to sets to build your collection
                 </Text>
-                <Pressable style={styles.findFriendsButton}>
-                  <UserPlus size={16} color={Colors.dark.primary} />
-                  <Text style={styles.findFriendsText}>Find Friends</Text>
-                </Pressable>
               </View>
             ) : (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.followingContainer}
+                contentContainerStyle={styles.tracksContainer}
               >
-                {followedUsers.map((follow) => (
-                  <Pressable
-                    key={follow.id}
-                    style={styles.followingItem}
+                {identifiedTracks.slice(0, 10).map((contribution) => (
+                  <IdentifiedTrackCard
+                    key={contribution.id}
+                    contribution={contribution}
                     onPress={() => {
-                      Haptics.selectionAsync();
-                      router.push(`/user/${follow.following_user?.username}`);
-                    }}
-                  >
-                    <Image
-                      source={{ uri: follow.following_user?.avatar_url || 'https://via.placeholder.com/56' }}
-                      style={styles.followingAvatar}
-                      contentFit="cover"
-                    />
-                    <Text style={styles.followingName} numberOfLines={1}>
-                      @{follow.following_user?.username}
-                    </Text>
-                  </Pressable>
-                ))}
-                {followedArtists.map((follow) => (
-                  <Pressable
-                    key={follow.id}
-                    style={styles.followingItem}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      if (follow.following_artist?.slug) {
-                        router.push(`/(tabs)/(discover)/artist/${follow.following_artist.slug}`);
+                      if (contribution.set?.id) {
+                        navigateToSet(contribution.set.id);
                       }
                     }}
-                  >
-                    <Image
-                      source={{ uri: follow.following_artist?.image_url || 'https://via.placeholder.com/56' }}
-                      style={[styles.followingAvatar, styles.artistAvatar]}
-                      contentFit="cover"
-                    />
-                    <Text style={styles.followingName} numberOfLines={1}>
-                      {follow.following_artist?.name}
-                    </Text>
-                  </Pressable>
+                  />
                 ))}
-                <Pressable style={styles.addFollowItem}>
-                  <View style={styles.addFollowCircle}>
-                    <UserPlus size={22} color={Colors.dark.primary} />
-                  </View>
-                  <Text style={styles.addFollowText}>Find</Text>
-                </Pressable>
+                {identifiedTracks.length > 10 && (
+                  <Pressable
+                    style={styles.seeAllCard}
+                    onPress={() => {
+                      Haptics.selectionAsync();
+                      // Could navigate to a full list screen
+                    }}
+                  >
+                    <Text style={styles.seeAllText}>See All</Text>
+                    <ChevronRight size={16} color={Colors.dark.primary} />
+                  </Pressable>
+                )}
               </ScrollView>
             )}
           </View>
 
-          {/* Activity Feed */}
-          <View style={styles.activitySection}>
-            <Text style={styles.activityTitle}>Activity</Text>
-            {isLoading ? (
-              <ActivityIndicator color={Colors.dark.primary} style={styles.loader} />
-            ) : feed.length === 0 ? (
-              <View style={styles.emptyFeed}>
-                <Text style={styles.emptyFeedTitle}>No activity yet</Text>
-                <Text style={styles.emptyFeedText}>
-                  Follow users and artists to see their activity here
+          {/* Saved Sets Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Bookmark size={18} color={Colors.dark.success} />
+                <Text style={styles.sectionTitle}>Saved Sets</Text>
+              </View>
+              {savedSets.length > 0 && (
+                <Text style={styles.sectionCount}>{savedSets.length}</Text>
+              )}
+            </View>
+
+            {savedLoading ? (
+              <ActivityIndicator color={Colors.dark.primary} style={styles.sectionLoader} />
+            ) : savedSets.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Bookmark size={32} color={Colors.dark.textMuted} />
+                <Text style={styles.emptyTitle}>No saved sets</Text>
+                <Text style={styles.emptyText}>
+                  Save sets while browsing to find them here later
                 </Text>
               </View>
             ) : (
-              feed.map((activity) => (
-                <ActivityCard
-                  key={activity.id}
-                  activity={activity}
-                  onPress={() => {
-                    if (activity.set?.id) {
-                      navigateToSet(activity.set.id);
-                    }
-                  }}
-                />
-              ))
+              <View style={styles.savedSetsList}>
+                {savedSets.slice(0, 5).map((savedSet) => (
+                  <SavedSetCard
+                    key={savedSet.id}
+                    savedSet={savedSet}
+                    onPress={() => {
+                      if (savedSet.set?.id) {
+                        navigateToSet(savedSet.set.id);
+                      }
+                    }}
+                  />
+                ))}
+                {savedSets.length > 5 && (
+                  <Pressable style={styles.seeAllButton}>
+                    <Text style={styles.seeAllButtonText}>See All Saved Sets</Text>
+                    <ChevronRight size={16} color={Colors.dark.primary} />
+                  </Pressable>
+                )}
+              </View>
+            )}
+          </View>
+
+          {/* Liked Sets Section */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Heart size={18} color={Colors.dark.error} />
+                <Text style={styles.sectionTitle}>Liked Sets</Text>
+              </View>
+              {likedSets.length > 0 && (
+                <Text style={styles.sectionCount}>{likedSets.length}</Text>
+              )}
+            </View>
+
+            {likedLoading ? (
+              <ActivityIndicator color={Colors.dark.primary} style={styles.sectionLoader} />
+            ) : likedSets.length === 0 ? (
+              <View style={styles.emptySection}>
+                <Heart size={32} color={Colors.dark.textMuted} />
+                <Text style={styles.emptyTitle}>No liked sets</Text>
+                <Text style={styles.emptyText}>
+                  Like sets to show your appreciation
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.savedSetsList}>
+                {likedSets.slice(0, 3).map((likedSet) => (
+                  <SavedSetCard
+                    key={likedSet.id}
+                    savedSet={likedSet}
+                    onPress={() => {
+                      if (likedSet.set?.id) {
+                        navigateToSet(likedSet.set.id);
+                      }
+                    }}
+                  />
+                ))}
+                {likedSets.length > 3 && (
+                  <Pressable style={styles.seeAllButton}>
+                    <Text style={styles.seeAllButtonText}>See All Liked Sets</Text>
+                    <ChevronRight size={16} color={Colors.dark.primary} />
+                  </Pressable>
+                )}
+              </View>
             )}
           </View>
         </ScrollView>
@@ -365,19 +379,13 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerSpacer: {
-    width: 84, // Match headerButtons width for centering
+    width: 38,
   },
-  title: {
+  headerTitle: {
     fontSize: 20,
     fontWeight: '700',
     color: Colors.dark.text,
     letterSpacing: -0.3,
-  },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    width: 84,
-    justifyContent: 'flex-end',
   },
   headerButton: {
     width: 38,
@@ -388,23 +396,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: Colors.dark.border,
-  },
-  notificationBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -4,
-    backgroundColor: Colors.dark.error,
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-  },
-  notificationCount: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#fff',
   },
   scrollView: {
     flex: 1,
@@ -455,15 +446,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.dark.primary,
   },
-  followingSection: {
-    marginBottom: 24,
+  // Stats Section
+  statsSection: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  statIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: Colors.dark.text,
+  },
+  statLabel: {
+    fontSize: 12,
+    color: Colors.dark.textMuted,
+    marginTop: 2,
+  },
+  // Section Styles
+  section: {
+    marginTop: 8,
+    paddingBottom: 16,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    marginBottom: 12,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 20,
-    marginBottom: 14,
   },
   sectionTitle: {
     fontSize: 17,
@@ -481,205 +513,156 @@ const styles = StyleSheet.create({
   sectionLoader: {
     marginVertical: 20,
   },
-  emptyFollowing: {
+  emptySection: {
     alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 20,
+    paddingVertical: 32,
+    paddingHorizontal: 32,
+    marginHorizontal: 16,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  emptyTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  // Track Cards
+  tracksContainer: {
+    paddingHorizontal: 16,
     gap: 12,
   },
-  emptyFollowingText: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-  },
-  findFriendsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  trackCard: {
+    width: 140,
     backgroundColor: Colors.dark.surface,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 20,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.primary,
-  },
-  findFriendsText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.dark.primary,
-  },
-  followingContainer: {
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  followingItem: {
-    alignItems: 'center',
-    width: 68,
-  },
-  followingAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    marginBottom: 6,
-  },
-  artistAvatar: {
-    borderWidth: 2,
-    borderColor: Colors.dark.primary,
-  },
-  followingName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.dark.text,
-    textAlign: 'center',
-  },
-  addFollowItem: {
-    alignItems: 'center',
-    width: 68,
-  },
-  addFollowCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.dark.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-    borderWidth: 2,
     borderColor: Colors.dark.border,
-    borderStyle: 'dashed',
   },
-  addFollowText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: Colors.dark.primary,
-  },
-  activitySection: {
-    paddingHorizontal: 16,
-  },
-  activityTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: Colors.dark.text,
-    marginBottom: 14,
-    paddingHorizontal: 4,
-  },
-  loader: {
-    marginTop: 40,
-  },
-  emptyFeed: {
+  trackCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyFeedTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.dark.text,
     marginBottom: 8,
   },
-  emptyFeedText: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-    textAlign: 'center',
+  trackIconContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: `${Colors.dark.primary}20`,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  activityCard: {
+  trackTimestamp: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    fontWeight: '500',
+  },
+  trackTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginBottom: 2,
+    lineHeight: 17,
+  },
+  trackArtist: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    marginBottom: 8,
+  },
+  trackSetInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+  },
+  trackSetName: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+    flex: 1,
+  },
+  trackDate: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+  },
+  seeAllCard: {
+    width: 80,
     backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  seeAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.dark.primary,
+  },
+  // Saved Sets
+  savedSetsList: {
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  savedSetCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  activityHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
+  savedSetImage: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
   },
-  activityAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  activityHeaderText: {
-    flex: 1,
-  },
-  activityNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  activityFriendName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.dark.text,
-  },
-  activityAction: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
-    marginTop: 1,
-  },
-  activityTime: {
-    fontSize: 12,
-    color: Colors.dark.textMuted,
-  },
-  activityContent: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  activitySetImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 10,
-  },
-  activitySetInfo: {
+  savedSetInfo: {
     flex: 1,
     marginLeft: 12,
-    justifyContent: 'center',
   },
-  activitySetName: {
-    fontSize: 14,
+  savedSetName: {
+    fontSize: 15,
     fontWeight: '600',
     color: Colors.dark.text,
     marginBottom: 2,
   },
-  activitySetArtist: {
+  savedSetArtist: {
     fontSize: 13,
     color: Colors.dark.primary,
-    marginBottom: 6,
+    marginBottom: 4,
   },
-  trackBadge: {
+  savedSetMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: Colors.dark.surfaceLight,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    flexWrap: 'wrap',
   },
-  trackBadgeText: {
+  savedSetDate: {
     fontSize: 11,
-    color: Colors.dark.text,
-    fontWeight: '500',
-  },
-  trackTimestamp: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    marginLeft: 4,
-  },
-  trackTimestampText: {
-    fontSize: 10,
     color: Colors.dark.textMuted,
   },
-  activityActions: {
+  seeAllButton: {
     flexDirection: 'row',
-    gap: 16,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.dark.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    gap: 4,
   },
-  actionButton: {
-    padding: 4,
+  seeAllButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: Colors.dark.primary,
   },
 });

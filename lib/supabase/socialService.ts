@@ -151,6 +151,122 @@ export async function getFollowers(userId: string) {
   return { data, error };
 }
 
+// Get user's followers list with pagination
+export async function getFollowersList(userId: string, limit = 50, offset = 0) {
+  const { data, error } = await supabase
+    .from('follows')
+    .select(`
+      id,
+      created_at,
+      follower:profiles!follower_id(
+        id,
+        username,
+        display_name,
+        avatar_url,
+        bio,
+        followers_count,
+        following_count
+      )
+    `)
+    .eq('following_user_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  return { data, error };
+}
+
+// Get user's following list with pagination (both users and artists)
+export async function getFollowingList(userId: string, limit = 50, offset = 0) {
+  const { data, error } = await supabase
+    .from('follows')
+    .select(`
+      id,
+      created_at,
+      following_user_id,
+      following_artist_id,
+      following_user:profiles!following_user_id(
+        id,
+        username,
+        display_name,
+        avatar_url,
+        bio,
+        followers_count
+      ),
+      following_artist:artists!following_artist_id(
+        id,
+        name,
+        slug,
+        image_url,
+        bio,
+        followers_count
+      )
+    `)
+    .eq('follower_id', userId)
+    .order('created_at', { ascending: false })
+    .range(offset, offset + limit - 1);
+
+  return { data, error };
+}
+
+// Get mutual followers count between two users
+export async function getMutualFollowersCount(userId: string, targetUserId: string): Promise<{ count: number; error: any }> {
+  // Get followers of the current user who also follow the target user
+  const { data, error } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('following_user_id', userId);
+
+  if (error || !data) {
+    return { count: 0, error };
+  }
+
+  const userFollowerIds = data.map(f => f.follower_id);
+
+  if (userFollowerIds.length === 0) {
+    return { count: 0, error: null };
+  }
+
+  // Count how many of these also follow the target user
+  const { count, error: countError } = await supabase
+    .from('follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('following_user_id', targetUserId)
+    .in('follower_id', userFollowerIds);
+
+  return { count: count || 0, error: countError };
+}
+
+// Get mutual followers list (up to a limit)
+export async function getMutualFollowers(userId: string, targetUserId: string, limit = 10) {
+  // Get followers of the current user
+  const { data: userFollowers, error: error1 } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('following_user_id', userId);
+
+  if (error1 || !userFollowers) {
+    return { data: [], error: error1 };
+  }
+
+  const userFollowerIds = userFollowers.map(f => f.follower_id);
+
+  if (userFollowerIds.length === 0) {
+    return { data: [], error: null };
+  }
+
+  // Get followers of target user who are also followers of current user
+  const { data, error } = await supabase
+    .from('follows')
+    .select(`
+      follower:profiles!follower_id(id, username, display_name, avatar_url)
+    `)
+    .eq('following_user_id', targetUserId)
+    .in('follower_id', userFollowerIds)
+    .limit(limit);
+
+  return { data: data?.map(d => d.follower) || [], error };
+}
+
 // Get artist's followers count
 export async function getArtistFollowersCount(artistId: string) {
   const { count, error } = await supabase

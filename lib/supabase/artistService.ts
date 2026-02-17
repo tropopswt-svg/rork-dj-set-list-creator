@@ -1,6 +1,9 @@
 import { supabase, isSupabaseConfigured } from './client';
 import type { DbArtist, DbArtistAlias, ArtistMatch, CreateArtistInput } from './types';
 
+// Re-export types for convenience
+export type { DbArtist, ArtistMatch, CreateArtistInput } from './types';
+
 // ============================================
 // Text normalization for matching
 // ============================================
@@ -416,4 +419,150 @@ export async function getArtistSets(artistId: string, limit: number = 50): Promi
   }
 
   return data;
+}
+
+// ============================================
+// Browse Artists
+// ============================================
+
+export type ArtistSortOption = 'name' | 'tracks_count' | 'followers_count' | 'created_at';
+
+interface BrowseArtistsOptions {
+  limit?: number;
+  offset?: number;
+  search?: string;
+  genre?: string;
+  sortBy?: ArtistSortOption;
+  sortOrder?: 'asc' | 'desc';
+}
+
+/**
+ * Check if an artist name is a B2B/collaboration (not a solo artist)
+ */
+function isB2BArtist(name: string): boolean {
+  // Check for explicit b2b/b3b patterns
+  if (name.toLowerCase().match(/\bb\d+b\b/)) {
+    return true;
+  }
+
+  // Check for "&" that separates artists (but not names that start with &, like "&ME")
+  if (name.match(/[a-zA-Z0-9]\s*&\s*[a-zA-Z]/)) {
+    return true;
+  }
+
+  // Check for " x " or " vs " separators (common DJ collab notation)
+  if (name.match(/\s+x\s+/i) || name.match(/\s+vs\.?\s+/i)) {
+    return true;
+  }
+
+  // Check for " and " between names
+  if (name.match(/\s+and\s+/i)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Filter out B2B artists from a list
+ */
+function filterOutB2B(artists: DbArtist[]): DbArtist[] {
+  return artists.filter(artist => !isB2BArtist(artist.name));
+}
+
+/**
+ * Browse all artists with filtering and sorting (excludes B2B collaborations)
+ */
+export async function browseArtists(options: BrowseArtistsOptions = {}): Promise<{ data: DbArtist[]; count: number }> {
+  if (!isSupabaseConfigured()) return { data: [], count: 0 };
+
+  const {
+    limit = 20,
+    offset = 0,
+    search,
+    genre,
+    sortBy = 'name',
+    sortOrder = 'asc',
+  } = options;
+
+  // Fetch more than needed to account for B2B filtering
+  const fetchLimit = limit * 3;
+
+  let query = supabase
+    .from('artists')
+    .select('*', { count: 'exact' });
+
+  // Apply search filter
+  if (search && search.length > 0) {
+    query = query.ilike('name', `%${search}%`);
+  }
+
+  // Apply genre filter
+  if (genre && genre.length > 0) {
+    query = query.contains('genres', [genre]);
+  }
+
+  // Apply sorting
+  query = query.order(sortBy, { ascending: sortOrder === 'asc' });
+
+  // Fetch all for proper filtering and pagination
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('[ArtistService] Error browsing artists:', error);
+    return { data: [], count: 0 };
+  }
+
+  // Filter out B2B collaborations
+  const soloArtists = filterOutB2B(data as DbArtist[]);
+
+  // Apply pagination on filtered results
+  const paginatedArtists = soloArtists.slice(offset, offset + limit);
+
+  return { data: paginatedArtists, count: soloArtists.length };
+}
+
+/**
+ * Get popular artists (by tracks count or followers) - excludes B2B
+ */
+export async function getPopularArtists(limit: number = 20): Promise<DbArtist[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  // Fetch more to account for B2B filtering
+  const { data, error } = await supabase
+    .from('artists')
+    .select('*')
+    .order('tracks_count', { ascending: false })
+    .limit(limit * 3);
+
+  if (error) {
+    console.error('[ArtistService] Error fetching popular artists:', error);
+    return [];
+  }
+
+  // Filter out B2B and return requested limit
+  return filterOutB2B(data as DbArtist[]).slice(0, limit);
+}
+
+/**
+ * Get all unique genres from artists
+ */
+export async function getArtistGenres(): Promise<string[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const { data, error } = await supabase
+    .from('artists')
+    .select('genres')
+    .not('genres', 'is', null);
+
+  if (error) {
+    console.error('[ArtistService] Error fetching genres:', error);
+    return [];
+  }
+
+  // Flatten and dedupe genres
+  const allGenres = data.flatMap(a => a.genres || []);
+  const uniqueGenres = [...new Set(allGenres)].sort();
+
+  return uniqueGenres;
 }

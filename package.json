@@ -71,6 +71,7 @@
     "canvas": "^3.2.1",
     "eslint": "^9.31.0",
     "eslint-config-expo": "~10.0.0",
+    "puppeteer": "^24.37.1",
     "puppeteer-core": "^24.36.0",
     "typescript": "~5.9.2"
   },

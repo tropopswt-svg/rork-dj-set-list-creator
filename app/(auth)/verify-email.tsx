@@ -1,11 +1,47 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Mail, CheckCircle } from 'lucide-react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { Mail, CheckCircle, RefreshCw } from 'lucide-react-native';
+import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import { supabase } from '@/lib/supabase/client';
 
 export default function VerifyEmailScreen() {
   const router = useRouter();
+  const { email } = useLocalSearchParams<{ email?: string }>();
+  const [isResending, setIsResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+  const [resendError, setResendError] = useState<string | null>(null);
+
+  const handleResendEmail = async () => {
+    if (!email) {
+      setResendError('Email address not available. Please try signing up again.');
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsResending(true);
+    setResendError(null);
+    setResendSuccess(false);
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+      });
+
+      if (error) {
+        setResendError(error.message);
+      } else {
+        setResendSuccess(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (err: any) {
+      setResendError(err.message || 'Failed to resend verification email');
+    }
+
+    setIsResending(false);
+  };
 
   return (
     <View style={styles.container}>
@@ -17,7 +53,7 @@ export default function VerifyEmailScreen() {
         <Text style={styles.title}>Verify your email</Text>
 
         <Text style={styles.description}>
-          We've sent a verification link to your email address. Please check your inbox and click the link to verify your account.
+          We've sent a verification link to{email ? ` ${email}` : ' your email address'}. Please check your inbox and click the link to verify your account.
         </Text>
 
         <View style={styles.tips}>
@@ -31,6 +67,19 @@ export default function VerifyEmailScreen() {
           </View>
         </View>
 
+        {resendSuccess && (
+          <View style={styles.successMessage}>
+            <CheckCircle size={16} color={Colors.dark.success} />
+            <Text style={styles.successText}>Verification email sent!</Text>
+          </View>
+        )}
+
+        {resendError && (
+          <View style={styles.errorMessage}>
+            <Text style={styles.errorText}>{resendError}</Text>
+          </View>
+        )}
+
         <Pressable
           style={styles.loginButton}
           onPress={() => router.replace('/(auth)/login')}
@@ -39,12 +88,18 @@ export default function VerifyEmailScreen() {
         </Pressable>
 
         <Pressable
-          style={styles.resendButton}
-          onPress={() => {
-            // TODO: Implement resend verification email
-          }}
+          style={[styles.resendButton, isResending && styles.resendButtonDisabled]}
+          onPress={handleResendEmail}
+          disabled={isResending}
         >
-          <Text style={styles.resendButtonText}>Resend verification email</Text>
+          {isResending ? (
+            <ActivityIndicator size="small" color={Colors.dark.primary} />
+          ) : (
+            <>
+              <RefreshCw size={16} color={Colors.dark.primary} />
+              <Text style={styles.resendButtonText}>Resend verification email</Text>
+            </>
+          )}
         </Pressable>
       </View>
     </View>
@@ -91,7 +146,7 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
     width: '100%',
-    marginBottom: 32,
+    marginBottom: 24,
   },
   tipRow: {
     flexDirection: 'row',
@@ -101,6 +156,33 @@ const styles = StyleSheet.create({
   tipText: {
     fontSize: 14,
     color: Colors.dark.text,
+  },
+  successMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: `${Colors.dark.success}20`,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  successText: {
+    fontSize: 14,
+    color: Colors.dark.success,
+    fontWeight: '500',
+  },
+  errorMessage: {
+    backgroundColor: `${Colors.dark.error}20`,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    width: '100%',
+  },
+  errorText: {
+    fontSize: 14,
+    color: Colors.dark.error,
+    textAlign: 'center',
   },
   loginButton: {
     backgroundColor: Colors.dark.primary,
@@ -115,7 +197,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     padding: 12,
+  },
+  resendButtonDisabled: {
+    opacity: 0.6,
   },
   resendButtonText: {
     color: Colors.dark.primary,

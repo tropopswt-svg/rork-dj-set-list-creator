@@ -43,7 +43,7 @@ export default function ArtistProfileScreen() {
   const [tracks, setTracks] = useState<DbTrack[]>([]);
   const [sets, setSets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'tracks' | 'sets'>('tracks');
+  const [activeTab, setActiveTab] = useState<'tracks' | 'sets'>('sets');
 
   useEffect(() => {
     loadArtist();
@@ -196,27 +196,27 @@ export default function ArtistProfileScreen() {
         {/* Tabs */}
         <View style={styles.tabsContainer}>
           <Pressable
-            style={[styles.tab, activeTab === 'tracks' && styles.tabActive]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setActiveTab('tracks');
-            }}
-          >
-            <Music size={16} color={activeTab === 'tracks' ? Colors.dark.primary : Colors.dark.textMuted} />
-            <Text style={[styles.tabText, activeTab === 'tracks' && styles.tabTextActive]}>
-              Tracks ({tracks.length})
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.tab, activeTab === 'sets' && styles.tabActive]}
+            style={[styles.setsTab, activeTab === 'sets' && styles.setsTabActive]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
               setActiveTab('sets');
             }}
           >
-            <Disc3 size={16} color={activeTab === 'sets' ? Colors.dark.primary : Colors.dark.textMuted} />
-            <Text style={[styles.tabText, activeTab === 'sets' && styles.tabTextActive]}>
+            <Disc3 size={20} color={activeTab === 'sets' ? '#fff' : '#DC2626'} />
+            <Text style={[styles.setsTabText, activeTab === 'sets' && styles.setsTabTextActive]}>
               Sets ({sets.length})
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.tracksToggle, activeTab === 'tracks' && styles.tracksToggleActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              setActiveTab('tracks');
+            }}
+          >
+            <Music size={14} color={activeTab === 'tracks' ? Colors.dark.primary : Colors.dark.textMuted} />
+            <Text style={[styles.tracksToggleText, activeTab === 'tracks' && styles.tracksToggleTextActive]}>
+              Tracks
             </Text>
           </Pressable>
         </View>
@@ -482,29 +482,57 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 16,
     marginBottom: 16,
     gap: 12,
   },
-  tab: {
+  setsTab: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: 14,
     borderRadius: 12,
-    backgroundColor: Colors.dark.surface,
-    gap: 8,
+    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    borderWidth: 1,
+    borderColor: '#DC2626',
+    gap: 10,
   },
-  tabActive: {
+  setsTabActive: {
+    backgroundColor: '#DC2626',
+  },
+  setsTabText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  setsTabTextActive: {
+    color: '#fff',
+  },
+  tracksToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.surface,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  tracksToggleActive: {
+    borderColor: Colors.dark.primary,
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
   },
-  tabText: {
-    fontSize: 14,
+  tracksToggleText: {
+    fontSize: 12,
     fontWeight: '500',
     color: Colors.dark.textMuted,
   },
-  tabTextActive: {
+  tracksToggleTextActive: {
     color: Colors.dark.primary,
   },
   content: {

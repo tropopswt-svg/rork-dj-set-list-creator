@@ -204,12 +204,28 @@ export default function ProfileScreen() {
 
           {/* Followers/Following Row */}
           <View style={styles.followStatsRow}>
-            <Pressable style={styles.followStat}>
+            <Pressable
+              style={styles.followStat}
+              onPress={() => {
+                Haptics.selectionAsync();
+                if (profile?.id) {
+                  router.push(`/(tabs)/(social)/followers/${profile.id}`);
+                }
+              }}
+            >
               <Text style={styles.followStatNumber}>{user.followersCount}</Text>
               <Text style={styles.followStatLabel}>Followers</Text>
             </Pressable>
             <View style={styles.followStatDivider} />
-            <Pressable style={styles.followStat}>
+            <Pressable
+              style={styles.followStat}
+              onPress={() => {
+                Haptics.selectionAsync();
+                if (profile?.id) {
+                  router.push(`/(tabs)/(social)/following/${profile.id}`);
+                }
+              }}
+            >
               <Text style={styles.followStatNumber}>{user.followingCount}</Text>
               <Text style={styles.followStatLabel}>Following</Text>
             </Pressable>

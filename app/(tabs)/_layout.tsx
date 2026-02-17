@@ -1,5 +1,5 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
-import { Disc3, Rss, Users, User } from 'lucide-react-native';
+import { Disc3, Rss, Archive, User } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-native';
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -9,7 +9,7 @@ import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 
-// Animated Vinyl FAB with multiple grooves, pulse, and spinning accent circle
+// Animated Vinyl FAB with TRACK'D text - TRACK wraps around, D in center
 const VinylFAB = ({ onPress }: { onPress: () => void }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const spinCircleOpacity = useRef(new Animated.Value(0)).current;
@@ -85,6 +85,13 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
     outputRange: ['0deg', '360deg', '720deg', '1080deg'],
   });
 
+  // Letters for TRACK' centered at top of button
+  const trackLetters = ['T', 'R', 'A', 'C', 'K', "'"];
+  const radius = 24; // Distance from center to letters
+  const angleSpan = 100; // Smaller arc centered at top
+  const startAngle = -90 - (angleSpan / 2); // Center around top (-90 degrees)
+  const angleStep = angleSpan / (trackLetters.length - 1);
+
   return (
     <Pressable style={styles.fab} onPress={onPress}>
       {/* Multiple vinyl grooves (static) */}
@@ -101,9 +108,33 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
           },
         ]}
       />
-      {/* Center with T'D text - pulses */}
+      {/* TRACK' letters wrapped around the center */}
+      {trackLetters.map((letter, index) => {
+        const angle = startAngle + (index * angleStep);
+        const angleRad = (angle * Math.PI) / 180;
+        const x = Math.cos(angleRad) * radius;
+        const y = Math.sin(angleRad) * radius;
+        return (
+          <Text
+            key={index}
+            style={[
+              styles.trackLetter,
+              {
+                transform: [
+                  { translateX: x },
+                  { translateY: y },
+                  { rotate: `${angle + 90}deg` },
+                ],
+              },
+            ]}
+          >
+            {letter}
+          </Text>
+        );
+      })}
+      {/* Center with D - pulses */}
       <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.fabText}>T'D</Text>
+        <Text style={styles.fabText}>D</Text>
       </Animated.View>
     </Pressable>
   );
@@ -174,7 +205,7 @@ export default function TabLayout() {
       setAuthGateMessage(
         tabName === '(profile)'
           ? 'Create an account to build your music profile and track your contributions.'
-          : 'Sign up to connect with other music lovers and see what they\'re discovering.'
+          : 'Sign up to build your crate with saved sets and identified tracks.'
       );
       setShowAuthGate(true);
     }
@@ -215,8 +246,8 @@ export default function TabLayout() {
       <Tabs.Screen
         name="(social)"
         options={{
-          title: 'Social',
-          tabBarIcon: ({ color, size }) => <Users size={size} color={color} />,
+          title: 'Crate',
+          tabBarIcon: ({ color, size }) => <Archive size={size} color={color} />,
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(social)', e),
@@ -338,8 +369,14 @@ const styles = StyleSheet.create({
   },
   fabText: {
     color: Colors.dark.background,
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: '900',
     letterSpacing: -0.5,
+  },
+  trackLetter: {
+    position: 'absolute',
+    color: '#DC2626',
+    fontSize: 9,
+    fontWeight: '800',
   },
 });

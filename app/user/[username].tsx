@@ -25,7 +25,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFollowUser, useUserProfile } from '@/hooks/useSocial';
+import { useFollowUser, useUserProfile, useMutualFollowers } from '@/hooks/useSocial';
 
 export default function UserProfileScreen() {
   const { username } = useLocalSearchParams<{ username: string }>();
@@ -33,6 +33,7 @@ export default function UserProfileScreen() {
   const { user: currentUser } = useAuth();
   const { profile, isLoading } = useUserProfile(username || '');
   const { isFollowing, isLoading: followLoading, toggleFollow } = useFollowUser(profile?.id || '');
+  const { mutualFollowers, mutualCount, isLoading: mutualLoading } = useMutualFollowers(profile?.id || '', 3);
 
   const [activeTab, setActiveTab] = useState<'contributions' | 'likes'>('contributions');
 
@@ -115,11 +116,23 @@ export default function UserProfileScreen() {
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          <Pressable style={styles.statItem}>
+          <Pressable
+            style={styles.statItem}
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push(`/(tabs)/(social)/followers/${profile.id}`);
+            }}
+          >
             <Text style={styles.statNumber}>{profile.followers_count}</Text>
             <Text style={styles.statLabel}>Followers</Text>
           </Pressable>
-          <Pressable style={styles.statItem}>
+          <Pressable
+            style={styles.statItem}
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push(`/(tabs)/(social)/following/${profile.id}`);
+            }}
+          >
             <Text style={styles.statNumber}>{profile.following_count}</Text>
             <Text style={styles.statLabel}>Following</Text>
           </Pressable>
@@ -132,6 +145,38 @@ export default function UserProfileScreen() {
             <Text style={styles.statLabel}>Points</Text>
           </View>
         </View>
+
+        {/* Mutual Followers (only shown for other users) */}
+        {!isOwnProfile && currentUser && mutualCount > 0 && (
+          <Pressable
+            style={styles.mutualSection}
+            onPress={() => {
+              Haptics.selectionAsync();
+              router.push(`/(tabs)/(social)/followers/${profile.id}`);
+            }}
+          >
+            <View style={styles.mutualAvatars}>
+              {mutualFollowers.slice(0, 3).map((follower: any, index: number) => (
+                <View
+                  key={follower.id}
+                  style={[
+                    styles.mutualAvatar,
+                    { marginLeft: index > 0 ? -8 : 0, zIndex: 3 - index },
+                  ]}
+                >
+                  <Image
+                    source={{ uri: follower.avatar_url || 'https://via.placeholder.com/24' }}
+                    style={styles.mutualAvatarImage}
+                  />
+                </View>
+              ))}
+            </View>
+            <Text style={styles.mutualText}>
+              Followed by {mutualFollowers[0]?.display_name || mutualFollowers[0]?.username}
+              {mutualCount > 1 && ` and ${mutualCount - 1} other${mutualCount > 2 ? 's' : ''} you follow`}
+            </Text>
+          </Pressable>
+        )}
 
         {/* Follow Button */}
         {!isOwnProfile && currentUser && (
@@ -217,7 +262,7 @@ export default function UserProfileScreen() {
                 <Pressable
                   key={index}
                   style={styles.contributionItem}
-                  onPress={() => router.push(`/${contribution.set?.id}`)}
+                  onPress={() => router.push(`/(tabs)/(discover)/${contribution.set?.id}`)}
                 >
                   <View style={styles.contributionIcon}>
                     <Music size={16} color={Colors.dark.primary} />
@@ -248,7 +293,7 @@ export default function UserProfileScreen() {
                 <Pressable
                   key={index}
                   style={styles.likedSetItem}
-                  onPress={() => router.push(`/${like.set?.id}`)}
+                  onPress={() => router.push(`/(tabs)/(discover)/${like.set?.id}`)}
                 >
                   <Image
                     source={{ uri: like.set?.cover_url || 'https://via.placeholder.com/50' }}
@@ -377,6 +422,33 @@ const styles = StyleSheet.create({
   statItem: {
     flex: 1,
     alignItems: 'center',
+  },
+  mutualSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    gap: 10,
+    borderBottomWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  mutualAvatars: {
+    flexDirection: 'row',
+  },
+  mutualAvatar: {
+    borderWidth: 2,
+    borderColor: Colors.dark.background,
+    borderRadius: 14,
+  },
+  mutualAvatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  mutualText: {
+    flex: 1,
+    fontSize: 13,
+    color: Colors.dark.textMuted,
   },
   statNumber: {
     fontSize: 18,

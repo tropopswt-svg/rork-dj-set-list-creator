@@ -1799,14 +1799,14 @@ const styles = StyleSheet.create({
   locationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#4B5563',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+    gap: 3,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   locationBadgeText: {
-    fontSize: 10,
+    fontSize: 8,
     color: '#fff',
     fontWeight: '600' as const,
   },
@@ -1879,16 +1879,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  // Tracks count badge - teal/cyan color
+  // Tracks count badge - cream color
   tracksBadge: {
-    backgroundColor: '#0D9488',
+    backgroundColor: '#FFF8F0',
     paddingHorizontal: 5,
     paddingVertical: 2,
     borderRadius: 4,
   },
   tracksBadgeText: {
     fontSize: 8,
-    color: '#fff',
+    color: '#8B7355',
     fontWeight: '700' as const,
   },
   // TRACK'D badge - square logo style
