@@ -1,0 +1,37 @@
+{
+  "tiktok": {
+    "accounts": ["@djname1", "@djname2"],
+    "filters": {
+      "minDuration": 30,
+      "maxAge": 30,
+      "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive", "WIP", "unfinished"],
+      "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"]
+    },
+    "scrapeOptions": {
+      "maxVideos": 30,
+      "includeComments": true,
+      "maxComments": 100
+    }
+  },
+  "instagram": {
+    "accounts": ["djname1", "djname2"],
+    "filters": {
+      "minDuration": 15,
+      "maxAge": 30,
+      "contentTypes": ["reels", "video"],
+      "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive"],
+      "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"]
+    },
+    "scrapeOptions": {
+      "maxPosts": 30,
+      "resultsType": "posts",
+      "includeComments": true,
+      "maxComments": 100
+    }
+  },
+  "schedule": {
+    "enabled": false,
+    "cronExpression": "0 0 * * *",
+    "comment": "Daily at midnight - set enabled to true and use with cron/scheduler"
+  }
+}

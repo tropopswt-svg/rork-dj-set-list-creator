@@ -1,0 +1,33 @@
+{
+  "name": "trackd-commercial",
+  "version": "1.0.0",
+  "description": "Apple-style iPhone commercial for TRACK'D app",
+  "scripts": {
+    "start": "remotion studio",
+    "build": "remotion render TrackdCommercial out/trackd-commercial.mp4",
+    "build:landscape": "remotion render TrackdCommercial-Landscape out/trackd-commercial-landscape.mp4",
+    "build:gif": "remotion render TrackdCommercial out/trackd-commercial.gif --image-format=png",
+    "build:trackid": "remotion render TrackIdAd out/trackid-ad.mp4",
+    "build:trackid-landscape": "remotion render TrackIdAd-Landscape out/trackid-ad-landscape.mp4",
+    "build:trackid-gif": "remotion render TrackIdAd out/trackid-ad.gif --image-format=png",
+    "upgrade": "remotion upgrade"
+  },
+  "keywords": [
+    "remotion",
+    "video",
+    "commercial"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@remotion/bundler": "^4.0.419",
+    "@remotion/cli": "^4.0.419",
+    "@remotion/media-utils": "^4.0.419",
+    "@types/react": "^19.2.13",
+    "canvas": "^3.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "remotion": "^4.0.419",
+    "typescript": "^5.9.3"
+  }
+}

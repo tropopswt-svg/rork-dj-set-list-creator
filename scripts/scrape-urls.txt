@@ -1,0 +1,26 @@
+# Unreleased Track Sources
+# Add SoundCloud URLs here (profiles, playlists, stations)
+# Lines starting with # are comments
+
+# ===========================================
+# STATION LINKS (algorithmic recommendations)
+# ===========================================
+# These pull tracks similar to a seed track
+# https://soundcloud.com/discover/sets/track-stations:TRACK_ID
+
+# ===========================================
+# ARTIST PROFILES
+# ===========================================
+# Add artist SoundCloud profiles here
+# https://soundcloud.com/username
+
+# ===========================================
+# PLAYLISTS
+# ===========================================
+# Curated unreleased playlists
+# https://soundcloud.com/username/sets/playlist-name
+
+# ===========================================
+# YOUR URLS BELOW
+# ===========================================
+
