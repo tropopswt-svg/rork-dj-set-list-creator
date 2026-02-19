@@ -268,6 +268,25 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
   const { user } = useAuth();
   const { isLiked, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
   const router = useRouter();
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.97,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 8,
+    }).start();
+  };
 
   const handleLike = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -293,8 +312,8 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
   };
 
   return (
-    <View style={styles.feedCard}>
-      <Pressable onPress={onPress}>
+    <Animated.View style={[styles.feedCard, { transform: [{ scale: scaleAnim }] }]}>
+      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
         <View style={styles.feedHeader}>
           {item.artist.image ? (
             <Image
@@ -374,7 +393,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -1111,17 +1130,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   feedCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.4)',
-    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
+    borderRadius: 20,
     padding: 14,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.7)',
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    borderRightColor: 'rgba(0, 0, 0, 0.03)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 8,
+    transform: [{ scale: 1 }],
   },
   feedHeader: {
     flexDirection: 'row',
@@ -1168,8 +1190,13 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: 100,
     height: 100,
-    borderRadius: 12,
+    borderRadius: 14,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
   },
   feedCover: {
     width: '100%',

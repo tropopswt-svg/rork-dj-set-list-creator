@@ -210,18 +210,20 @@ export default function TabLayout() {
   }, [isRecordingSet]);
 
   // Gate certain tabs for unauthenticated users
+  // TODO: Re-enable auth gate after testing
   const handleTabPress = (tabName: string, e: any) => {
-    const gatedTabs = ['(profile)', '(social)'];
-    if (gatedTabs.includes(tabName) && !isAuthenticated) {
-      e.preventDefault();
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      setAuthGateMessage(
-        tabName === '(profile)'
-          ? 'Create an account to build your music profile and track your contributions.'
-          : 'Sign up to build your crate with saved sets and identified tracks.'
-      );
-      setShowAuthGate(true);
-    }
+    // Auth gate disabled for testing
+    // const gatedTabs = ['(profile)', '(social)'];
+    // if (gatedTabs.includes(tabName) && !isAuthenticated) {
+    //   e.preventDefault();
+    //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    //   setAuthGateMessage(
+    //     tabName === '(profile)'
+    //       ? 'Create an account to build your music profile and track your contributions.'
+    //       : 'Sign up to build your crate with saved sets and identified tracks.'
+    //   );
+    //   setShowAuthGate(true);
+    // }
   };
 
   return (

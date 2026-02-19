@@ -419,6 +419,24 @@ export function parseTitle(fullTitle: string, uploader: string): { artist: strin
   };
 }
 
+/**
+ * Check if a video title already contains clear "Artist - Title" track info.
+ * If true, comment parsing can be skipped or deprioritized.
+ */
+export function titleHasTrackInfo(title: string): boolean {
+  const separators = [' - ', ' – ', ' — '];
+  for (const sep of separators) {
+    if (title.includes(sep)) {
+      const parts = title.split(sep);
+      // Both parts should be meaningful (not just common words)
+      if (parts.length >= 2 && parts[0].trim().length > 1 && parts[1].trim().length > 1) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 // ============================================
 // Audio Download — CDN Direct
 // ============================================
@@ -630,7 +648,12 @@ export async function uploadToACRCloud(
   }
 
   const audioBuffer = fs.readFileSync(audioPath);
-  const { artist, title } = parseTitle(video.title, video.username);
+  const { artist: rawArtist, title: rawTitle } = parseTitle(video.title, video.username);
+
+  // Strip emoji and non-ASCII characters that ACRCloud doesn't support
+  const stripEmoji = (s: string) => s.replace(/[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{200D}]|[\u{20E3}]|[\u{E0020}-\u{E007F}]/gu, '').trim();
+  const artist = stripEmoji(rawArtist);
+  const title = stripEmoji(rawTitle) || 'Untitled';
 
   // Build form data for Console API v2
   const boundary = '----FormBoundary' + Math.random().toString(36).substring(2);
@@ -817,18 +840,23 @@ export async function processVideos(
     console.log(`  URL: ${video.url}`);
     console.log(`  Duration: ${video.duration}s, Username: @${video.username}`);
 
-    // Parse comments for track hints
-    if (video.comments && video.comments.length > 0) {
-      const hints = commentParser.parsePostComments(video.comments);
-      const idHints = commentParser.filterIdRelatedHints(hints);
-      if (idHints.length > 0) {
-        console.log(`  Found ${idHints.length} ID hints in comments`);
-        hintsFound += idHints.length;
-      }
-    }
-
     // Spotify release check + bucket dedup (before expensive download)
     const { artist: parsedArtist, title: parsedTitle } = parseTitle(video.title, video.username);
+    const hasTitleInfo = titleHasTrackInfo(video.title);
+
+    // Parse comments for track hints (skip if title already has Artist - Title)
+    if (video.comments && video.comments.length > 0) {
+      if (hasTitleInfo) {
+        console.log(`  Title already has track info ("${parsedArtist} - ${parsedTitle}"), skipping comment parse`);
+      } else {
+        const hints = commentParser.parsePostComments(video.comments);
+        const idHints = commentParser.filterIdRelatedHints(hints);
+        if (idHints.length > 0) {
+          console.log(`  Found ${idHints.length} ID hints in comments`);
+          hintsFound += idHints.length;
+        }
+      }
+    }
 
     if (options?.checkSpotify) {
       const spotifyCheck = await spotify.isOnSpotify(parsedArtist, parsedTitle);
@@ -901,8 +929,8 @@ export async function processVideos(
       failed++;
     }
 
-    // Save comment hints
-    if (video.comments && video.comments.length > 0) {
+    // Save comment hints (skip if title already had Artist - Title)
+    if (video.comments && video.comments.length > 0 && !hasTitleInfo) {
       const hints = commentParser.parsePostComments(video.comments);
       const savedHints = await saveCommentsToDatabase(supabase!, trackId, video, hints);
       if (savedHints > 0) {

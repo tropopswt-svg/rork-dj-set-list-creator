@@ -144,7 +144,8 @@ export default function ProfileScreen() {
   }
 
   // Not authenticated - show login prompt
-  if (!isAuthenticated) {
+  // TODO: Re-enable auth wall after testing
+  if (false && !isAuthenticated) {
     return (
       <View style={styles.container}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>

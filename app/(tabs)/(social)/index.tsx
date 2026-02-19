@@ -126,7 +126,8 @@ export default function MyStuffScreen() {
   const isLoading = savedLoading || likedLoading || contributionsLoading;
 
   // Not logged in view
-  if (!isAuthenticated) {
+  // TODO: Re-enable auth wall after testing
+  if (false && !isAuthenticated) {
     return (
       <View style={styles.container}>
         <SafeAreaView style={styles.safeArea} edges={['top']}>

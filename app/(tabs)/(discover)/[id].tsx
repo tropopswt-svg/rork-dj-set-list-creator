@@ -911,13 +911,13 @@ export default function SetDetailScreen() {
 
   // Get the source URL and platform for audio preview
   const getAudioSource = (): { url: string; platform: 'youtube' | 'soundcloud' } | null => {
-    if (!setList?.sourceLinks) return null;
+    if (!setList?.sourceLinks?.length) return null;
 
     // Prefer YouTube, then SoundCloud
-    const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+    const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
     if (ytLink) return { url: ytLink.url, platform: 'youtube' };
 
-    const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+    const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
     if (scLink) return { url: scLink.url, platform: 'soundcloud' };
 
     return null;
@@ -1071,8 +1071,8 @@ export default function SetDetailScreen() {
 
           {/* Needs Source Banner - show when no YouTube/SoundCloud for analysis */}
           {(() => {
-            const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-            const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+            const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+            const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
             const hasAnalyzableSource = ytLink || scLink;
 
             // Check if analysis has been run by looking for tracks with timestamps > 0
@@ -1121,7 +1121,7 @@ export default function SetDetailScreen() {
             <View style={styles.linksGrid}>
               {/* YouTube */}
               {(() => {
-                const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+                const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
                 // Check if analysis has been run by looking for tracks with timestamps > 0
                 const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
                 const needsAnalysis = ytLink && !hasTimestamps;
@@ -1249,7 +1249,7 @@ export default function SetDetailScreen() {
 
               {/* SoundCloud */}
               {(() => {
-                const scLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+                const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
                 // Check if analysis has been run by looking for tracks with timestamps > 0
                 const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
                 const needsAnalysis = scLink && !hasTimestamps;
@@ -1472,7 +1472,7 @@ export default function SetDetailScreen() {
 
           {/* Embedded YouTube Player */}
           {(() => {
-            const ytLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+            const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
             const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
             
             if (!showPlayer || !videoId) {
@@ -1552,8 +1552,8 @@ export default function SetDetailScreen() {
             {tracklistItems.map((item, index) => {
               if (item.type === 'conflict') {
                 const conflict = item.data;
-                const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
-                const soundcloudLink = setList.sourceLinks.find(l => l.platform === 'soundcloud');
+                const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+                const soundcloudLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
 
                 return (
                   <InlineConflictOptions
@@ -2010,7 +2010,7 @@ export default function SetDetailScreen() {
               }
             } else {
               // Start the player at the timestamp
-              const youtubeLink = setList.sourceLinks.find(l => l.platform === 'youtube');
+              const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
               if (youtubeLink) {
                 setCurrentTimestamp(pendingTimestamp);
                 setShowPlayer(true);

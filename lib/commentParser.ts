@@ -223,20 +223,40 @@ export function parseCommentThread(
 }
 
 /**
- * Parse all comments from a post
+ * Parse all comments from a post.
+ *
+ * Uses early-exit: once we find a high-confidence hint with both artist AND title
+ * (e.g., a reply to an "ID?" with "Artist - Track"), we stop parsing further comments.
+ * This avoids burning through hundreds of comments when we already have a solid match.
  */
 export function parsePostComments(
   comments: Array<{
     text: string;
     username?: string;
     replies?: Array<{ text: string; username?: string }>;
-  }>
+  }>,
+  options?: { earlyExit?: boolean }
 ): CommentTrackHint[] {
   const allHints: CommentTrackHint[] = [];
+  const earlyExit = options?.earlyExit ?? true;
 
   for (const comment of comments) {
     const { hints } = parseCommentThread(comment, comment.replies || []);
     allHints.push(...hints);
+
+    // Early exit: if we found a high-confidence hint with both artist and title, stop
+    if (earlyExit) {
+      const strongMatch = allHints.find(
+        (h) =>
+          h.confidence === 'high' &&
+          h.possibleArtist &&
+          h.possibleTitle &&
+          (h.hintType === 'id_response' || h.hintType === 'direct_mention')
+      );
+      if (strongMatch) {
+        break;
+      }
+    }
   }
 
   // Deduplicate and sort by confidence
