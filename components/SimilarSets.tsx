@@ -47,12 +47,18 @@ export default function SimilarSets({ setId }: SimilarSetsProps) {
     setIsLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}/api/sets/similar?setId=${setId}`);
-      const data = await response.json();
+      if (!response.ok) {
+        if (__DEV__) console.log('[SimilarSets] API returned', response.status);
+        return;
+      }
+      const text = await response.text();
+      if (!text) return;
+      const data = JSON.parse(text);
       if (data.success) {
         setSimilarSets(data.similarSets || []);
       }
     } catch (error) {
-      if (__DEV__) console.error('[SimilarSets] Failed to fetch:', error);
+      if (__DEV__) console.log('[SimilarSets] Failed to fetch:', error);
     } finally {
       setIsLoading(false);
     }

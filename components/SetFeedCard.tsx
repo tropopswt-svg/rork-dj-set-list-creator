@@ -1024,7 +1024,14 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const [triedHqFallback, setTriedHqFallback] = useState(false);
 
   const getFallbackImage = useCallback(() => {
-    const index = parseInt(setList.id) % coverImages.length;
+    // Hash the ID string to get a stable index (IDs may be UUIDs, not numbers)
+    let hash = 0;
+    const idStr = setList.id || '';
+    for (let i = 0; i < idStr.length; i++) {
+      hash = ((hash << 5) - hash) + idStr.charCodeAt(i);
+      hash |= 0;
+    }
+    const index = Math.abs(hash) % coverImages.length;
     return coverImages[index] || coverImages[0];
   }, [setList.id]);
 
@@ -1057,7 +1064,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   }, [triedHqFallback, setList.coverUrl, setList.name]);
 
   const getPlatformIcons = () => {
-    const platforms = setList.sourceLinks.map(l => l.platform);
+    const platforms = (setList.sourceLinks || []).map(l => l.platform);
     const unique = [...new Set(platforms)];
 
     return unique.slice(0, 3).map((platform, index) => {
@@ -1074,7 +1081,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   };
 
   // Check if set needs analyzable sources (YouTube or SoundCloud)
-  const hasAnalyzableSource = setList.sourceLinks.some(
+  const hasAnalyzableSource = (setList.sourceLinks || []).some(
     l => l.platform === 'youtube' || l.platform === 'soundcloud'
   );
   const needsSource = !hasAnalyzableSource;
