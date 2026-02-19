@@ -313,7 +313,16 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
 
   return (
     <Animated.View style={[styles.feedCard, { transform: [{ scale: scaleAnim }] }]}>
-      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      {/* Glossy sheen highlight */}
+      <LinearGradient
+        colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0.15)', 'rgba(255,255,255,0.02)']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.feedCardSheen}
+      />
+      <BlurView intensity={40} tint="light" style={StyleSheet.absoluteFill} />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.55)' }]} />
+      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} style={styles.feedCardInner}>
         <View style={styles.feedHeader}>
           {item.artist.image ? (
             <Image
@@ -367,7 +376,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
       </Pressable>
 
       {/* Social Actions */}
-      <View style={styles.socialActions}>
+      <View style={[styles.socialActions, { zIndex: 2 }]}>
         <Pressable
           style={styles.actionButton}
           onPress={handleLike}
@@ -1130,20 +1139,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   feedCard: {
-    backgroundColor: 'rgba(255, 255, 255, 0.65)',
-    borderRadius: 20,
-    padding: 14,
-    marginBottom: 16,
+    borderRadius: 22,
+    marginBottom: 18,
+    overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.9)',
-    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
-    borderRightColor: 'rgba(0, 0, 0, 0.03)',
+    borderColor: 'rgba(255, 255, 255, 0.95)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+    borderRightColor: 'rgba(0, 0, 0, 0.04)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 8,
-    transform: [{ scale: 1 }],
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  feedCardInner: {
+    padding: 14,
+  },
+  feedCardSheen: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
   },
   feedHeader: {
     flexDirection: 'row',
@@ -1193,10 +1212,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   feedCover: {
     width: '100%',
@@ -1268,9 +1289,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.08)',
-    marginTop: 12,
-    paddingTop: 12,
+    borderTopColor: 'rgba(0, 0, 0, 0.06)',
+    marginTop: 0,
+    paddingTop: 10,
+    paddingBottom: 10,
+    paddingHorizontal: 14,
   },
   actionButton: {
     flexDirection: 'row',
