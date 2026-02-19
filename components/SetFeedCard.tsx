@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Animated, Easing, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, Animated, Alert } from 'react-native';
 import EventBadge, { detectEvent, EVENT_BADGES } from './EventBadge';
 import { Image } from 'expo-image';
 import { Play, Music, Youtube, Music2, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, HelpCircle } from 'lucide-react-native';
@@ -272,46 +272,6 @@ const VENUE_LOCATIONS: Record<string, string> = {
 
 export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, fillProgress, fillDirection }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
-
-  // Pulsing glow animation for selected card's artist chips
-  const glowAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (isSelected) {
-      // Start pulsing glow animation
-      const pulseAnimation = Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, {
-            toValue: 1,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
-          }),
-          Animated.timing(glowAnim, {
-            toValue: 0,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: false,
-          }),
-        ])
-      );
-      pulseAnimation.start();
-      return () => pulseAnimation.stop();
-    } else {
-      glowAnim.setValue(0);
-    }
-  }, [isSelected, glowAnim]);
-
-  // Interpolate glow values (reduced for subtler effect)
-  const glowShadowOpacity = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.15, 0.35],
-  });
-
-  const glowShadowRadius = glowAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [2, 6],
-  });
 
   // Calculate dynamic font sizes based on content length and venue presence
   // NEVER truncate - instead scale down font size to fit
@@ -1339,12 +1299,6 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                           paddingVertical: artistChipStyle.paddingV,
                         },
                         isSelected && styles.artistMoreBadgeSelected,
-                        isSelected && {
-                          shadowColor: Colors.dark.primary,
-                          shadowOffset: { width: 0, height: 2 },
-                          shadowOpacity: glowShadowOpacity,
-                          shadowRadius: glowShadowRadius,
-                        },
                         pressed && styles.artistMoreBadgePressed
                       ]}
                     >
@@ -1373,7 +1327,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
               )}
             </View>
             <Text
-              style={[styles.name, isIdentified && styles.nameTrackd, isSelected && styles.nameSelected]}
+              style={[styles.name, isIdentified && styles.nameTrackd]}
               numberOfLines={2}
             >
               {formatDisplayName().length > 50
@@ -1520,21 +1474,27 @@ const styles = StyleSheet.create({
     top: -6,
     left: 10,
     zIndex: 10,
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
+    backgroundColor: 'rgba(212, 175, 55, 0.75)',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 223, 100, 0.6)',
+    borderBottomColor: 'rgba(160, 120, 20, 0.3)',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 4,
     elevation: 4,
   },
   trackdBadgeFloatingText: {
-    fontSize: 7,
-    color: '#fff',
+    fontSize: 7.5,
+    color: '#FFF8E7',
     fontWeight: '900' as const,
     letterSpacing: 0.5,
+    textShadowColor: 'rgba(120, 80, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 0.5 },
+    textShadowRadius: 1,
   },
   venueBadgeTopRight: {
     position: 'absolute',
@@ -1827,10 +1787,6 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(255, 255, 255, 0.3)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 4,
-  },
-  nameSelected: {
-    color: '#C41E3A',
-    fontWeight: '700' as const,
   },
   // Location row - more prominent
   locationRow: {
