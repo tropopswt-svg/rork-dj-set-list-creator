@@ -101,7 +101,7 @@ export default function LibraryScreen() {
                       {(setList.totalDuration || 0) > 0 && (
                         <View style={styles.metaItem}>
                           <Clock size={12} color={Colors.dark.textMuted} />
-                          <Text style={styles.metaText}>{formatDuration(setList.totalDuration)}</Text>
+                          <Text style={styles.metaText}>{formatDuration(setList.totalDuration || 0)}</Text>
                         </View>
                       )}
                       <View style={styles.metaItem}>

@@ -14,6 +14,7 @@ import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
 import { useSets } from '@/contexts/SetsContext';
 import { detectEvent, getEventLabel } from '@/components/EventBadge';
+import { normalizeVenueName, normalizeArtistName } from '@/lib/venueNormalization';
 
 // Tab bar height from _layout.tsx — in React Navigation v7 (Expo Router 6),
 // the tab bar is absolutely positioned and overlaps scroll content
@@ -599,18 +600,18 @@ export default function DiscoverScreen() {
     router.push(`/(tabs)/(discover)/${result.setList.id}`);
   };
 
-  // Extract unique filter options from sets
+  // Extract unique filter options from sets — normalize to deduplicate
   const filterOptions = useMemo(() => {
     const artists = new Set<string>();
     const years = new Set<string>();
     const venues = new Set<string>();
 
     setLists.forEach(set => {
-      if (set.artist) artists.add(set.artist);
+      if (set.artist) artists.add(normalizeArtistName(set.artist));
       if (set.date) years.add(extractYear(set.date));
       // Use explicit venue field first, fall back to parsing from name
       const venue = set.venue || extractVenue(set.name);
-      if (venue) venues.add(venue);
+      if (venue) venues.add(normalizeVenueName(venue));
     });
 
     return {
@@ -666,9 +667,10 @@ export default function DiscoverScreen() {
           }
         }
 
-        // Artist filter
+        // Artist filter — normalize for consistent matching
         if (selectedFilters.artists.length > 0) {
-          if (!selectedFilters.artists.includes(set.artist)) return false;
+          const normalizedArtist = normalizeArtistName(set.artist);
+          if (!selectedFilters.artists.includes(normalizedArtist)) return false;
         }
 
         // Year filter
@@ -677,10 +679,10 @@ export default function DiscoverScreen() {
           if (!selectedFilters.years.includes(setYear)) return false;
         }
 
-        // Venue filter
+        // Venue filter — normalize for consistent matching
         if (selectedFilters.venues.length > 0) {
           const venue = set.venue || extractVenue(set.name);
-          if (!venue || !selectedFilters.venues.includes(venue)) return false;
+          if (!venue || !selectedFilters.venues.includes(normalizeVenueName(venue))) return false;
         }
 
         // Event/Venue badge filter

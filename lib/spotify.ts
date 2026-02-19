@@ -1,8 +1,8 @@
 /**
  * Shared Spotify Service
  *
- * Provides Spotify release-checking and bucket deduplication logic
- * used by both the SoundCloud scraper and social media scrapers.
+ * Provides Spotify track/artist matching, release-checking, and data enrichment.
+ * Uses client credentials flow (no user login needed).
  */
 
 // Spotify config
@@ -10,6 +10,44 @@ const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 let spotifyToken: string | null = null;
 let spotifyTokenExpiry = 0;
+
+// ============================================
+// Types
+// ============================================
+
+export interface SpotifyTrackData {
+  found: boolean;
+  spotifyId?: string;
+  title?: string;
+  artist?: string;
+  artists?: string[];
+  album?: string;
+  albumArt?: string;        // High-res album artwork URL
+  albumArtSmall?: string;   // 64px thumbnail
+  previewUrl?: string;      // 30-second preview MP3
+  spotifyUrl?: string;      // Open in Spotify link
+  isrc?: string;            // International Standard Recording Code
+  durationMs?: number;
+  releaseDate?: string;     // YYYY-MM-DD or YYYY
+  popularity?: number;      // 0-100
+  label?: string;
+}
+
+export interface SpotifyArtistData {
+  found: boolean;
+  spotifyId?: string;
+  name?: string;
+  imageUrl?: string;        // Artist profile image
+  imageUrlSmall?: string;
+  genres?: string[];
+  popularity?: number;      // 0-100
+  followers?: number;
+  spotifyUrl?: string;
+}
+
+// ============================================
+// Helpers
+// ============================================
 
 /**
  * Normalize a string for fuzzy comparison.
@@ -52,12 +90,15 @@ export async function getSpotifyToken(): Promise<string | null> {
   }
 }
 
+// ============================================
+// Track Matching & Enrichment
+// ============================================
+
 /**
- * Check if a track is already released on Spotify.
- * Searches by artist + title, fuzzy matches on normalized strings.
- * Returns { found: false } when credentials are missing (graceful skip).
+ * Search Spotify for a track and return full metadata.
+ * This is the main enrichment function — returns album art, preview URL, ISRC, etc.
  */
-export async function isOnSpotify(artist: string, title: string): Promise<{ found: boolean; url?: string }> {
+export async function searchSpotifyTrack(artist: string, title: string): Promise<SpotifyTrackData> {
   const token = await getSpotifyToken();
   if (!token) return { found: false };
 
@@ -88,7 +129,88 @@ export async function isOnSpotify(artist: string, title: string): Promise<{ foun
       );
 
       if (titleSim && artistMatch) {
-        return { found: true, url: track.external_urls?.spotify };
+        // Get the best album art (largest available)
+        const images = track.album?.images || [];
+        const albumArt = images.find((i: any) => i.width >= 300)?.url || images[0]?.url;
+        const albumArtSmall = images.find((i: any) => i.width <= 64)?.url || images[images.length - 1]?.url;
+
+        return {
+          found: true,
+          spotifyId: track.id,
+          title: track.name,
+          artist: track.artists[0]?.name,
+          artists: track.artists.map((a: any) => a.name),
+          album: track.album?.name,
+          albumArt,
+          albumArtSmall,
+          previewUrl: track.preview_url || undefined,
+          spotifyUrl: track.external_urls?.spotify,
+          isrc: track.external_ids?.isrc,
+          durationMs: track.duration_ms,
+          releaseDate: track.album?.release_date,
+          popularity: track.popularity,
+          label: undefined, // Not available in search results, need album endpoint
+        };
+      }
+    }
+    return { found: false };
+  } catch {
+    return { found: false };
+  }
+}
+
+/**
+ * Simple check if a track exists on Spotify.
+ * Backwards-compatible wrapper around searchSpotifyTrack.
+ */
+export async function isOnSpotify(artist: string, title: string): Promise<{ found: boolean; url?: string }> {
+  const result = await searchSpotifyTrack(artist, title);
+  return { found: result.found, url: result.spotifyUrl };
+}
+
+// ============================================
+// Artist Matching & Enrichment
+// ============================================
+
+/**
+ * Search Spotify for an artist and return full metadata.
+ * Returns image, genres, popularity, followers.
+ */
+export async function searchSpotifyArtist(artistName: string): Promise<SpotifyArtistData> {
+  const token = await getSpotifyToken();
+  if (!token) return { found: false };
+
+  const query = encodeURIComponent(artistName);
+
+  try {
+    const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=artist&limit=5`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) return { found: false };
+
+    const data = await response.json();
+    const artists = data.artists?.items || [];
+
+    for (const artist of artists) {
+      if (normalize(artist.name) === normalize(artistName) ||
+          normalize(artist.name).includes(normalize(artistName)) ||
+          normalize(artistName).includes(normalize(artist.name))) {
+
+        const images = artist.images || [];
+        const imageUrl = images.find((i: any) => i.width >= 300)?.url || images[0]?.url;
+        const imageUrlSmall = images.find((i: any) => i.width <= 64)?.url || images[images.length - 1]?.url;
+
+        return {
+          found: true,
+          spotifyId: artist.id,
+          name: artist.name,
+          imageUrl,
+          imageUrlSmall,
+          genres: artist.genres || [],
+          popularity: artist.popularity,
+          followers: artist.followers?.total,
+          spotifyUrl: artist.external_urls?.spotify,
+        };
       }
     }
     return { found: false };

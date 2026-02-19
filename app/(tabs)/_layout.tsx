@@ -146,7 +146,7 @@ export default function TabLayout() {
     }
 
     // For (discover), check if it's index.tsx (no third segment or third segment is 'index')
-    if (segments.length === 3 && segments[2] === 'index') {
+    if (segments.length === 3 && (segments[2] as string) === 'index') {
       return mainTabs.includes(segments[1]);
     }
 

@@ -1,4 +1,5 @@
 import { supabase, isSupabaseConfigured } from './client';
+import { normalizeVenueName, getVenueAliases } from '../venueNormalization';
 
 // ============================================
 // Venue Images - Curated venue/club photos
@@ -219,12 +220,12 @@ export async function browseVenues(options: BrowseVenuesOptions = {}): Promise<{
       return { data: [], count: 0 };
     }
 
-    // Aggregate venues
+    // Aggregate venues — normalize to canonical names so "Amnesia" and "Amnesia Ibiza" group together
     const venueMap = new Map<string, number>();
 
     for (const row of rawData || []) {
       if (row.venue) {
-        const normalized = row.venue.trim();
+        const normalized = normalizeVenueName(row.venue);
         venueMap.set(normalized, (venueMap.get(normalized) || 0) + 1);
       }
     }
@@ -285,10 +286,14 @@ export async function getVenueSets(venueName: string, limit: number = 50, offset
   if (!isSupabaseConfigured()) return { data: [], count: 0 };
 
   try {
+    // Get all known aliases for this venue so "Amnesia" also finds "Amnesia Ibiza" rows
+    const aliases = getVenueAliases(venueName);
+    const orFilter = aliases.map(a => `venue.ilike.%${a}%`).join(',');
+
     const { data, error, count } = await supabase
       .from('sets')
       .select('*', { count: 'exact' })
-      .ilike('venue', venueName)
+      .or(orFilter)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -311,11 +316,14 @@ export async function getVenueWithSets(venueName: string, setsLimit: number = 20
   if (!isSupabaseConfigured()) return null;
 
   try {
-    // Get all sets for this venue
+    // Match all aliases for this venue
+    const aliases = getVenueAliases(venueName);
+    const orFilter = aliases.map(a => `venue.ilike.%${a}%`).join(',');
+
     const { data: sets, count } = await supabase
       .from('sets')
       .select('*', { count: 'exact' })
-      .ilike('venue', venueName)
+      .or(orFilter)
       .order('created_at', { ascending: false })
       .limit(setsLimit);
 

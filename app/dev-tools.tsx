@@ -349,7 +349,7 @@ export default function DevToolsScreen() {
     });
   }, []);
 
-  const handleAddSelectedToRepository = useCallback(() => {
+  const handleAddSelectedToRepository = useCallback(async () => {
     if (selectedTracks.size === 0) {
       Alert.alert('No Tracks Selected', 'Please select tracks to add to the repository.');
       return;
@@ -358,7 +358,7 @@ export default function DevToolsScreen() {
     let success = 0;
     let failed = 0;
 
-    soundcloudResults.forEach(track => {
+    for (const track of soundcloudResults) {
       if (selectedTracks.has(track.url)) {
         const newTrack: Track = {
           id: `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -372,14 +372,14 @@ export default function DevToolsScreen() {
           trackLinks: [{ platform: 'soundcloud', url: track.url }],
         };
 
-        const result = addTrackToRepository(newTrack);
+        const result = await addTrackToRepository(newTrack);
         if (result.success) {
           success++;
         } else {
           failed++;
         }
       }
-    });
+    }
 
     setSelectedTracks(new Set());
     
@@ -390,7 +390,7 @@ export default function DevToolsScreen() {
     );
   }, [selectedTracks, soundcloudResults, addTrackToRepository]);
 
-  const handleAddSingleTrack = useCallback((track: SoundCloudTrack) => {
+  const handleAddSingleTrack = useCallback(async (track: SoundCloudTrack) => {
     const newTrack: Track = {
       id: `track-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: track.title,
@@ -403,7 +403,7 @@ export default function DevToolsScreen() {
       trackLinks: [{ platform: 'soundcloud', url: track.url }],
     };
 
-    const result = addTrackToRepository(newTrack);
+    const result = await addTrackToRepository(newTrack);
     if (result.success) {
       Alert.alert('Added', `"${track.title}" added to repository.`);
     } else {

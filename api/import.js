@@ -3098,13 +3098,18 @@ async function handleChromeExtensionImport(req, res, data) {
           }
         }
 
+        // Normalize DJ name before inserting
+        const normalizedDjName = setInfo.djName
+          ? setInfo.djName.trim().replace(/\s{2,}/g, ' ').replace(/\bb2b\b/gi, 'B2B')
+          : setInfo.djName;
+
         // Create the set
         const { data: newSet, error: setError } = await supabase
           .from('sets')
           .insert({
             title: setInfo.title,
             slug: setSlug,
-            dj_name: setInfo.djName,
+            dj_name: normalizedDjName,
             dj_id: djId,
             venue: setInfo.venue || null,
             event_name: setInfo.eventName || null,
@@ -3118,6 +3123,7 @@ async function handleChromeExtensionImport(req, res, data) {
             spotify_url: setInfo.spotify_url || null,
             apple_music_url: setInfo.apple_music_url || null,
             source: '1001tracklists',
+            cover_url: data.coverUrl || null,
           })
           .select('id')
           .single();
@@ -3130,10 +3136,14 @@ async function handleChromeExtensionImport(req, res, data) {
 
           // Create set_tracks entries
           for (const track of data.tracks || []) {
+            // Normalize artist and track names for consistency
+            let artistName = (track.artist || 'Unknown').trim().replace(/\s{2,}/g, ' ');
+            artistName = artistName.replace(/\bb2b\b/gi, 'B2B');
+            let trackTitle = (track.title || '').trim().replace(/\s{2,}/g, ' ');
+
             // Find track ID if it exists
             let trackId = null;
-            const titleNormalized = normalizeText(track.title);
-            const artistName = track.artist || 'Unknown';
+            const titleNormalized = normalizeText(trackTitle);
 
             const { data: trackData } = await supabase
               .from('tracks')
@@ -3149,11 +3159,11 @@ async function handleChromeExtensionImport(req, res, data) {
               set_id: newSet.id,
               track_id: trackId,
               artist_name: artistName,
-              track_title: track.title,
+              track_title: trackTitle,
               position: track.position || 0,
               timestamp_seconds: track.timestamp_seconds || null,
               timestamp_str: track.timestamp_str || null,
-              is_id: track.is_unreleased || track.title?.toLowerCase() === 'id',
+              is_id: track.is_unreleased || trackTitle?.toLowerCase() === 'id',
             });
           }
 

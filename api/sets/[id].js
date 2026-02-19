@@ -123,6 +123,10 @@ export default async function handler(req, res) {
         }
       }
 
+      // Spotify enrichment data (album art, preview, etc.)
+      const spotify = track.spotify_data || {};
+      const hasSpotify = !!spotify.spotify_id;
+
       return {
         id: track.id,
         title: track.track_title || 'Unknown',
@@ -131,13 +135,23 @@ export default async function handler(req, res) {
         timestamp,
         timestampStr,
         isId: track.is_id || false,
-        isTimed: track.is_timed !== false || ensureBookendTimestamps, // Mark as timed if we added bookends
-        trackId: track.track_id, // Reference to tracks table
+        isTimed: track.is_timed !== false || ensureBookendTimestamps,
+        trackId: track.track_id,
         addedAt: track.created_at,
-        // Source is '1001tracklists' since that's where set_tracks come from
         source: track.source || '1001tracklists',
         verified: !track.is_id,
         confidence: track.is_id ? 0 : 1,
+        // Spotify data
+        coverUrl: spotify.album_art_url || undefined,
+        album: spotify.album || undefined,
+        previewUrl: spotify.preview_url || undefined,
+        isrc: spotify.isrc || undefined,
+        releaseDate: spotify.release_date || undefined,
+        popularity: spotify.popularity || undefined,
+        isReleased: hasSpotify,
+        trackLinks: [
+          spotify.spotify_url && { platform: 'spotify', url: spotify.spotify_url },
+        ].filter(Boolean),
       };
     }) || [];
 

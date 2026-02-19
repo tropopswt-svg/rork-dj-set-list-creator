@@ -1217,7 +1217,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
           </View>
           {(setList.totalDuration || 0) > 0 && (
             <View style={styles.durationBadge}>
-              <Text style={styles.durationText}>{formatDuration(setList.totalDuration)}</Text>
+              <Text style={styles.durationText}>{formatDuration(setList.totalDuration || 0)}</Text>
             </View>
           )}
           {isFullyIdentified && (
@@ -1917,6 +1917,10 @@ const styles = StyleSheet.create({
     fontSize: 7,
     color: '#fff',
     fontWeight: '700' as const,
+  },
+  needsSourceIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   needsSourceBadge: {
     flexDirection: 'row',

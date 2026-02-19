@@ -162,7 +162,7 @@ function ArtistCard({ artist, onPress }: { artist: DbArtist; onPress: () => void
             <Music size={12} color={Colors.dark.textMuted} />
             <Text style={styles.statText}>{artist.tracks_count || 0}</Text>
           </View>
-          {artist.followers_count > 0 && (
+          {(artist.followers_count ?? 0) > 0 && (
             <View style={styles.statItem}>
               <Users size={12} color={Colors.dark.textMuted} />
               <Text style={styles.statText}>{artist.followers_count}</Text>

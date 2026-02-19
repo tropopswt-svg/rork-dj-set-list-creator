@@ -176,9 +176,9 @@ export default function CommentsSection({ setId }: CommentsSectionProps) {
     }
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const { error } = await addComment(newComment.trim(), replyingTo || undefined);
+    const result = await addComment(newComment.trim(), replyingTo || undefined);
 
-    if (!error) {
+    if (!result?.error) {
       setNewComment('');
       setReplyingTo(null);
     }

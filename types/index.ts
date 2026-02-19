@@ -19,13 +19,14 @@ export interface Track {
   duration: number;
   bpm?: number;
   key?: string;
-  coverUrl: string;
+  coverUrl?: string;
   addedAt: Date;
   source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database' | '1001tracklists' | 'youtube' | 'soundcloud' | 'user';
   timestamp?: number;
   contributedBy?: string;
   verified?: boolean;
   isUnreleased?: boolean;
+  isReleased?: boolean;       // Matched to Spotify — confirmed release
   isId?: boolean;
   hasConflict?: boolean;
   conflictId?: string;
@@ -34,6 +35,11 @@ export interface Track {
   // Multi-source identification
   sources?: TrackSource[];
   confidence?: number; // 0-1 confidence score
+  // Spotify enrichment
+  previewUrl?: string;        // 30-second Spotify preview MP3
+  isrc?: string;              // International Standard Recording Code
+  releaseDate?: string;       // YYYY-MM-DD
+  popularity?: number;        // 0-100 Spotify popularity
 }
 
 // Track identification from a specific platform

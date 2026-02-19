@@ -18,7 +18,7 @@ function extractYouTubeVideoId(url) {
 // Generate YouTube thumbnail URL from video ID
 function getYouTubeThumbnail(videoId) {
   if (!videoId) return null;
-  return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  return `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
 }
 
 function getSupabaseClient() {

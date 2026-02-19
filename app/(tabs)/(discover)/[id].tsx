@@ -126,7 +126,7 @@ export default function SetDetailScreen() {
             venue: data.set.venue,
             date: new Date(data.set.date),
             totalDuration: data.set.totalDuration || 0,
-            coverUrl: data.set.coverUrl || null,
+            coverUrl: data.set.coverUrl || undefined,
             plays: data.set.trackCount * 10,
             sourceLinks: data.set.sourceLinks || [],
             tracks: data.set.tracks?.map((t: any) => ({
@@ -653,7 +653,7 @@ export default function SetDetailScreen() {
                       const transformedSet: SetList = {
                         id: data.set.id, name: data.set.name, artist: data.set.artist,
                         venue: data.set.venue, date: new Date(data.set.date),
-                        totalDuration: data.set.totalDuration || 0, coverUrl: data.set.coverUrl || null,
+                        totalDuration: data.set.totalDuration || 0, coverUrl: data.set.coverUrl || undefined,
                         plays: data.set.trackCount * 10, sourceLinks: data.set.sourceLinks || [],
                         tracks: data.set.tracks?.map((t: any) => ({
                           id: t.id, title: t.title, artist: t.artist, duration: 0, coverUrl: '',
@@ -737,7 +737,7 @@ export default function SetDetailScreen() {
       duration: trackData.duration || 0,
       bpm: trackData.bpm,
       key: trackData.key,
-      coverUrl: trackData.coverUrl || null,
+      coverUrl: trackData.coverUrl || undefined,
       addedAt: new Date(),
       source: 'manual',
       timestamp: trackData.timestamp,
@@ -997,7 +997,7 @@ export default function SetDetailScreen() {
               )}
               {(setList.totalDuration || 0) > 0 ? (
                 <>
-                  <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration)}</Text>
+                  <Text style={styles.quickStatText}>{formatTotalDuration(setList.totalDuration || 0)}</Text>
                   <Text style={styles.quickStatDot}>•</Text>
                 </>
               ) : null}
@@ -1151,7 +1151,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || null,
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || undefined,
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -1274,7 +1274,7 @@ export default function SetDetailScreen() {
                                   venue: refreshData.set.venue,
                                   date: new Date(refreshData.set.date),
                                   totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || null,
+                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || undefined,
                                   plays: refreshData.set.trackCount * 10,
                                   sourceLinks: refreshData.set.sourceLinks || [],
                                   tracks: refreshData.set.tracks?.map((t: any) => ({
@@ -1946,7 +1946,7 @@ export default function SetDetailScreen() {
                   venue: refreshData.set.venue,
                   date: new Date(refreshData.set.date),
                   totalDuration: refreshData.set.totalDuration || 0,
-                  coverUrl: refreshData.set.coverUrl || null,
+                  coverUrl: refreshData.set.coverUrl || undefined,
                   plays: refreshData.set.trackCount * 10,
                   sourceLinks: refreshData.set.sourceLinks || [],
                   tracks: refreshData.set.tracks?.map((t: any) => ({
