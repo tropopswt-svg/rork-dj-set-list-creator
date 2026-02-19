@@ -301,11 +301,11 @@ export default function TrackCard({
                 <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
               </View>
             )}
-            {/* Only show Released badge when we have confirmed database match */}
+            {/* Spotify verified badge — track matched to Spotify */}
             {!isUnidentified && !showUnreleasedBadge && !showPartialIdBadge && hasConfirmedRelease && (
-              <View style={styles.releasedBadge}>
-                <CircleDot size={9} color="#22C55E" />
-                <Text style={styles.releasedBadgeText}>Released</Text>
+              <View style={styles.spotifyVerifiedBadge}>
+                <Music2 size={9} color="#1DB954" />
+                <Text style={styles.spotifyVerifiedText}>Spotify</Text>
               </View>
             )}
             {track.trackLinks && track.trackLinks.length > 0 && (
@@ -599,6 +599,20 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600' as const,
     color: '#22C55E',
+  },
+  spotifyVerifiedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    backgroundColor: 'rgba(29, 185, 84, 0.15)',
+  },
+  spotifyVerifiedText: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    color: '#1DB954',
   },
   linkBadge: {
     backgroundColor: 'rgba(59, 130, 246, 0.15)',

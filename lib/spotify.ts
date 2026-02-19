@@ -106,9 +106,21 @@ export async function searchSpotifyTrack(artist: string, title: string): Promise
     .replace(/\(unreleased\)/gi, '')
     .replace(/\(free download\)/gi, '')
     .replace(/\(clip\)/gi, '')
+    // Strip surrogate pairs and non-BMP characters that break encodeURIComponent
+    .replace(/[\uD800-\uDFFF]/g, '')
+    .replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, '')
     .trim();
 
-  const query = encodeURIComponent(`track:${cleanTitle} artist:${artist}`);
+  let query: string;
+  try {
+    query = encodeURIComponent(`track:${cleanTitle} artist:${artist}`);
+  } catch {
+    // Fallback: strip to ASCII-safe characters
+    const safeTitle = cleanTitle.replace(/[^\w\s-]/g, '').trim();
+    const safeArtist = artist.replace(/[^\w\s-]/g, '').trim();
+    if (!safeTitle && !safeArtist) return { found: false };
+    query = encodeURIComponent(`track:${safeTitle} artist:${safeArtist}`);
+  }
 
   try {
     const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`, {

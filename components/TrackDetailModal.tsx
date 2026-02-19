@@ -1,16 +1,21 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Linking, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, Linking, ScrollView, Animated, Easing } from 'react-native';
 import { Image } from 'expo-image';
-import { 
-  X, 
-  Play, 
-  Clock, 
-  CheckCircle, 
+import { Audio } from 'expo-av';
+import {
+  X,
+  Play,
+  Pause,
+  Clock,
+  CheckCircle,
   AlertCircle,
   ExternalLink,
   ChevronRight,
   Music,
   Disc3,
+  Calendar,
+  BarChart3,
+  Shield,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
@@ -35,13 +40,76 @@ const PLATFORM_CONFIG: Record<string, { label: string; color: string; icon?: str
   other: { label: 'Link', color: Colors.dark.textMuted },
 };
 
-export default function TrackDetailModal({ 
-  visible, 
-  track, 
+export default function TrackDetailModal({
+  visible,
+  track,
   onClose,
   onPlayTimestamp,
 }: TrackDetailModalProps) {
   const router = useRouter();
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const progressAnim = useRef(new Animated.Value(0)).current;
+  const progressAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Clean up audio on close
+  useEffect(() => {
+    if (!visible) {
+      stopPreview();
+    }
+    return () => { stopPreview(); };
+  }, [visible]);
+
+  const stopPreview = async () => {
+    if (progressAnimRef.current) {
+      progressAnimRef.current.stop();
+      progressAnimRef.current = null;
+    }
+    progressAnim.setValue(0);
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+    setIsPlayingPreview(false);
+  };
+
+  const playPreview = async () => {
+    if (!track?.previewUrl) return;
+
+    if (isPlayingPreview) {
+      await stopPreview();
+      return;
+    }
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: track.previewUrl },
+        { shouldPlay: true }
+      );
+      soundRef.current = sound;
+      setIsPlayingPreview(true);
+
+      // Animate progress bar over 30 seconds
+      progressAnim.setValue(0);
+      const anim = Animated.timing(progressAnim, {
+        toValue: 1,
+        duration: 30000,
+        easing: Easing.linear,
+        useNativeDriver: false,
+      });
+      progressAnimRef.current = anim;
+      anim.start();
+
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          stopPreview();
+        }
+      });
+    } catch {
+      setIsPlayingPreview(false);
+    }
+  };
 
   if (!track) return null;
 
@@ -63,7 +131,6 @@ export default function TrackDetailModal({
   const handleArtistPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onClose();
-    // Create a slug from the artist name
     const slug = track.artist.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     router.push(`/artist/${slug}`);
   };
@@ -74,9 +141,17 @@ export default function TrackDetailModal({
     onPlayTimestamp?.();
   };
 
+  const isSpotifyVerified = !!track.isReleased;
+
   const getSourceBadge = () => {
+    if (track.isId) {
+      return { label: 'Unidentified', color: Colors.dark.primary, icon: AlertCircle };
+    }
     if (track.isUnreleased) {
       return { label: 'Unreleased', color: '#EC4899', icon: AlertCircle };
+    }
+    if (isSpotifyVerified) {
+      return { label: 'Verified on Spotify', color: '#1DB954', icon: Shield };
     }
     return { label: 'Released', color: Colors.dark.success, icon: CheckCircle };
   };
@@ -142,24 +217,66 @@ export default function TrackDetailModal({
               </Pressable>
             )}
 
+            {/* Spotify Preview Player */}
+            {track.previewUrl && (
+              <Pressable style={styles.previewSection} onPress={playPreview}>
+                <View style={styles.previewLeft}>
+                  <View style={[styles.previewPlayBtn, isPlayingPreview && styles.previewPlayBtnActive]}>
+                    {isPlayingPreview ?
+                      <Pause size={16} color="#FFFFFF" fill="#FFFFFF" /> :
+                      <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                    }
+                  </View>
+                  <View style={styles.previewInfo}>
+                    <Text style={styles.previewLabel}>
+                      {isPlayingPreview ? 'Playing Preview' : '30-Second Preview'}
+                    </Text>
+                    <View style={styles.previewBarBg}>
+                      <Animated.View style={[styles.previewBarFill, {
+                        width: progressAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0%', '100%'],
+                        }),
+                      }]} />
+                    </View>
+                  </View>
+                </View>
+                <Text style={styles.previewPowered}>Spotify</Text>
+              </Pressable>
+            )}
+
             {/* Track Metadata */}
             <View style={styles.metaSection}>
-              {track.bpm && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>BPM</Text>
-                  <Text style={styles.metaValue}>{track.bpm}</Text>
-                </View>
-              )}
-              {track.key && (
-                <View style={styles.metaItem}>
-                  <Text style={styles.metaLabel}>Key</Text>
-                  <Text style={styles.metaValue}>{track.key}</Text>
-                </View>
-              )}
               {track.album && (
                 <View style={styles.metaItem}>
                   <Text style={styles.metaLabel}>Album</Text>
                   <Text style={styles.metaValue} numberOfLines={1}>{track.album}</Text>
+                </View>
+              )}
+              {track.releaseDate && (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Released</Text>
+                  <Text style={styles.metaValue}>{track.releaseDate.substring(0, 4)}</Text>
+                </View>
+              )}
+              {track.bpm ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>BPM</Text>
+                  <Text style={styles.metaValue}>{track.bpm}</Text>
+                </View>
+              ) : null}
+              {track.key ? (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Key</Text>
+                  <Text style={styles.metaValue}>{track.key}</Text>
+                </View>
+              ) : null}
+              {(track.popularity !== undefined && track.popularity > 0) && (
+                <View style={styles.metaItem}>
+                  <Text style={styles.metaLabel}>Popularity</Text>
+                  <View style={styles.popularityBar}>
+                    <View style={[styles.popularityFill, { width: `${track.popularity}%` }]} />
+                  </View>
                 </View>
               )}
             </View>
@@ -443,6 +560,73 @@ const styles = StyleSheet.create({
   spotifySearchCard: {
     borderColor: 'rgba(29, 185, 84, 0.4)',
     flex: 1,
+  },
+  previewSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(29, 185, 84, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 185, 84, 0.25)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+  previewLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  previewPlayBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#1DB954',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewPlayBtnActive: {
+    backgroundColor: '#16a34a',
+  },
+  previewInfo: {
+    flex: 1,
+  },
+  previewLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1DB954',
+    marginBottom: 6,
+  },
+  previewBarBg: {
+    height: 3,
+    backgroundColor: 'rgba(29, 185, 84, 0.2)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  previewBarFill: {
+    height: '100%',
+    backgroundColor: '#1DB954',
+    borderRadius: 2,
+  },
+  previewPowered: {
+    fontSize: 10,
+    color: 'rgba(29, 185, 84, 0.6)',
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  popularityBar: {
+    width: '100%',
+    height: 4,
+    backgroundColor: Colors.dark.surfaceLight,
+    borderRadius: 2,
+    overflow: 'hidden',
+    marginTop: 4,
+  },
+  popularityFill: {
+    height: '100%',
+    backgroundColor: '#1DB954',
+    borderRadius: 2,
   },
   artistSection: {
     marginBottom: 20,
