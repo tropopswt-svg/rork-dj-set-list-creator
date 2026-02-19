@@ -63,6 +63,11 @@ export interface ProcessedVideo {
   }>;
 }
 
+export interface YouTubeFilters extends PlatformFilters {
+  maxDuration?: number; // Filter out long DJ sets/mixes
+  mixKeywords?: string[]; // Keywords that indicate a DJ set/mix (to exclude)
+}
+
 export interface ScraperConfig {
   tiktok?: {
     accounts: string[];
@@ -71,6 +76,19 @@ export interface ScraperConfig {
   };
   instagram?: {
     accounts: string[];
+    filters: PlatformFilters;
+    scrapeOptions?: ScrapeOptions;
+  };
+  youtube?: {
+    channels: string[]; // @handles or channel IDs
+    searchQueries?: string[];
+    filters: YouTubeFilters;
+    scrapeOptions?: ScrapeOptions & {
+      maxResultsPerQuery?: number;
+    };
+  };
+  soundcloud?: {
+    profiles: string[]; // SoundCloud profile URLs or usernames
     filters: PlatformFilters;
     scrapeOptions?: ScrapeOptions;
   };
@@ -281,6 +299,103 @@ export function normalizeInstagramPost(post: InstagramPost): ProcessedVideo {
 }
 
 // ============================================
+// YouTube Normalization
+// ============================================
+
+/**
+ * Normalize a YouTube video (from fetchVideoDetails) to ProcessedVideo format
+ */
+export function normalizeYouTubeVideo(
+  video: YouTubeVideoInfo,
+  comments?: YouTubeComment[]
+): ProcessedVideo {
+  const durationSeconds = video.durationSeconds ?? parseDuration(video.duration);
+
+  return {
+    id: video.id,
+    platform: 'youtube',
+    url: `https://www.youtube.com/watch?v=${video.id}`,
+    title: video.title,
+    description: video.description,
+    duration: durationSeconds,
+    uploadDate: new Date(video.publishedAt),
+    username: video.channelTitle,
+    comments: comments?.map((c) => ({
+      text: c.text,
+      username: c.authorName,
+    })),
+  };
+}
+
+/**
+ * Normalize a YouTube search result to ProcessedVideo (partial — needs fetchVideoDetails for duration)
+ */
+export function normalizeYouTubeSearchResult(
+  result: YouTubeSearchResult,
+  details?: YouTubeVideoInfo,
+  comments?: YouTubeComment[]
+): ProcessedVideo {
+  const durationSeconds = details?.durationSeconds ?? (details ? parseDuration(details.duration) : 0);
+
+  return {
+    id: result.videoId,
+    platform: 'youtube',
+    url: `https://www.youtube.com/watch?v=${result.videoId}`,
+    title: details?.title || result.title,
+    description: details?.description || result.description,
+    duration: durationSeconds,
+    uploadDate: new Date(result.publishedAt),
+    username: result.channelTitle,
+    comments: comments?.map((c) => ({
+      text: c.text,
+      username: c.authorName,
+    })),
+  };
+}
+
+// ============================================
+// YouTube-Specific Filtering
+// ============================================
+
+const DEFAULT_MIX_KEYWORDS = [
+  'dj set', 'dj mix', 'live set', 'live mix',
+  'b2b', 'boiler room', 'essential mix',
+  'full set', 'closing set', 'opening set',
+  'radio show', 'podcast', 'mix of the',
+  'hour mix', 'hr mix', 'minute mix', 'min mix',
+];
+
+/**
+ * Check if a YouTube video passes YouTube-specific filters
+ * (extends standard passesFilters with max duration and mix detection)
+ */
+export function passesYouTubeFilters(
+  video: ProcessedVideo,
+  filters: YouTubeFilters
+): { passes: boolean; reason?: string } {
+  // Standard filters first
+  const baseResult = passesFilters(video, filters);
+  if (!baseResult.passes) return baseResult;
+
+  // Max duration filter (to exclude full DJ sets/mixes)
+  if (filters.maxDuration && video.duration > filters.maxDuration) {
+    return { passes: false, reason: `Too long (${video.duration}s > ${filters.maxDuration}s max) — likely a full set/mix` };
+  }
+
+  // Mix/set keyword detection
+  const mixKeywords = filters.mixKeywords || DEFAULT_MIX_KEYWORDS;
+  const fullText = `${video.title} ${video.description}`.toLowerCase();
+
+  for (const keyword of mixKeywords) {
+    if (fullText.includes(keyword.toLowerCase())) {
+      return { passes: false, reason: `Likely a DJ set/mix (matched: "${keyword}")` };
+    }
+  }
+
+  return { passes: true };
+}
+
+// ============================================
 // Title Parsing
 // ============================================
 
@@ -473,7 +588,13 @@ export async function downloadAudioWithFallback(
     return outputPath;
   }
 
-  // Try CDN URL first (downloadAddr preferred, then playAddr, then videoUrl)
+  // YouTube and SoundCloud: skip CDN, go straight to yt-dlp (which handles these natively)
+  if (video.platform === 'youtube' || video.platform === 'soundcloud') {
+    console.log(`  Downloading via yt-dlp (${video.platform})...`);
+    return downloadAudioYtdlp(video.url, outputPath);
+  }
+
+  // TikTok/Instagram: try CDN URL first (downloadAddr preferred, then playAddr, then videoUrl)
   const cdnUrl = video.directVideoUrl || video.directPlayUrl;
   if (cdnUrl) {
     console.log(`  Trying CDN download...`);

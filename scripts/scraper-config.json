@@ -71,6 +71,76 @@
       "maxComments": 100
     }
   },
+  "youtube": {
+    "channels": [
+      "@Cloonee",
+      "@pawsamusic",
+      "@PatrickTopping",
+      "@SonnyFodera",
+      "@KETTAMA",
+      "@ProspaUK",
+      "@JoshBakerMusic",
+      "@HotSince82",
+      "@JamesHype",
+      "@johnsummit",
+      "@DomDolla",
+      "@Skaborofficial",
+      "@EatsEverything"
+    ],
+    "searchQueries": [
+      "unreleased techno 2026",
+      "unreleased house music 2026",
+      "unreleased tech house",
+      "track ID techno",
+      "track ID house music",
+      "unreleased dubplate DJ",
+      "forthcoming techno house",
+      "new unreleased electronic music"
+    ],
+    "filters": {
+      "minDuration": 30,
+      "maxDuration": 600,
+      "maxAge": 90,
+      "keywords": [],
+      "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"],
+      "mixKeywords": [
+        "dj set", "dj mix", "live set", "live mix",
+        "b2b", "boiler room", "essential mix",
+        "full set", "closing set", "opening set",
+        "radio show", "podcast", "mix of the",
+        "hour mix", "hr mix", "minute mix", "min mix"
+      ]
+    },
+    "scrapeOptions": {
+      "maxVideos": 30,
+      "includeComments": true,
+      "maxComments": 200,
+      "maxResultsPerQuery": 25
+    }
+  },
+  "soundcloud": {
+    "profiles": [
+      "cloonee",
+      "pawsa",
+      "patricktopping",
+      "sonnyfodera",
+      "kettama",
+      "prospa-uk",
+      "hotsince82",
+      "eats-everything"
+    ],
+    "filters": {
+      "minDuration": 30,
+      "maxAge": 90,
+      "keywords": [],
+      "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"]
+    },
+    "scrapeOptions": {
+      "maxVideos": 30,
+      "includeComments": false,
+      "maxComments": 0
+    }
+  },
   "discovery": {
     "tiktok": {
       "hashtags": [
