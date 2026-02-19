@@ -65,6 +65,7 @@
       gap: 12px;
     }
 
+    .signup-form input[type="text"],
     .signup-form input[type="email"] {
       width: 100%;
       padding: 16px 20px;
@@ -78,10 +79,12 @@
       transition: border-color 0.2s;
     }
 
+    .signup-form input[type="text"]::placeholder,
     .signup-form input[type="email"]::placeholder {
       color: rgba(245, 240, 232, 0.4);
     }
 
+    .signup-form input[type="text"]:focus,
     .signup-form input[type="email"]:focus {
       border-color: #C41E3A;
     }
@@ -239,7 +242,9 @@
       <p class="tagline">Know every track.<br>From the set to your playlist.</p>
 
       <form class="signup-form" id="waitlistForm">
-        <input type="email" id="emailInput" placeholder="Enter your email" required autocomplete="email" inputmode="email">
+        <input type="text" id="nameInput" placeholder="Your name" required autocomplete="name">
+        <input type="text" id="cityInput" placeholder="Your city" required autocomplete="address-level2">
+        <input type="email" id="emailInput" placeholder="Your email" required autocomplete="email" inputmode="email">
         <button type="submit" id="submitBtn">Join the Waitlist</button>
         <p class="form-message" id="formMessage"></p>
       </form>
@@ -294,6 +299,8 @@
       const source = params.get('ref') || 'direct';
 
       const form = document.getElementById('waitlistForm');
+      const nameInput = document.getElementById('nameInput');
+      const cityInput = document.getElementById('cityInput');
       const emailInput = document.getElementById('emailInput');
       const submitBtn = document.getElementById('submitBtn');
       const formMessage = document.getElementById('formMessage');
@@ -315,9 +322,11 @@
       // Form submit
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        const name = nameInput.value.trim();
+        const city = cityInput.value.trim();
         const email = emailInput.value.trim();
 
-        if (!email) return;
+        if (!email || !name || !city) return;
 
         submitBtn.disabled = true;
         submitBtn.textContent = 'Joining...';
@@ -328,7 +337,7 @@
           const res = await fetch('/api/waitlist', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, source })
+            body: JSON.stringify({ email, name, city, source })
           });
 
           const data = await res.json();

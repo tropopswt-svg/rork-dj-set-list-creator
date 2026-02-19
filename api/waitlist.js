@@ -48,18 +48,19 @@ export default async function handler(req, res) {
   // POST — add email to waitlist
   if (req.method === 'POST') {
     try {
-      const { email, source } = req.body || {};
+      const { email, name, city, source } = req.body || {};
 
       if (!email || !isValidEmail(email)) {
         return res.status(400).json({ error: 'Valid email is required' });
       }
 
+      const row = { email: email.toLowerCase().trim(), source: source || 'direct' };
+      if (name) row.name = name.trim();
+      if (city) row.city = city.trim();
+
       const { data, error } = await supabase
         .from('waitlist')
-        .upsert(
-          { email: email.toLowerCase().trim(), source: source || 'direct' },
-          { onConflict: 'email' }
-        )
+        .upsert(row, { onConflict: 'email' })
         .select();
 
       if (error) throw error;
