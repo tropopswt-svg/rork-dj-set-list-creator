@@ -2,43 +2,173 @@ name: Social Media Scraper
 
 on:
   schedule:
-    # Daily account scrape at 2 AM UTC
+    # Daily curator scrape at 2 AM UTC (repost pages + labels - highest value)
     - cron: '0 2 * * *'
-  workflow_dispatch: {}
+    # Weekly full scrape on Sundays at 3 AM UTC (all artists + curators)
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Scrape mode'
+        required: true
+        default: 'daily'
+        type: choice
+        options:
+          - daily
+          - weekly
+          - curators-only
+          - minimal-only
 
 jobs:
-  scrape:
+  # Daily: Curator/repost pages + label accounts (highest density of unreleased content)
+  scrape-daily:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '0 2 * * *') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'daily')
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - run: bun install
-      - run: bun scripts/social-scraper.ts --config ./scripts/scraper-config.json
-        env:
-          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
-          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
-          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
 
-  discover:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    # Weekly hashtag discovery on Sundays at 3 AM UTC
-    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * 0'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install
-      - run: bun scripts/discover-trending.ts
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      # Scrape curator/repost pages (track ID pages with high unreleased content)
+      - name: Scrape curator accounts (Instagram)
+        run: |
+          bun scripts/social-scraper.ts --platform instagram --accounts \
+            deeptechminimal,deephousemusicc,deephousesounds,\
+            kingofunreleasedhousemusic,housemusicbro,soundofhousemusic_,\
+            housemusicwithlove,deeptechlab,localhouseplug
         env:
           APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
           ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
           ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
           EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
-          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # Scrape label accounts (previews of forthcoming releases)
+      - name: Scrape label accounts (Instagram)
+        run: |
+          bun scripts/social-scraper.ts --platform instagram --accounts \
+            shallnotfade,pivrecords,moxymuzik,lobstertheremin_,fuserecords,\
+            pinarecords.pt,dansudiscs,17stepsrecords,kneedeepinsound,\
+            crosstownrebels,secretsundaze,rhythmsectionhq,hessleaudio,feelmybicep
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # Also scrape the most active minimal artists
+      - name: Scrape minimal artists (Instagram)
+        run: |
+          bun scripts/social-scraper.ts --platform instagram --accounts \
+            eastenddubs,enzosiragusa,sebzito,richnxt,chrisstussy,maxdeanmusic,\
+            joshbakermusic,sweely_music,frankyrizardo,lucadonzelli,dj_boring,\
+            archiehamiltonmusic,djsteaw,jobjobse,detroitswindle
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+  # Weekly: Full config scrape (all artists + all curators + all labels)
+  scrape-weekly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    if: >
+      (github.event_name == 'schedule' && github.event.schedule == '0 3 * * 0') ||
+      (github.event_name == 'workflow_dispatch' && inputs.mode == 'weekly')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      # Full config scrape (all Instagram accounts + curators from config)
+      - name: Full Instagram scrape
+        run: bun scripts/social-scraper.ts --platform instagram --config ./scripts/scraper-config.json
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # Process any pending/failed uploads
+      - name: Retry failed uploads
+        run: bun scripts/social-scraper.ts --process-pending
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+  # Manual: Just curator/label accounts
+  scrape-curators:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'curators-only'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Scrape curator + label accounts
+        run: |
+          bun scripts/social-scraper.ts --platform instagram --accounts \
+            deeptechminimal,deephousemusicc,deephousesounds,\
+            kingofunreleasedhousemusic,housemusicbro,soundofhousemusic_,\
+            housemusicwithlove,deeptechlab,localhouseplug,\
+            shallnotfade,pivrecords,moxymuzik,lobstertheremin_,fuserecords,\
+            pinarecords.pt,dansudiscs,17stepsrecords,kneedeepinsound,\
+            crosstownrebels,secretsundaze,rhythmsectionhq,hessleaudio,feelmybicep
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+  # Manual: Just minimal artists
+  scrape-minimal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' && inputs.mode == 'minimal-only'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Scrape minimal artists
+        run: |
+          bun scripts/social-scraper.ts --platform instagram --accounts \
+            eastenddubs,enzosiragusa,sebzito,richnxt,chrisstussy,maxdeanmusic,\
+            joshbakermusic,sweely_music,dj_boring,archiehamiltonmusic
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}

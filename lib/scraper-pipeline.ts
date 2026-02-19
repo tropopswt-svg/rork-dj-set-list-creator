@@ -559,6 +559,7 @@ export async function downloadAudioYtdlp(
       '--output',
       outputPath,
       '--no-playlist',
+      '--no-check-certificates',
       '--ffmpeg-location',
       path.dirname(FFMPEG_PATH),
     ];

@@ -350,7 +350,7 @@ async function processPending(): Promise<void> {
 // CLI Commands
 // ============================================
 
-async function runFromConfig(configPath: string, dryRun: boolean): Promise<void> {
+async function runFromConfig(configPath: string, dryRun: boolean, platformFilter?: 'tiktok' | 'instagram'): Promise<void> {
   const configFile = fs.existsSync(configPath)
     ? configPath
     : DEFAULT_CONFIG_PATH;
@@ -367,11 +367,12 @@ async function runFromConfig(configPath: string, dryRun: boolean): Promise<void>
   console.log('TikTok & Instagram Social Scraper');
   console.log('='.repeat(60));
   console.log(`Config: ${configFile}`);
+  console.log(`Platform: ${platformFilter || 'all'}`);
   console.log(`Dry run: ${dryRun}`);
   console.log('');
 
-  // Scrape TikTok accounts
-  if (config.tiktok && config.tiktok.accounts.length > 0) {
+  // Scrape TikTok accounts (skip if platform filter is instagram-only)
+  if ((!platformFilter || platformFilter === 'tiktok') && config.tiktok && config.tiktok.accounts.length > 0) {
     console.log(`\n${'='.repeat(40)}`);
     console.log(`TikTok Accounts: ${config.tiktok.accounts.join(', ')}`);
     console.log('='.repeat(40));
@@ -384,18 +385,28 @@ async function runFromConfig(configPath: string, dryRun: boolean): Promise<void>
     allVideos.push(...tiktokVideos);
   }
 
-  // Scrape Instagram accounts
-  if (config.instagram && config.instagram.accounts.length > 0) {
-    console.log(`\n${'='.repeat(40)}`);
-    console.log(`Instagram Accounts: ${config.instagram.accounts.join(', ')}`);
-    console.log('='.repeat(40));
+  // Scrape Instagram accounts (skip if platform filter is tiktok-only)
+  if ((!platformFilter || platformFilter === 'instagram') && config.instagram) {
+    // Merge curator accounts + regular accounts, dedup
+    const allAccounts = [
+      ...((config.instagram as any).curatorAccounts || []),
+      ...(config.instagram.accounts || []),
+    ];
+    const uniqueAccounts = [...new Set(allAccounts)];
 
-    const igVideos = await scrapeInstagramAccounts(
-      config.instagram.accounts,
-      config.instagram.filters,
-      config.instagram.scrapeOptions
-    );
-    allVideos.push(...igVideos);
+    if (uniqueAccounts.length > 0) {
+      const curatorCount = ((config.instagram as any).curatorAccounts || []).length;
+      console.log(`\n${'='.repeat(40)}`);
+      console.log(`Instagram Accounts: ${uniqueAccounts.length} total (${curatorCount} curators + ${uniqueAccounts.length - curatorCount} artists)`);
+      console.log('='.repeat(40));
+
+      const igVideos = await scrapeInstagramAccounts(
+        uniqueAccounts,
+        config.instagram.filters,
+        config.instagram.scrapeOptions
+      );
+      allVideos.push(...igVideos);
+    }
   }
 
   console.log(`\n${'='.repeat(40)}`);
@@ -547,24 +558,29 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Run from config
+  // Parse platform filter (can be used with --config or --accounts)
+  const platformIdx = args.indexOf('--platform');
+  const platform = platformIdx !== -1 ? args[platformIdx + 1] as 'tiktok' | 'instagram' : undefined;
+  if (platform && !['tiktok', 'instagram'].includes(platform)) {
+    console.error('Invalid platform. Use: tiktok or instagram');
+    process.exit(1);
+  }
+
+  // Run from config (optionally filtered by platform)
   const configIdx = args.indexOf('--config');
   if (configIdx !== -1) {
     const configPath = args[configIdx + 1] || DEFAULT_CONFIG_PATH;
-    await runFromConfig(configPath, dryRun);
+    await runFromConfig(configPath, dryRun, platform);
     return;
   }
 
-  // Run for specific platform
-  const platformIdx = args.indexOf('--platform');
+  // Run for specific platform with explicit accounts
   const accountsIdx = args.indexOf('--accounts');
-
   if (platformIdx !== -1 && accountsIdx !== -1) {
-    const platform = args[platformIdx + 1] as 'tiktok' | 'instagram';
     const accountsStr = args[accountsIdx + 1];
 
-    if (!platform || !['tiktok', 'instagram'].includes(platform)) {
-      console.error('Invalid platform. Use: tiktok or instagram');
+    if (!platform) {
+      console.error('No platform specified');
       process.exit(1);
     }
 
@@ -578,7 +594,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Default: run from config
+  // --platform without --accounts or --config: use config filtered by platform
+  if (platformIdx !== -1 && platform) {
+    await runFromConfig(DEFAULT_CONFIG_PATH, dryRun, platform);
+    return;
+  }
+
+  // Default: run from config (all platforms)
   await runFromConfig(DEFAULT_CONFIG_PATH, dryRun);
 }
 
