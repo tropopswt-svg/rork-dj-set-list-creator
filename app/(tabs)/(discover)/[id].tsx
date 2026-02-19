@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert, LayoutChangeEvent } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -25,7 +25,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackCard from '@/components/TrackCard';
-import DraggableTrackCard from '@/components/DraggableTrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import FillGapModal from '@/components/FillGapModal';
 import ArtistLink from '@/components/ArtistLink';
@@ -91,12 +90,9 @@ export default function SetDetailScreen() {
   // Track votes on timestamp conflicts (conflictTimestamp -> selected track)
   const [timestampVotes, setTimestampVotes] = useState<Record<number, Track>>({});
 
-  // Gap positions for drag-and-drop (gapId -> { y, timestamp })
-  const [gapPositions, setGapPositions] = useState<Record<string, { y: number; timestamp: number }>>({});
-  const [isDraggingTrack, setIsDraggingTrack] = useState(false);
-  const [highlightedGap, setHighlightedGap] = useState<string | null>(null);
+  // Pick-and-place: tap an unplaced track to pick it, then tap a gap to place it
+  const [pickedTrack, setPickedTrack] = useState<Track | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
-  const scrollOffset = useRef(0);
 
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -770,67 +766,19 @@ export default function SetDetailScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
-  // Handle gap position measurement for drag-and-drop
-  const handleGapLayout = (gapId: string, timestamp: number) => (event: LayoutChangeEvent) => {
-    const { y, height } = event.nativeEvent.layout;
-    // We need to account for scroll offset and get absolute position
-    setGapPositions(prev => ({
-      ...prev,
-      [gapId]: { y: y + scrollOffset.current, timestamp },
-    }));
-  };
-
-  // Handle track drop from unplaced section
-  const handleTrackDrop = (track: Track, dropY: number) => {
-    if (!setList) return;
-
-    // Find the closest gap above the drop position
-    const gaps = Object.entries(gapPositions);
-    let closestGap: { gapId: string; timestamp: number } | null = null;
-    let closestDistance = Infinity;
-
-    for (const [gapId, { y, timestamp }] of gaps) {
-      // Calculate distance from drop point to gap
-      const distance = Math.abs(dropY - y);
-      if (distance < closestDistance && dropY > y - 100) {
-        closestDistance = distance;
-        closestGap = { gapId, timestamp };
-      }
-    }
-
-    // If we found a close enough gap, place the track there
-    if (closestGap && closestDistance < 300) {
-      if (__DEV__) console.log('[Drop] Placing track at timestamp:', closestGap.timestamp);
-
-      // Create a new track with the timestamp
-      const placedTrack: Track = {
-        ...track,
-        id: `placed-${Date.now()}`,
-        timestamp: closestGap.timestamp,
-        source: 'manual',
-        contributedBy: 'You',
-      };
-
-      // Add the track to the set
-      addTracksToSet(setList.id, [placedTrack]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert(
-        'Track Placed',
-        `"${track.title}" has been added at ${formatTimestamp(closestGap.timestamp)}`,
-        [{ text: 'OK' }]
-      );
-    } else {
-      // No gap found nearby
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      Alert.alert(
-        'Drop Cancelled',
-        'Drag the track higher to place it in a gap in the timeline.',
-        [{ text: 'OK' }]
-      );
-    }
-
-    setIsDraggingTrack(false);
-    setHighlightedGap(null);
+  // Handle placing a picked track into a gap
+  const handlePlaceTrack = (timestamp: number) => {
+    if (!pickedTrack || !setList) return;
+    const placedTrack: Track = {
+      ...pickedTrack,
+      id: `placed-${Date.now()}`,
+      timestamp,
+      source: 'manual',
+      contributedBy: 'You',
+    };
+    addTracksToSet(setList.id, [placedTrack]);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setPickedTrack(null);
   };
 
   // Format timestamp helper
@@ -975,10 +923,6 @@ export default function SetDetailScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        scrollEventThrottle={16}
-        onScroll={(e) => {
-          scrollOffset.current = e.nativeEvent.contentOffset.y;
-        }}
       >
         <View style={styles.headerImage}>
           <Image
@@ -1604,31 +1548,31 @@ export default function SetDetailScreen() {
                   return `${mins}:${s.toString().padStart(2, '0')}`;
                 };
                 const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
-                const isHighlighted = isDraggingTrack && highlightedGap === item.gapId;
                 const hasAudioSource = !!audioSource;
+                const isPickMode = !!pickedTrack;
 
                 return (
-                  <View
+                  <Pressable
                     key={item.gapId}
                     style={[
                       styles.gapIndicator,
-                      isDraggingTrack && styles.gapIndicatorDropTarget,
-                      isHighlighted && styles.gapIndicatorHighlighted,
+                      isPickMode && styles.gapIndicatorDropTarget,
                     ]}
-                    onLayout={handleGapLayout(item.gapId, item.timestamp)}
+                    onPress={isPickMode ? () => handlePlaceTrack(item.timestamp) : undefined}
+                    disabled={!isPickMode}
                   >
                     <View style={styles.gapTimestamp}>
                       <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
                     </View>
                     <View style={styles.gapContent}>
-                      <View style={[styles.gapLine, isDraggingTrack && styles.gapLineActive]} />
-                      <Text style={[styles.gapText, isDraggingTrack && styles.gapTextActive]}>
-                        {isDraggingTrack ? 'Drop here' : `~${estimatedTracks} track${estimatedTracks > 1 ? 's' : ''} missing`}
+                      <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
+                      <Text style={[styles.gapText, isPickMode && styles.gapTextActive]}>
+                        {isPickMode ? 'Place here' : `~${estimatedTracks} track${estimatedTracks > 1 ? 's' : ''} missing`}
                       </Text>
-                      <View style={[styles.gapLine, isDraggingTrack && styles.gapLineActive]} />
+                      <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
                     </View>
                     <View style={styles.gapActions}>
-                      {hasAudioSource && (
+                      {!isPickMode && hasAudioSource && (
                         <Pressable
                           style={styles.gapIdentifyButton}
                           onPress={() => {
@@ -1642,19 +1586,21 @@ export default function SetDetailScreen() {
                           <Text style={styles.gapIdentifyText}>Identify</Text>
                         </Pressable>
                       )}
-                      <Pressable
-                        style={styles.gapAddButton}
-                        onPress={() => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setFillGapTimestamp(item.timestamp);
-                          setShowFillGapModal(true);
-                        }}
-                        hitSlop={8}
-                      >
-                        <Plus size={16} color={Colors.dark.primary} />
-                      </Pressable>
+                      {!isPickMode && (
+                        <Pressable
+                          style={styles.gapAddButton}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setFillGapTimestamp(item.timestamp);
+                            setShowFillGapModal(true);
+                          }}
+                          hitSlop={8}
+                        >
+                          <Plus size={16} color={Colors.dark.primary} />
+                        </Pressable>
+                      )}
                     </View>
-                  </View>
+                  </Pressable>
                 );
               }
 
@@ -1807,39 +1753,52 @@ export default function SetDetailScreen() {
                   </View>
                   <Text style={styles.unplacedSubtitle}>
                     {tracklistItems.length > 0 && estimatedMissingTracks > 0
-                      ? 'Drag tracks up to place them in gaps above'
+                      ? 'Tap a track, then tap a gap to place it'
                       : tracklistItems.length > 0
                       ? 'Add a YouTube or SoundCloud source to place these in the timeline'
                       : 'Add a source to get timestamps'}
                   </Text>
                 </View>
-                {unplacedTracks.map((track, index) => (
-                  // Use draggable card if there are gaps to fill
-                  estimatedMissingTracks > 0 ? (
-                    <DraggableTrackCard
+                {unplacedTracks.map((track, index) => {
+                  const isPicked = pickedTrack?.id === track.id;
+                  return (
+                    <Pressable
                       key={track.id}
-                      track={track}
-                      index={index}
-                      onDragStart={() => setIsDraggingTrack(true)}
-                      onDragEnd={handleTrackDrop}
+                      style={[
+                        styles.unplacedTrackCard,
+                        isPicked && styles.unplacedTrackCardPicked,
+                      ]}
                       onPress={() => {
+                        if (isPicked) {
+                          setPickedTrack(null);
+                        } else if (estimatedMissingTracks > 0) {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setPickedTrack(track);
+                        } else {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedTrack(track);
+                        }
+                      }}
+                      onLongPress={() => {
                         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                         setSelectedTrack(track);
                       }}
-                    />
-                  ) : (
-                    <TrackCard
-                      key={track.id}
-                      track={track}
-                      showIndex={index + 1}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedTrack(track);
-                      }}
-                      onContributorPress={(username) => setSelectedContributor(username)}
-                    />
-                  )
-                ))}
+                    >
+                      <View style={styles.unplacedTrackIndex}>
+                        <Text style={styles.unplacedTrackIndexText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.unplacedTrackInfo}>
+                        <Text style={styles.unplacedTrackTitle} numberOfLines={1}>{track.title}</Text>
+                        <Text style={styles.unplacedTrackArtist} numberOfLines={1}>{track.artist}</Text>
+                      </View>
+                      {isPicked && (
+                        <View style={styles.pickedBadge}>
+                          <Text style={styles.pickedBadgeText}>Selected</Text>
+                        </View>
+                      )}
+                    </Pressable>
+                  );
+                })}
               </View>
             )}
 
@@ -1866,6 +1825,27 @@ export default function SetDetailScreen() {
           {id && <CommentsSection setId={id} />}
         </View>
       </ScrollView>
+
+      {/* Floating banner when a track is picked for placement */}
+      {pickedTrack && (
+        <View style={styles.pickedBanner}>
+          <View style={styles.pickedBannerContent}>
+            <View style={styles.pickedBannerInfo}>
+              <Text style={styles.pickedBannerTitle} numberOfLines={1}>
+                {pickedTrack.artist} - {pickedTrack.title}
+              </Text>
+              <Text style={styles.pickedBannerHint}>Tap a gap above to place</Text>
+            </View>
+            <Pressable
+              style={styles.pickedBannerClose}
+              onPress={() => setPickedTrack(null)}
+              hitSlop={8}
+            >
+              <Text style={styles.pickedBannerCloseText}>✕</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
 
       <AddTrackModal
         visible={showAddModal}
@@ -2708,11 +2688,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     minHeight: 44,
   },
-  gapIndicatorHighlighted: {
-    backgroundColor: 'rgba(255, 107, 53, 0.25)',
-    borderColor: Colors.dark.primary,
-    borderWidth: 2,
-  },
   gapLineActive: {
     backgroundColor: Colors.dark.primary,
     height: 2,
@@ -2901,5 +2876,107 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: Colors.dark.textSecondary,
     lineHeight: 18,
+  },
+  // Pick-and-place styles
+  unplacedTrackCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 10,
+    marginHorizontal: 16,
+    marginBottom: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  unplacedTrackCardPicked: {
+    borderColor: Colors.dark.primary,
+    borderWidth: 2,
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+  },
+  unplacedTrackIndex: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: Colors.dark.surfaceLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  unplacedTrackIndexText: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    color: Colors.dark.textSecondary,
+  },
+  unplacedTrackInfo: {
+    flex: 1,
+  },
+  unplacedTrackTitle: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: Colors.dark.text,
+    marginBottom: 2,
+  },
+  unplacedTrackArtist: {
+    fontSize: 11,
+    color: Colors.dark.textSecondary,
+  },
+  pickedBadge: {
+    backgroundColor: Colors.dark.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  pickedBadgeText: {
+    fontSize: 10,
+    fontWeight: '700' as const,
+    color: '#fff',
+  },
+  // Floating banner
+  pickedBanner: {
+    position: 'absolute',
+    bottom: 100,
+    left: 16,
+    right: 16,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  pickedBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+  },
+  pickedBannerInfo: {
+    flex: 1,
+  },
+  pickedBannerTitle: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#fff',
+    marginBottom: 2,
+  },
+  pickedBannerHint: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.7)',
+  },
+  pickedBannerClose: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  pickedBannerCloseText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600' as const,
   },
 });
