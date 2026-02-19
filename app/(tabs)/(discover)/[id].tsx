@@ -103,8 +103,17 @@ export default function SetDetailScreen() {
   const [playerMinimized, setPlayerMinimized] = useState(false);
   const [currentTimestamp, setCurrentTimestamp] = useState(0);
 
-  // Fetch set from API
+  // Fetch set from API — reset all state when id changes
   useEffect(() => {
+    // Reset state for new set navigation (e.g., clicking a similar set)
+    setDbSet(null);
+    setIsLoadingSet(true);
+    setLoadError(null);
+    setTimestampVotes({});
+    setSelectedTrack(null);
+    setShowPlayer(false);
+    setPlayerMinimized(false);
+
     const fetchSet = async () => {
       if (!id) return;
 
@@ -143,6 +152,8 @@ export default function SetDetailScreen() {
           };
           setDbSet(transformedSet);
           if (__DEV__) console.log('[SetDetail] Loaded set from API:', transformedSet.name, 'with', transformedSet.tracks?.length, 'tracks');
+        } else {
+          setLoadError('Set not found.');
         }
       } catch (error) {
         setLoadError('Failed to load set. Check your connection and try again.');
@@ -1940,7 +1951,7 @@ export default function SetDetailScreen() {
               const newCoverUrl = importResult.setList?.coverUrl;
               setDbSet(prev => prev ? {
                 ...prev,
-                sourceLinks: [...prev.sourceLinks, { platform: selectedPlatform, url }],
+                sourceLinks: [...(prev.sourceLinks || []), { platform: selectedPlatform, url }],
                 ...(newCoverUrl && { coverUrl: newCoverUrl }),
               } : prev);
 
