@@ -52,10 +52,20 @@ async function searchTrackOnSpotify(token, artist, title) {
 
   const query = encodeURIComponent(`track:${cleanTitle} artist:${artist}`);
 
-  const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`, {
+  let response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`, {
     headers: { 'Authorization': `Bearer ${token}` },
   });
-  if (!response.ok) return null;
+
+  // Handle rate limiting — wait and retry once
+  if (response.status === 429) {
+    const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
+    await new Promise(r => setTimeout(r, (retryAfter + 1) * 1000));
+    response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+  }
+
+  if (!response.ok) return { _rateLimited: response.status === 429 };
 
   const data = await response.json();
   const tracks = data.tracks?.items || [];
@@ -186,12 +196,17 @@ export default async function handler(req, res) {
         if (track.spotify_data?.spotify_id) { skipped++; continue; }
         if (!track.artist_name || !track.track_title) { skipped++; continue; }
 
-        // Rate limit: ~2 requests/sec to stay under Spotify limits
-        await new Promise(r => setTimeout(r, 500));
+        // Rate limit: ~1 request/sec to stay safely under Spotify limits
+        await new Promise(r => setTimeout(r, 1000));
 
         const spotifyData = await searchTrackOnSpotify(token, track.artist_name, track.track_title);
 
-        if (spotifyData) {
+        if (spotifyData?._rateLimited) {
+          // Rate limited — stop, don't mark remaining tracks
+          break;
+        }
+
+        if (spotifyData && !spotifyData._rateLimited) {
           await supabase
             .from('set_tracks')
             .update({ spotify_data: spotifyData })
@@ -238,13 +253,20 @@ export default async function handler(req, res) {
 
       let enriched = 0;
       let notFound = 0;
+      let rateLimited = false;
 
       for (const track of tracks || []) {
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 1000));
 
         const spotifyData = await searchTrackOnSpotify(token, track.artist_name, track.track_title);
 
-        if (spotifyData) {
+        if (spotifyData?._rateLimited) {
+          // Rate limited even after retry — stop processing, don't mark as not found
+          rateLimited = true;
+          break;
+        }
+
+        if (spotifyData && !spotifyData._rateLimited) {
           await supabase
             .from('set_tracks')
             .update({ spotify_data: spotifyData })
@@ -264,6 +286,7 @@ export default async function handler(req, res) {
         success: true,
         action: 'enrich-batch',
         total: (tracks || []).length,
+        rateLimited,
         enriched,
         notFound,
       });
@@ -309,7 +332,7 @@ export default async function handler(req, res) {
           if (existingArtist?.spotify_url) { skipped++; count++; continue; }
         }
 
-        await new Promise(r => setTimeout(r, 500));
+        await new Promise(r => setTimeout(r, 1000));
 
         const spotifyData = await searchArtistOnSpotify(token, name);
 
