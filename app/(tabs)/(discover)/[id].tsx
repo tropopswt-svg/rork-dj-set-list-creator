@@ -1065,7 +1065,7 @@ export default function SetDetailScreen() {
               <View style={styles.matchingBanner}>
                 <ActivityIndicator size="small" color={Colors.dark.primary} />
                 <View style={styles.matchingBannerContent}>
-                  <Text style={styles.matchingBannerTitle}>IDentifying tracks...</Text>
+                  <Text style={styles.matchingBannerTitle}>Identifying tracks...</Text>
                   <Text style={styles.matchingBannerSubtext}>
                     Matching tracks to database
                   </Text>
@@ -1111,7 +1111,7 @@ export default function SetDetailScreen() {
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Source Needed for Analysis</Text>
                     <Text style={styles.needsSourceText}>
-                      Add a YouTube or SoundCloud link to enable our IDentification engine
+                      Add a YouTube or SoundCloud link to enable trakd identification
                     </Text>
                   </View>
                 </View>
@@ -1128,7 +1128,7 @@ export default function SetDetailScreen() {
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Ready for Analysis</Text>
                     <Text style={styles.needsSourceText}>
-                      Source links detected. Tap "Analyze" to run our IDentification engine.
+                      Source links detected. Tap "Analyze" to run trakd identification.
                     </Text>
                   </View>
                 </View>
@@ -1399,7 +1399,7 @@ export default function SetDetailScreen() {
                 <Sparkles size={14} color={Colors.dark.primary} />
               </View>
               <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
-              <Text style={styles.statLabel}>ID&apos;d</Text>
+              <Text style={styles.statLabel}>trakd</Text>
             </View>
 
             <View style={styles.statCard}>
