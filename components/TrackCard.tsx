@@ -18,6 +18,7 @@ interface TrackCardProps {
   onContributorPress?: (username: string) => void;
   onIdentify?: () => void;
   onListen?: () => void; // Play audio preview to help identify
+  onIDThis?: () => void; // Open crowd-sourcing modal for unknown track
 }
 
 export default function TrackCard({
@@ -31,6 +32,7 @@ export default function TrackCard({
   onContributorPress,
   onIdentify,
   onListen,
+  onIDThis,
 }: TrackCardProps) {
   const router = useRouter();
   const [showFeaturedModal, setShowFeaturedModal] = useState(false);
@@ -264,7 +266,12 @@ export default function TrackCard({
               {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : track.title)}
             </Text>
             {isUnidentified && (
-              <HelpCircle size={14} color="#C41E3A" />
+              <View style={styles.questionBadge3d}>
+                <View style={styles.questionBadgeShadow} />
+                <View style={styles.questionBadgeFace}>
+                  <Text style={styles.questionBadgeText}>?</Text>
+                </View>
+              </View>
             )}
           </View>
           <Text style={[styles.artist, isUnidentified && styles.unidentifiedArtist]} numberOfLines={1}>
@@ -332,6 +339,19 @@ export default function TrackCard({
             >
               <Volume2 size={14} color="#FFF" />
               <Text style={styles.listenButtonText}>Listen</Text>
+            </Pressable>
+          )}
+          {/* Show ID This button for unidentified tracks */}
+          {isUnidentified && onIDThis && (
+            <Pressable
+              style={styles.idThisButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onIDThis();
+              }}
+            >
+              <HelpCircle size={12} color={Colors.dark.primary} />
+              <Text style={styles.idThisButtonText}>ID This</Text>
             </Pressable>
           )}
           {/* Show identify button for unidentified tracks */}
@@ -628,6 +648,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.surfaceLight,
     borderRadius: 8,
   },
+  idThisButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+  },
+  idThisButtonText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: Colors.dark.primary,
+  },
   identifyButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,6 +691,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
     color: '#FFF',
+  },
+  questionBadge3d: {
+    width: 26,
+    height: 30,
+    position: 'relative',
+  },
+  questionBadgeShadow: {
+    position: 'absolute',
+    bottom: 0,
+    left: 1,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#6B0F1E',
+  },
+  questionBadgeFace: {
+    position: 'absolute',
+    top: 0,
+    left: 1,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#C41E3A',
+    borderTopWidth: 1.5,
+    borderTopColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#8B1225',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 5,
+    elevation: 6,
+  },
+  questionBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 1,
   },
   unidentifiedTimestamp: {
     backgroundColor: 'rgba(205, 106, 111, 0.3)',

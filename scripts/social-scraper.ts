@@ -3,7 +3,7 @@
  * TikTok & Instagram Social Scraper
  *
  * Scrapes TikTok and Instagram profiles for unreleased/ID tracks using Apify,
- * downloads audio with yt-dlp, and uploads to ACRCloud custom bucket.
+ * downloads audio (CDN-first with yt-dlp fallback), and uploads to ACRCloud custom bucket.
  *
  * Usage:
  *   bun scripts/social-scraper.ts --platform tiktok --accounts @dj1,@dj2
@@ -14,110 +14,45 @@
  *
  * Prerequisites:
  *   - Apify account with API token (set APIFY_API_TOKEN)
- *   - yt-dlp installed (brew install yt-dlp)
  *   - ffmpeg installed (brew install ffmpeg)
+ *   - yt-dlp optional but recommended as fallback (brew install yt-dlp)
  *   - Supabase and ACRCloud credentials configured
  */
 
-import { execSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 import apifyClient, {
-  TikTokVideo,
-  InstagramPost,
   TikTokScraperOptions,
   InstagramScraperOptions,
 } from '../services/apifyClient';
-import commentParser, { CommentTrackHint } from '../lib/commentParser';
+
+import {
+  ProcessedVideo,
+  PlatformFilters,
+  ScrapeOptions,
+  ScraperConfig,
+  PROJECT_ROOT,
+  OUTPUT_DIR,
+  getSupabaseClient,
+  checkYtdlpAvailable,
+  checkFfmpegAvailable,
+  passesFilters,
+  normalizeTikTokVideo,
+  normalizeInstagramPost,
+  downloadAudioWithFallback,
+  downloadAudioYtdlp,
+  uploadToACRCloud,
+  parseTitle,
+  processVideos,
+  saveTrackToDatabase,
+} from '../lib/scraper-pipeline';
 
 // ============================================
-// Configuration Types
+// Paths
 // ============================================
 
-interface PlatformFilters {
-  minDuration: number;
-  maxAge: number;
-  keywords: string[];
-  excludeKeywords: string[];
-  contentTypes?: string[]; // Instagram only
-}
-
-interface ScrapeOptions {
-  maxVideos?: number;
-  maxPosts?: number;
-  maxComments?: number;
-  includeComments?: boolean;
-  resultsType?: string;
-}
-
-interface ScraperConfig {
-  tiktok?: {
-    accounts: string[];
-    filters: PlatformFilters;
-    scrapeOptions?: ScrapeOptions;
-  };
-  instagram?: {
-    accounts: string[];
-    filters: PlatformFilters;
-    scrapeOptions?: ScrapeOptions;
-  };
-}
-
-interface ProcessedVideo {
-  id: string;
-  platform: 'tiktok' | 'instagram';
-  url: string;
-  title: string;
-  description: string;
-  duration: number;
-  uploadDate: Date;
-  username: string;
-  audioPath?: string;
-  comments?: Array<{
-    text: string;
-    username?: string;
-    replies?: Array<{ text: string; username?: string }>;
-  }>;
-}
-
-// ============================================
-// Paths and Constants
-// ============================================
-
-const PROJECT_ROOT = path.resolve(__dirname, '..');
-const LOCAL_YTDLP = path.join(PROJECT_ROOT, 'bin', 'yt-dlp');
-const LOCAL_FFMPEG = path.join(PROJECT_ROOT, 'bin', 'ffmpeg');
-const YTDLP_PATH = fs.existsSync(LOCAL_YTDLP) ? LOCAL_YTDLP : 'yt-dlp';
-const FFMPEG_PATH = fs.existsSync(LOCAL_FFMPEG) ? LOCAL_FFMPEG : 'ffmpeg';
-const OUTPUT_DIR = path.join(PROJECT_ROOT, 'unreleased-downloads');
 const DEFAULT_CONFIG_PATH = path.join(__dirname, 'scraper-config.json');
-
-// ============================================
-// Supabase Client
-// ============================================
-
-type SupabaseClientType = SupabaseClient<any, 'public', any>;
-
-function getSupabaseClient(): SupabaseClientType | null {
-  const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    console.error('Missing Supabase credentials');
-    return null;
-  }
-  return createClient(url, key);
-}
-
-// ACRCloud bucket config
-function getBucketConfig() {
-  return {
-    bucketId: process.env.ACRCLOUD_BUCKET_NAME,
-    bearerToken: process.env.ACRCLOUD_BEARER_TOKEN,
-    consoleHost: 'api-v2.acrcloud.com',
-  };
-}
 
 // ============================================
 // Dependency Checks
@@ -126,30 +61,20 @@ function getBucketConfig() {
 function checkDependencies(): boolean {
   let allGood = true;
 
-  // Check yt-dlp
-  if (fs.existsSync(LOCAL_YTDLP)) {
-    console.log(`[Dependencies] Using local yt-dlp: ${LOCAL_YTDLP}`);
+  // Check yt-dlp (optional — warn instead of error)
+  if (checkYtdlpAvailable()) {
+    console.log('[Dependencies] yt-dlp available (fallback enabled)');
   } else {
-    try {
-      execSync('which yt-dlp', { stdio: 'ignore' });
-      console.log('[Dependencies] Using system yt-dlp');
-    } catch {
-      console.error('[Dependencies] ERROR: yt-dlp not found. Install with: brew install yt-dlp');
-      allGood = false;
-    }
+    console.warn('[Dependencies] WARNING: yt-dlp not found. CDN downloads still work, but fallback is disabled.');
+    console.warn('[Dependencies]   Install with: brew install yt-dlp');
   }
 
-  // Check ffmpeg
-  if (fs.existsSync(LOCAL_FFMPEG)) {
-    console.log(`[Dependencies] Using local ffmpeg: ${LOCAL_FFMPEG}`);
+  // Check ffmpeg (required for audio extraction)
+  if (checkFfmpegAvailable()) {
+    console.log('[Dependencies] ffmpeg available');
   } else {
-    try {
-      execSync('which ffmpeg', { stdio: 'ignore' });
-      console.log('[Dependencies] Using system ffmpeg');
-    } catch {
-      console.error('[Dependencies] ERROR: ffmpeg not found. Install with: brew install ffmpeg');
-      allGood = false;
-    }
+    console.error('[Dependencies] ERROR: ffmpeg not found. Install with: brew install ffmpeg');
+    allGood = false;
   }
 
   // Check Apify
@@ -164,101 +89,8 @@ function checkDependencies(): boolean {
 }
 
 // ============================================
-// Video Filtering
+// TikTok Scraping
 // ============================================
-
-function passesFilters(
-  video: ProcessedVideo,
-  filters: PlatformFilters
-): { passes: boolean; reason?: string } {
-  // Duration filter
-  if (video.duration < filters.minDuration) {
-    return { passes: false, reason: `Too short (${video.duration}s < ${filters.minDuration}s)` };
-  }
-
-  // Age filter
-  const daysSinceUpload = (Date.now() - video.uploadDate.getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSinceUpload > filters.maxAge) {
-    return { passes: false, reason: `Too old (${Math.floor(daysSinceUpload)} days > ${filters.maxAge} days)` };
-  }
-
-  const fullText = `${video.title} ${video.description}`.toLowerCase();
-
-  // Exclude keywords - but handle "unreleased" vs "released" carefully
-  for (const keyword of filters.excludeKeywords) {
-    const keywordLower = keyword.toLowerCase();
-    if (keywordLower === 'released') {
-      // "released" should not match "unreleased"
-      const releasedPattern = /(?<![un])released/i;
-      if (releasedPattern.test(fullText)) {
-        return { passes: false, reason: `Contains excluded keyword: "${keyword}"` };
-      }
-    } else if (fullText.includes(keywordLower)) {
-      return { passes: false, reason: `Contains excluded keyword: "${keyword}"` };
-    }
-  }
-
-  // Include keywords (if specified)
-  if (filters.keywords.length > 0) {
-    const hasKeyword = filters.keywords.some((kw) => fullText.includes(kw.toLowerCase()));
-    if (!hasKeyword) {
-      return { passes: false, reason: 'Missing required keyword' };
-    }
-  }
-
-  return { passes: true };
-}
-
-// ============================================
-// TikTok Processing
-// ============================================
-
-function normalizeTikTokVideo(video: any): ProcessedVideo | null {
-  // Handle different data structures from Apify actors
-  const authorUsername = video.author?.uniqueId || video.authorMeta?.name || video.authorName || 'unknown';
-  const videoId = video.id || video.videoId || '';
-
-  if (!videoId) {
-    console.log('  SKIP: Video missing ID');
-    return null;
-  }
-
-  const webUrl =
-    video.webVideoUrl ||
-    video.videoUrl ||
-    `https://www.tiktok.com/@${authorUsername}/video/${videoId}`;
-
-  // Convert comments to standard format
-  const comments = video.comments?.map((c: any) => ({
-    text: c.text || c.comment || '',
-    username: c.user?.uniqueId || c.uniqueId || c.username,
-    replies: c.replies?.map((r: any) => ({
-      text: r.text || r.comment || '',
-      username: r.user?.uniqueId || r.uniqueId || r.username,
-    })),
-  }));
-
-  // Duration can be in different places
-  const duration = video.video?.duration || video.videoMeta?.duration || video.duration || 0;
-
-  // Timestamp can be seconds or milliseconds
-  const createTime = video.createTime || video.createTimeISO || video.createdAt;
-  const uploadDate = typeof createTime === 'number'
-    ? new Date(createTime * (createTime > 1e12 ? 1 : 1000))
-    : new Date(createTime || Date.now());
-
-  return {
-    id: videoId,
-    platform: 'tiktok',
-    url: webUrl,
-    title: video.desc || video.text || video.description || '',
-    description: video.desc || video.text || video.description || '',
-    duration,
-    uploadDate,
-    username: authorUsername,
-    comments,
-  };
-}
 
 async function scrapeTikTokAccounts(
   accounts: string[],
@@ -318,32 +150,8 @@ async function scrapeTikTokAccounts(
 }
 
 // ============================================
-// Instagram Processing
+// Instagram Scraping
 // ============================================
-
-function normalizeInstagramPost(post: InstagramPost): ProcessedVideo {
-  // Convert comments to standard format
-  const comments = post.comments?.map((c) => ({
-    text: c.text,
-    username: c.ownerUsername,
-    replies: c.replies?.map((r) => ({
-      text: r.text,
-      username: r.ownerUsername,
-    })),
-  }));
-
-  return {
-    id: post.id,
-    platform: 'instagram',
-    url: post.url || `https://www.instagram.com/p/${post.shortCode}/`,
-    title: post.caption?.substring(0, 100) || '',
-    description: post.caption || '',
-    duration: post.videoDuration || 0,
-    uploadDate: new Date(post.timestamp),
-    username: post.ownerUsername,
-    comments,
-  };
-}
 
 async function scrapeInstagramAccounts(
   accounts: string[],
@@ -391,369 +199,151 @@ async function scrapeInstagramAccounts(
 }
 
 // ============================================
-// Audio Download
+// Process Pending — Real Retry Logic
 // ============================================
 
-async function downloadAudio(video: ProcessedVideo, outputDir: string): Promise<string | null> {
-  const tracksDir = path.join(outputDir, 'tracks');
-  fs.mkdirSync(tracksDir, { recursive: true });
+const MAX_RETRIES = 3;
 
-  const outputPath = path.join(tracksDir, `${video.platform}_${video.id}.mp3`);
-
-  // Skip if already downloaded
-  if (fs.existsSync(outputPath)) {
-    console.log(`  Audio already exists: ${outputPath}`);
-    return outputPath;
+async function processPending(): Promise<void> {
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    console.error('Cannot proceed without Supabase connection');
+    return;
   }
 
-  console.log(`  Downloading audio from: ${video.url}`);
+  console.log('='.repeat(60));
+  console.log('Processing Pending / Failed Uploads');
+  console.log('='.repeat(60));
 
-  return new Promise((resolve) => {
-    const ytdlpArgs = [
-      video.url,
-      '--extract-audio',
-      '--audio-format',
-      'mp3',
-      '--audio-quality',
-      '0',
-      '--output',
-      outputPath,
-      '--no-playlist',
-      '--ffmpeg-location',
-      path.dirname(FFMPEG_PATH),
-    ];
-
-    const proc = spawn(YTDLP_PATH, ytdlpArgs, { stdio: 'pipe' });
-
-    let stderr = '';
-    proc.stderr?.on('data', (data) => {
-      stderr += data.toString();
-    });
-
-    proc.on('close', (code) => {
-      if (code === 0 && fs.existsSync(outputPath)) {
-        console.log(`  Downloaded: ${outputPath}`);
-        resolve(outputPath);
-      } else {
-        console.error(`  Download failed: ${stderr.substring(0, 200)}`);
-        resolve(null);
-      }
-    });
-
-    proc.on('error', (err) => {
-      console.error(`  Download error: ${err.message}`);
-      resolve(null);
-    });
-  });
-}
-
-// ============================================
-// ACRCloud Upload
-// ============================================
-
-async function uploadToACRCloud(
-  video: ProcessedVideo,
-  audioPath: string,
-  dbTrackId: string
-): Promise<{ success: boolean; acrId?: string; error?: string }> {
-  const config = getBucketConfig();
-
-  if (!config.bucketId || !config.bearerToken) {
-    return {
-      success: false,
-      error: 'ACRCloud bucket credentials not configured',
-    };
-  }
-
-  if (!fs.existsSync(audioPath)) {
-    return { success: false, error: 'Audio file not found' };
-  }
-
-  const audioBuffer = fs.readFileSync(audioPath);
-  const { artist, title } = parseTitle(video.title, video.username);
-
-  // Build form data for Console API v2
-  const boundary = '----FormBoundary' + Math.random().toString(36).substring(2);
-  const formParts: (string | Buffer)[] = [];
-
-  const addField = (name: string, value: string) => {
-    formParts.push(`--${boundary}\r\n`);
-    formParts.push(`Content-Disposition: form-data; name="${name}"\r\n\r\n`);
-    formParts.push(`${value}\r\n`);
-  };
-
-  addField('title', title);
-  addField('data_type', 'audio');
-  addField(
-    'user_defined',
-    JSON.stringify({
-      artist: artist,
-      source_platform: video.platform,
-      source_url: video.url,
-      source_id: video.id,
-      db_track_id: dbTrackId,
-    })
-  );
-
-  formParts.push(`--${boundary}\r\n`);
-  formParts.push(`Content-Disposition: form-data; name="file"; filename="track.mp3"\r\n`);
-  formParts.push(`Content-Type: audio/mp3\r\n\r\n`);
-  formParts.push(audioBuffer);
-  formParts.push(`\r\n--${boundary}--\r\n`);
-
-  const bodyParts = formParts.map((p) => (typeof p === 'string' ? Buffer.from(p) : p)) as Uint8Array[];
-  const bodyBuffer = Buffer.concat(bodyParts);
-
-  try {
-    const url = `https://${config.consoleHost}/api/buckets/${config.bucketId}/files`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${config.bearerToken}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body: bodyBuffer as unknown as BodyInit,
-    });
-
-    const result = await response.json();
-
-    if (response.ok && result.data?.acr_id) {
-      return { success: true, acrId: result.data.acr_id };
-    }
-
-    return {
-      success: false,
-      error: result.message || result.error || `HTTP ${response.status}`,
-    };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
-  }
-}
-
-// ============================================
-// Title Parsing
-// ============================================
-
-function parseTitle(fullTitle: string, uploader: string): { artist: string; title: string } {
-  const separators = [' - ', ' – ', ' — ', ' | '];
-
-  for (const sep of separators) {
-    if (fullTitle.includes(sep)) {
-      const [artist, ...rest] = fullTitle.split(sep);
-      return {
-        artist: artist.trim(),
-        title: rest.join(sep).trim(),
-      };
-    }
-  }
-
-  // No separator found - use uploader as artist
-  return {
-    artist: uploader,
-    title: fullTitle || 'Untitled',
-  };
-}
-
-// ============================================
-// Database Operations
-// ============================================
-
-async function saveTrackToDatabase(
-  supabase: SupabaseClientType,
-  video: ProcessedVideo,
-  acrId?: string
-): Promise<string | null> {
-  const { artist, title } = parseTitle(video.title, video.username);
-
-  // Check if already exists
-  const { data: existing } = await supabase
+  // Fetch tracks with pending or failed status
+  const { data: pendingTracks, error } = await supabase
     .from('unreleased_tracks')
-    .select('id')
-    .eq('source_url', video.url)
-    .single();
-
-  if (existing) {
-    console.log(`  Already in database: ${(existing as any).id}`);
-    return (existing as any).id;
-  }
-
-  // Insert new track
-  const { data: newTrack, error } = await supabase
-    .from('unreleased_tracks')
-    .insert({
-      title,
-      artist,
-      source_platform: video.platform,
-      source_url: video.url,
-      source_user: video.username,
-      source_post_date: video.uploadDate.toISOString(),
-      audio_duration_seconds: Math.round(video.duration),
-      audio_quality: video.duration >= 180 ? 'high' : video.duration >= 60 ? 'medium' : 'clip',
-      acrcloud_status: acrId ? 'uploaded' : 'pending',
-      acrcloud_acr_id: acrId || null,
-      fingerprint_created_at: acrId ? new Date().toISOString() : null,
-      metadata: {
-        platform_id: video.id,
-      },
-    })
-    .select()
-    .single();
-
-  if (error || !newTrack) {
-    console.error(`  Database insert error: ${error?.message || 'No data returned'}`);
-    return null;
-  }
-
-  return (newTrack as any).id;
-}
-
-async function saveCommentsToDatabase(
-  supabase: SupabaseClientType,
-  trackId: string,
-  video: ProcessedVideo,
-  hints: CommentTrackHint[]
-): Promise<number> {
-  if (hints.length === 0) return 0;
-
-  // Only save ID-related hints
-  const idHints = commentParser.filterIdRelatedHints(hints);
-  if (idHints.length === 0) return 0;
-
-  const records = idHints.map((hint) => ({
-    unreleased_track_id: trackId,
-    platform: video.platform,
-    hint_type: hint.hintType,
-    original_comment: hint.sourceComment,
-    commenter_username: hint.commenterUsername || null,
-    parsed_artist: hint.possibleArtist || null,
-    parsed_title: hint.possibleTitle || null,
-    extracted_links: hint.extractedLinks || null,
-    timestamp_reference: hint.timestamp || null,
-    confidence: hint.confidence,
-    is_reply_to_id_request: hint.isReplyToIdRequest,
-  }));
-
-  const { error } = await supabase.from('track_id_hints').insert(records);
+    .select('*')
+    .eq('is_active', true)
+    .in('source_platform', ['tiktok', 'instagram'])
+    .in('acrcloud_status', ['pending', 'failed'])
+    .order('created_at', { ascending: true })
+    .limit(50);
 
   if (error) {
-    console.error(`  Error saving hints: ${error.message}`);
-    return 0;
+    console.error('Error fetching pending tracks:', error);
+    return;
   }
 
-  return idHints.length;
-}
-
-// ============================================
-// Main Processing Pipeline
-// ============================================
-
-async function processVideos(
-  videos: ProcessedVideo[],
-  dryRun: boolean = false
-): Promise<{
-  processed: number;
-  uploaded: number;
-  failed: number;
-  hintsFound: number;
-}> {
-  const supabase = getSupabaseClient();
-  if (!supabase && !dryRun) {
-    console.error('Cannot proceed without Supabase connection');
-    return { processed: 0, uploaded: 0, failed: 0, hintsFound: 0 };
+  if (!pendingTracks || pendingTracks.length === 0) {
+    console.log('No pending TikTok/Instagram tracks to process.');
+    return;
   }
 
-  const outputDir = path.join(OUTPUT_DIR, `scrape_${Date.now()}`);
+  console.log(`Found ${pendingTracks.length} pending/failed tracks\n`);
+
+  const outputDir = path.join(OUTPUT_DIR, `retry_${Date.now()}`);
   fs.mkdirSync(outputDir, { recursive: true });
 
-  let processed = 0;
-  let uploaded = 0;
+  let retried = 0;
+  let succeeded = 0;
   let failed = 0;
-  let hintsFound = 0;
+  let skipped = 0;
 
-  for (const video of videos) {
-    processed++;
-    console.log(`\n[${processed}/${videos.length}] ${video.platform}: ${video.title.substring(0, 60)}...`);
-    console.log(`  URL: ${video.url}`);
-    console.log(`  Duration: ${video.duration}s, Username: @${video.username}`);
+  for (const track of pendingTracks) {
+    const retryCount = track.metadata?.retryCount || 0;
 
-    // Parse comments for track hints
-    if (video.comments && video.comments.length > 0) {
-      const hints = commentParser.parsePostComments(video.comments);
-      const idHints = commentParser.filterIdRelatedHints(hints);
-      if (idHints.length > 0) {
-        console.log(`  Found ${idHints.length} ID hints in comments`);
-        hintsFound += idHints.length;
+    console.log(`\n[${retried + skipped + 1}/${pendingTracks.length}] ${track.artist} - ${track.title}`);
+    console.log(`  Source: ${track.source_url}`);
+    console.log(`  Status: ${track.acrcloud_status}, Retries: ${retryCount}/${MAX_RETRIES}`);
 
-        if (!dryRun && idHints.length > 0) {
-          // Will save after creating track
-        }
-      }
-    }
-
-    if (dryRun) {
-      console.log('  [DRY RUN] Would download and process');
+    // Skip if max retries exceeded
+    if (retryCount >= MAX_RETRIES) {
+      console.log(`  SKIP: Max retries (${MAX_RETRIES}) exceeded`);
+      skipped++;
       continue;
     }
 
-    // Download audio
-    const audioPath = await downloadAudio(video, outputDir);
+    retried++;
+
+    // CDN URLs are expired by retry time, so use yt-dlp
+    const tracksDir = path.join(outputDir, 'tracks');
+    fs.mkdirSync(tracksDir, { recursive: true });
+    const outputPath = path.join(tracksDir, `${track.source_platform}_${track.metadata?.platform_id || track.id}.mp3`);
+
+    const audioPath = await downloadAudioYtdlp(track.source_url, outputPath);
     if (!audioPath) {
       console.log('  FAILED: Could not download audio');
+      // Update retry count
+      await supabase
+        .from('unreleased_tracks')
+        .update({
+          acrcloud_status: 'failed',
+          metadata: {
+            ...track.metadata,
+            retryCount: retryCount + 1,
+            lastRetryAt: new Date().toISOString(),
+            lastError: 'Download failed',
+          },
+        })
+        .eq('id', track.id);
       failed++;
       continue;
     }
 
-    // Save to database first
-    const trackId = await saveTrackToDatabase(supabase!, video);
-    if (!trackId) {
-      console.log('  FAILED: Could not save to database');
-      failed++;
-      continue;
-    }
+    // Build a ProcessedVideo-like object for ACRCloud upload
+    const video: ProcessedVideo = {
+      id: track.metadata?.platform_id || track.id,
+      platform: track.source_platform,
+      url: track.source_url,
+      title: track.title,
+      description: track.title,
+      duration: track.audio_duration_seconds || 0,
+      uploadDate: new Date(track.source_post_date || track.created_at),
+      username: track.source_user || '',
+    };
 
     // Upload to ACRCloud
-    const uploadResult = await uploadToACRCloud(video, audioPath, trackId);
+    const uploadResult = await uploadToACRCloud(video, audioPath, track.id);
     if (uploadResult.success) {
-      // Update track with ACR ID
-      await supabase!
+      await supabase
         .from('unreleased_tracks')
         .update({
           acrcloud_acr_id: uploadResult.acrId,
           acrcloud_status: 'uploaded',
           fingerprint_created_at: new Date().toISOString(),
+          metadata: {
+            ...track.metadata,
+            retryCount: retryCount + 1,
+            lastRetryAt: new Date().toISOString(),
+          },
         })
-        .eq('id', trackId);
+        .eq('id', track.id);
 
       console.log(`  UPLOADED: ACR ID = ${uploadResult.acrId}`);
-      uploaded++;
+      succeeded++;
     } else {
-      await supabase!
+      await supabase
         .from('unreleased_tracks')
         .update({
           acrcloud_status: 'failed',
           metadata: {
+            ...track.metadata,
+            retryCount: retryCount + 1,
+            lastRetryAt: new Date().toISOString(),
             lastError: uploadResult.error,
-            lastErrorAt: new Date().toISOString(),
           },
         })
-        .eq('id', trackId);
+        .eq('id', track.id);
 
       console.log(`  UPLOAD FAILED: ${uploadResult.error}`);
       failed++;
     }
-
-    // Save comment hints
-    if (video.comments && video.comments.length > 0) {
-      const hints = commentParser.parsePostComments(video.comments);
-      const savedHints = await saveCommentsToDatabase(supabase!, trackId, video, hints);
-      if (savedHints > 0) {
-        console.log(`  Saved ${savedHints} ID hints to database`);
-      }
-    }
   }
 
-  return { processed, uploaded, failed, hintsFound };
+  console.log('\n' + '='.repeat(60));
+  console.log('RETRY SUMMARY');
+  console.log('='.repeat(60));
+  console.log(`Total found:  ${pendingTracks.length}`);
+  console.log(`Retried:      ${retried}`);
+  console.log(`Succeeded:    ${succeeded}`);
+  console.log(`Failed:       ${failed}`);
+  console.log(`Skipped:      ${skipped} (max retries exceeded)`);
 }
 
 // ============================================
@@ -818,7 +408,7 @@ async function runFromConfig(configPath: string, dryRun: boolean): Promise<void>
   }
 
   // Process all videos
-  const results = await processVideos(allVideos, dryRun);
+  const results = await processVideos(allVideos, dryRun, undefined, { checkSpotify: true, checkDuplicates: true });
 
   // Summary
   console.log('\n' + '='.repeat(60));
@@ -864,7 +454,7 @@ async function runForPlatform(
     return;
   }
 
-  const results = await processVideos(videos, dryRun);
+  const results = await processVideos(videos, dryRun, undefined, { checkSpotify: true, checkDuplicates: true });
 
   // Summary
   console.log('\n' + '='.repeat(60));
@@ -893,49 +483,6 @@ async function testConnection(): Promise<void> {
   }
 }
 
-async function processPending(): Promise<void> {
-  const supabase = getSupabaseClient();
-  if (!supabase) {
-    console.error('Cannot proceed without Supabase connection');
-    return;
-  }
-
-  console.log('='.repeat(60));
-  console.log('Processing Pending Uploads');
-  console.log('='.repeat(60));
-
-  const { data: pendingTracks, error } = await supabase
-    .from('unreleased_tracks')
-    .select('*')
-    .eq('acrcloud_status', 'pending')
-    .eq('is_active', true)
-    .in('source_platform', ['tiktok', 'instagram'])
-    .order('created_at', { ascending: true })
-    .limit(50);
-
-  if (error) {
-    console.error('Error fetching pending tracks:', error);
-    return;
-  }
-
-  if (!pendingTracks || pendingTracks.length === 0) {
-    console.log('No pending TikTok/Instagram tracks to process.');
-    return;
-  }
-
-  console.log(`Found ${pendingTracks.length} pending tracks\n`);
-
-  for (const track of pendingTracks) {
-    console.log(`- ${track.artist} - ${track.title}`);
-    console.log(`  Source: ${track.source_url}`);
-    console.log(`  Platform: ${track.source_platform}`);
-    console.log(`  Created: ${track.created_at}`);
-  }
-
-  console.log('\nTo re-process these tracks, download audio and upload to ACRCloud.');
-  console.log('Run this scraper again with the source URLs to retry.');
-}
-
 // ============================================
 // CLI Entry Point
 // ============================================
@@ -951,23 +498,24 @@ Usage:
   bun scripts/social-scraper.ts --process-pending
 
 Options:
-  --platform      Platform to scrape (tiktok or instagram)
-  --accounts      Comma-separated list of accounts to scrape
-  --config        Path to config JSON file (default: ./scripts/scraper-config.json)
-  --dry-run       Don't download or upload, just show what would be processed
+  --platform         Platform to scrape (tiktok or instagram)
+  --accounts         Comma-separated list of accounts to scrape
+  --config           Path to config JSON file (default: ./scripts/scraper-config.json)
+  --dry-run          Don't download or upload, just show what would be processed
   --test-connection  Test Apify API connection
-  --process-pending  List pending tracks in database
+  --process-pending  Retry pending/failed uploads (re-downloads via yt-dlp, re-uploads to ACRCloud)
 
 Examples:
-  bun scripts/social-scraper.ts --platform tiktok --accounts @djname1,@djname2
-  bun scripts/social-scraper.ts --platform instagram --accounts djname1 --dry-run
+  bun scripts/social-scraper.ts --platform tiktok --accounts @cloonee,@pawsamusic
+  bun scripts/social-scraper.ts --platform instagram --accounts sonnyfodera --dry-run
   bun scripts/social-scraper.ts --config ./my-config.json
   bun scripts/social-scraper.ts --test-connection
+  bun scripts/social-scraper.ts --process-pending
 
 Prerequisites:
   - APIFY_API_TOKEN environment variable set
-  - yt-dlp installed (brew install yt-dlp)
   - ffmpeg installed (brew install ffmpeg)
+  - yt-dlp optional as fallback (brew install yt-dlp)
   - Supabase and ACRCloud credentials configured
 `);
 }

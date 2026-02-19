@@ -24,6 +24,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getArtistBySlug, getArtistTracks, getArtistSets } from '@/lib/supabase';
 import type { DbArtist, DbTrack } from '@/lib/supabase/types';
+import ArtistHeatMap from '@/components/ArtistHeatMap';
 
 // Social icons mapping
 const SOCIAL_LINKS = [
@@ -192,7 +193,14 @@ export default function ArtistProfileScreen() {
             </View>
           )}
         </View>
-        
+
+        {/* Artist Venue Heat Map */}
+        {sets.length > 0 && (
+          <View style={styles.heatMapContainer}>
+            <ArtistHeatMap artistSlug={slug} />
+          </View>
+        )}
+
         {/* Tabs */}
         <View style={styles.tabsContainer}>
           <Pressable
@@ -476,6 +484,10 @@ const styles = StyleSheet.create({
   socialButtonText: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  heatMapContainer: {
+    paddingHorizontal: 16,
+    marginBottom: 16,
   },
   tabsContainer: {
     flexDirection: 'row',

@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock, SlidersHorizontal, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings, Heart, Bookmark, Play, Share2, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -15,8 +15,11 @@ import { ImportResult } from '@/services/importService';
 import { useSets } from '@/contexts/SetsContext';
 import { detectEvent, getEventLabel } from '@/components/EventBadge';
 
-// Fixed offset - controls vertical position of raised card
-const CENTER_OFFSET = 140;
+// Tab bar height from _layout.tsx — in React Navigation v7 (Expo Router 6),
+// the tab bar is absolutely positioned and overlaps scroll content
+const TAB_BAR_HEIGHT = 85;
+// Initial estimate of header area (logo ~76 + search ~62 + filters ~58 = ~196)
+const HEADER_AREA_ESTIMATE = 196;
 
 // Clear filter FAB with grooves, pulse, and spinning accent circle
 const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
@@ -151,6 +154,16 @@ const extractYear = (date: Date | string): string => {
 export default function DiscoverScreen() {
   const router = useRouter();
   const { refreshSetsMetadata } = useSets();
+  const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // Full tab bar height: styled height + bottom safe area (home indicator on iOS)
+  const totalTabBarHeight = TAB_BAR_HEIGHT + insets.bottom;
+  // Measure the actual header area height for precise centering
+  const [headerAreaHeight, setHeaderAreaHeight] = useState(HEADER_AREA_ESTIMATE);
+  // Visible scroll area = screen minus safe area, header, and tab bar
+  const visibleScrollHeight = windowHeight - insets.top - headerAreaHeight - totalTabBarHeight;
+  const scrollPaddingTop = Math.max(0, Math.round(visibleScrollHeight / 2 - CARD_HEIGHT / 2));
+  const scrollPaddingBottom = scrollPaddingTop + totalTabBarHeight;
   const [setLists, setSetLists] = useState<SetList[]>([]);
   const [dbSets, setDbSets] = useState<SetList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -487,7 +500,7 @@ export default function DiscoverScreen() {
     try {
       const params = new URLSearchParams({
         limit: '200',
-        sort: activeFilter === 'trending' ? 'popular' : 'recent',
+        sort: 'recent',
       });
       if (searchTerm && searchTerm.length >= 2) {
         params.set('search', searchTerm);
@@ -518,12 +531,11 @@ export default function DiscoverScreen() {
       }
     } catch (error) {
       if (__DEV__) console.error('[Discover] Failed to fetch sets:', error);
-      // Fallback to mock data if API fails
       setDbSets([]);
     } finally {
       setIsLoading(false);
     }
-  }, [activeFilter]);
+  }, []);
 
   // Load sets on mount and when filter changes
   useEffect(() => {
@@ -544,18 +556,25 @@ export default function DiscoverScreen() {
     setSetLists([...dbSets]);
   }, [dbSets]);
 
-  // Haptic feedback when scrolling through cards - throttled for natural feel
+  // Track whether user is actively dragging (not programmatic scroll)
+  const isUserDragging = useRef(false);
+
+  // Track centered card index and provide haptic feedback during user drag
   useEffect(() => {
     const listenerId = scrollY.addListener(({ value }) => {
-      const centeredIndex = Math.round((value + CENTER_OFFSET) / CARD_HEIGHT);
+      const centeredIndex = Math.round(value / CARD_HEIGHT);
 
       if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
         lastCenteredIndex.current = centeredIndex;
-        // Throttle haptics to max once per 120ms so fast scrolls don't feel sticky
-        const now = Date.now();
-        if (now - lastHapticTime.current > 120) {
-          lastHapticTime.current = now;
-          Haptics.selectionAsync();
+        setSelectedIndex(centeredIndex);
+
+        // Haptic feedback only during user drag
+        if (isUserDragging.current) {
+          const now = Date.now();
+          if (now - lastHapticTime.current > 120) {
+            lastHapticTime.current = now;
+            Haptics.selectionAsync();
+          }
         }
       }
     });
@@ -685,42 +704,39 @@ export default function DiscoverScreen() {
   }, [setLists, debouncedSearchQuery, activeFilter, selectedFilters]);
 
   // Calculate initial scroll position to start in the middle of the list
+  // With paddingTop centering the visible area, card i is centered when scrollY = i * CARD_HEIGHT
   const middleIndex = Math.floor(filteredSets.length / 2);
-  const initialScrollOffset = Math.max(0, middleIndex * CARD_HEIGHT - CENTER_OFFSET);
-
-  // Calculate snap positions - each card should snap when it's in the "centered" (raised) position
-  const snapOffsets = useMemo(() => {
-    const offsets: number[] = [0];
-    filteredSets.forEach((_, index) => {
-      const offset = index * CARD_HEIGHT - CENTER_OFFSET;
-      if (offset > 0) {
-        offsets.push(offset);
-      }
-    });
-    return offsets;
-  }, [filteredSets.length]);
+  const initialScrollOffset = middleIndex * CARD_HEIGHT;
 
   // Set scroll position to middle when data loads
   const filteredSetKey = useMemo(() => filteredSets.map(s => s.id).join(','), [filteredSets]);
 
+  const isInitialLoad = useRef(true);
+
   useEffect(() => {
     if (filteredSets.length > 0 && scrollViewRef.current) {
-      // Small delay to ensure layout is complete
       setTimeout(() => {
-        scrollViewRef.current?.scrollTo({ y: initialScrollOffset, animated: false });
+        if (isInitialLoad.current) {
+          // First load: start in the middle
+          scrollViewRef.current?.scrollTo({ y: initialScrollOffset, animated: false });
+          isInitialLoad.current = false;
+        } else {
+          // Filter/sort change: scroll to top smoothly
+          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+        }
       }, 100);
     }
-  }, [filteredSetKey, initialScrollOffset]);
+  }, [filteredSetKey]);
 
   // Auto-scroll: scroll to next set
   const scrollToNextSet = useCallback(() => {
     if (!scrollViewRef.current || filteredSets.length === 0) return;
 
     const nextIndex = (selectedIndex + 1) % filteredSets.length;
-    const targetOffset = nextIndex * CARD_HEIGHT - CENTER_OFFSET;
+    const targetOffset = nextIndex * CARD_HEIGHT;
 
     scrollViewRef.current.scrollTo({
-      y: Math.max(0, targetOffset),
+      y: targetOffset,
       animated: true,
     });
   }, [selectedIndex, filteredSets.length]);
@@ -817,7 +833,8 @@ export default function DiscoverScreen() {
   };
 
   const toggleFilterDropdown = () => {
-    Haptics.selectionAsync();
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    resetInactivityTimer();
     const toValue = showFilterDropdown ? 0 : 1;
     setShowFilterDropdown(!showFilterDropdown);
     Animated.timing(dropdownAnim, {
@@ -847,6 +864,12 @@ export default function DiscoverScreen() {
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <View onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0 && Math.abs(h - headerAreaHeight) > 2) {
+            setHeaderAreaHeight(h);
+          }
+        }}>
         <View style={styles.header}>
           {/* Hidden admin button - dev only */}
           <Pressable
@@ -881,7 +904,8 @@ export default function DiscoverScreen() {
           <Pressable
             style={[styles.filterChip, activeFilter === 'trending' && styles.filterChipActive]}
             onPress={() => {
-              Haptics.selectionAsync();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              resetInactivityTimer();
               setActiveFilter('trending');
             }}
           >
@@ -891,7 +915,8 @@ export default function DiscoverScreen() {
           <Pressable
             style={[styles.filterChip, activeFilter === 'recent' && styles.filterChipActive]}
             onPress={() => {
-              Haptics.selectionAsync();
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+              resetInactivityTimer();
               setActiveFilter('recent');
             }}
           >
@@ -1035,21 +1060,33 @@ export default function DiscoverScreen() {
             )}
           </Animated.View>
         )}
+        </View>
 
         <Animated.ScrollView
           ref={scrollViewRef as any}
           style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: scrollPaddingTop, paddingBottom: scrollPaddingBottom }]}
           showsVerticalScrollIndicator={false}
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
           scrollEventThrottle={16}
           decelerationRate="fast"
-          snapToOffsets={snapOffsets}
+          snapToInterval={CARD_HEIGHT}
           snapToAlignment="start"
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
-          onScrollBeginDrag={resetInactivityTimer}
+          onScrollBeginDrag={() => {
+            isUserDragging.current = true;
+            resetInactivityTimer();
+          }}
+          onScrollEndDrag={() => {
+            isUserDragging.current = false;
+          }}
+          onMomentumScrollEnd={() => {
+            isUserDragging.current = false;
+          }}
           onTouchStart={resetInactivityTimer}
           refreshControl={
             <RefreshControl
@@ -1072,7 +1109,7 @@ export default function DiscoverScreen() {
                   setList={setList}
                   index={index}
                   scrollY={scrollY}
-                  centerOffset={CENTER_OFFSET}
+                  centerOffset={0}
                   isSelected={index === selectedIndex}
                   onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
                   onLongPress={() => handleSetLongPress(setList)}
@@ -1497,7 +1534,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 200,
+    // paddingTop and paddingBottom are applied dynamically via onLayout
   },
   emptyState: {
     alignItems: 'center',

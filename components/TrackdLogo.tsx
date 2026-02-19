@@ -5,7 +5,7 @@ import Colors from '@/constants/colors';
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface TrackdLogoProps {
-  size?: 'small' | 'medium' | 'large';
+  size?: 'small' | 'medium' | 'large' | 'xlarge';
   showTagline?: boolean;
 }
 
@@ -13,6 +13,16 @@ interface TrackdLogoProps {
 const seededRandom = (seed: number) => {
   const x = Math.sin(seed * 9999) * 10000;
   return x - Math.floor(x);
+};
+
+// Per-letter width ratios (relative to fontSize)
+const LETTER_WIDTHS: Record<string, number> = {
+  t: 0.38,
+  r: 0.38,
+  a: 0.52,
+  c: 0.58,
+  k: 0.55,
+  d: 0.56,
 };
 
 // Individual letter with volume bars that animate from bottom
@@ -37,27 +47,27 @@ const AnimatedLetter = ({
     Array.from({ length: 5 }, (_, i) => 0.3 + seededRandom(letterIndex * 10 + i) * 0.7)
   ).current;
 
+  const fadeOut = Math.min(1, letterEnd + 0.08);
   const barScales = barHeights.map(() => {
     return scanProgress.interpolate({
       inputRange: [
         Math.max(0, letterStart - 0.05),
         letterStart,
         letterMid,
-        letterEnd,
-        Math.min(1, letterEnd + 0.1),
+        Math.min(letterEnd, fadeOut - 0.01),
+        fadeOut,
       ],
-      outputRange: [0, 0.2, 1, 0.8, 0],
+      outputRange: [0, 0.2, 1, 0.6, 0],
       extrapolate: 'clamp',
     });
   });
 
-  const barWidth = fontSize * 0.08;
-  const barMaxHeight = fontSize * 0.5;
-  const letterWidth = fontSize * 0.5;
-  const letterSpacing = 0;
+  const barWidth = fontSize * 0.07;
+  const barMaxHeight = fontSize * 0.45;
+  const letterWidth = fontSize * (LETTER_WIDTHS[letter] || 0.5);
 
   return (
-    <View style={[styles.letterContainer, { width: letterWidth, marginHorizontal: letterSpacing }]}>
+    <View style={[styles.letterContainer, { width: letterWidth }]}>
       <View style={[styles.volumeBarsContainer, { height: barMaxHeight }]}>
         {barHeights.map((height, i) => (
           <Animated.View
@@ -68,7 +78,7 @@ const AnimatedLetter = ({
                 width: barWidth,
                 height: barMaxHeight * height,
                 transform: [{ scaleY: barScales[i] }],
-                marginHorizontal: 1,
+                marginHorizontal: 0.5,
               },
             ]}
           />
@@ -127,9 +137,10 @@ export default function TrackdLogo({ size = 'medium', showTagline = false }: Tra
     small: { fontSize: 42 },
     medium: { fontSize: 56 },
     large: { fontSize: 72 },
+    xlarge: { fontSize: 90 },
   }[size];
 
-  const letters = ['t', 'r', 'a', 'c', 'k', 'd'];
+  const letters = ['t', 'r', 'a', 'k', 'd'];
   const totalLetters = letters.length;
 
   useEffect(() => {
@@ -215,7 +226,7 @@ const styles = StyleSheet.create({
     right: 0,
   },
   volumeBar: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#FFFFFF',
     borderRadius: 2,
     transformOrigin: 'bottom',
   },
@@ -228,12 +239,12 @@ const styles = StyleSheet.create({
   scanLine: {
     position: 'absolute',
     width: 3,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#FFFFFF',
     zIndex: 10,
-    shadowColor: Colors.dark.primary,
+    shadowColor: '#FFFFFF',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 8,
+    shadowOpacity: 0.6,
+    shadowRadius: 6,
   },
   tagline: {
     marginTop: 12,

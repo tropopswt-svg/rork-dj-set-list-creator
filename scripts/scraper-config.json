@@ -1,10 +1,31 @@
 {
   "tiktok": {
-    "accounts": ["@djname1", "@djname2"],
+    "accounts": [
+      "@cloonee",
+      "@pawsamusic",
+      "@patricktoppingdj",
+      "@sonnyfodera",
+      "@kettama",
+      "@prospauk",
+      "@joshbakeruk",
+      "@bensterlingdj",
+      "@hotsince82",
+      "@jameshypemusic",
+      "@johnsummit",
+      "@domdolla",
+      "@michaelbibi",
+      "@skream",
+      "@eatseverything",
+      "@fisherdj",
+      "@chrislake",
+      "@greenvelvet",
+      "@solomundj",
+      "@taleofus"
+    ],
     "filters": {
-      "minDuration": 30,
-      "maxAge": 30,
-      "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive", "WIP", "unfinished"],
+      "minDuration": 15,
+      "maxAge": 90,
+      "keywords": [],
       "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"]
     },
     "scrapeOptions": {
@@ -14,12 +35,33 @@
     }
   },
   "instagram": {
-    "accounts": ["djname1", "djname2"],
+    "accounts": [
+      "cloonee",
+      "pawsamusic",
+      "patricktopping",
+      "sonnyfodera",
+      "kettama",
+      "prospauk",
+      "joshbakermusic",
+      "bensterlling",
+      "hotsince82",
+      "jameshype",
+      "johnsummit",
+      "domdolla",
+      "michaelbibimusic",
+      "skaborofficial",
+      "eatseverything",
+      "fish3r",
+      "chrislake",
+      "greenvelvet",
+      "saborofficial",
+      "taleofus"
+    ],
     "filters": {
-      "minDuration": 15,
-      "maxAge": 30,
+      "minDuration": 10,
+      "maxAge": 90,
       "contentTypes": ["reels", "video"],
-      "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive"],
+      "keywords": [],
       "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available"]
     },
     "scrapeOptions": {
@@ -27,6 +69,49 @@
       "resultsType": "posts",
       "includeComments": true,
       "maxComments": 100
+    }
+  },
+  "discovery": {
+    "tiktok": {
+      "hashtags": [
+        "#unreleased",
+        "#ID",
+        "#trackid",
+        "#dubplate",
+        "#forthcoming",
+        "#techno",
+        "#techhouse",
+        "#housemusic",
+        "#ukgarage"
+      ],
+      "filters": {
+        "minDuration": 15,
+        "maxAge": 14,
+        "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive", "WIP", "unfinished", "dubplate", "dub", "clip"],
+        "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available", "tutorial", "how to", "remix contest"]
+      },
+      "maxResultsPerHashtag": 50
+    },
+    "instagram": {
+      "hashtags": [
+        "#unreleased",
+        "#unreleasedmusic",
+        "#trackid",
+        "#dubplate",
+        "#forthcoming",
+        "#techno",
+        "#techhouse",
+        "#housemusic",
+        "#ukgarage"
+      ],
+      "filters": {
+        "minDuration": 10,
+        "maxAge": 14,
+        "contentTypes": ["reels", "video"],
+        "keywords": ["unreleased", "ID", "forthcoming", "preview", "exclusive", "WIP", "unfinished", "dubplate", "dub", "clip"],
+        "excludeKeywords": ["released", "out now", "spotify", "beatport", "buy", "available", "tutorial", "how to", "remix contest"]
+      },
+      "maxResultsPerHashtag": 50
     }
   },
   "schedule": {

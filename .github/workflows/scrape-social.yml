@@ -1,0 +1,44 @@
+name: Social Media Scraper
+
+on:
+  schedule:
+    # Daily account scrape at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun scripts/social-scraper.ts --config ./scripts/scraper-config.json
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+
+  discover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    # Weekly hashtag discovery on Sundays at 3 AM UTC
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 2 * * 0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install
+      - run: bun scripts/discover-trending.ts
+        env:
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+          ACRCLOUD_BUCKET_NAME: ${{ secrets.ACRCLOUD_BUCKET_NAME }}
+          ACRCLOUD_BEARER_TOKEN: ${{ secrets.ACRCLOUD_BEARER_TOKEN }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}

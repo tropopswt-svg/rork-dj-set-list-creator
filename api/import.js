@@ -269,6 +269,13 @@ function parseTrackInfo(text) {
     /^(the|this|that)\s+\w+\s+is\s+(the|a)/i,  // "the X is the Y" pattern
     /^listen\s+to/i,
     /starting\s+at\s+\w+\s+\d+/i,  // "starting at edco 2024"
+    /^(man|dude|bro|mate),?\s/i,
+    /^no\s+(doubt|way|cap)/i,
+    /^(big|huge|massive)\s+(tune|track|banger|one)/i,
+    /^(such|what)\s+a\s+(tune|set|mix|banger|track)/i,
+    /^(need|want|give)\s+(this|that|the)\s/i,
+    /^(my|the)\s+(favourite|favorite|fav)\s/i,
+    /^(played|playing|plays)\s+(this|that|it)\s/i,
   ];
   
   for (const pattern of reactionPatterns) {
@@ -315,15 +322,30 @@ function parseTrackInfo(text) {
   // Remove any stray timestamps that might be embedded in the text
   cleaned = cleaned.replace(/\d{1,2}:\d{2}(:\d{2})?\s*/g, '').trim();
   
+  // Common single words that are not track titles or artist names
+  const commonWords = new Set([
+    'the', 'this', 'that', 'what', 'when', 'where', 'which', 'who', 'how',
+    'set', 'mix', 'live', 'here', 'best', 'vibes', 'good', 'great', 'nice',
+    'tune', 'song', 'track', 'music', 'sound', 'yeah', 'yes', 'wow', 'omg',
+  ]);
+
   // Standard format: "Artist - Title"
   const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
   if (dashMatch) {
     let part1 = dashMatch[1].trim();
     let part2 = dashMatch[2].trim();
-    
+
     // Validate both parts look like real track/artist info
     if (!isValidTrackPart(part1) || !isValidTrackPart(part2)) return null;
-    
+
+    // Reject if either part is a common English word (not a real artist/title)
+    const p1Lower = part1.toLowerCase().trim();
+    const p2Lower = part2.toLowerCase().trim();
+    if (commonWords.has(p1Lower) || commonWords.has(p2Lower)) return null;
+
+    // Reject if artist and title are the same text (parsing error)
+    if (p1Lower === p2Lower) return null;
+
     // Check for remix/edit info - if it's in part1, that's likely the title (unusual format)
     const part1HasRemix = /remix|edit|vip|dub|bootleg/i.test(part1);
     const part2HasRemix = /remix|edit|vip|dub|bootleg/i.test(part2);
@@ -355,7 +377,7 @@ function parseTrackInfo(text) {
  * Validate that a string looks like a valid track title or artist name
  */
 function isValidTrackPart(str) {
-  if (!str || str.length < 2) return false;
+  if (!str || str.length < 3) return false;
   if (str.length > 100) return false;
   
   // Reject if it's mostly numbers or special characters
@@ -377,6 +399,11 @@ function isValidTrackPart(str) {
     /^(amazing|incredible|insane|crazy|unreal)$/i,
     /starting\s+at/i,
     /\d{4}$/,  // Ends with a year (likely a comment about an event)
+    /^(set|mix|live|vibes?|tune|song|track)$/i,  // Single generic music words
+    /^(man|bro|mate|dude|lol|omg|wow)$/i,        // Reactions/filler
+    /^(yes|no|yeah|nah|yep|nope)$/i,             // Affirmatives
+    /^(here|there|now|then|just|only)$/i,         // Adverbs alone
+    /^\d+$/,                                       // Pure numbers
   ];
   
   for (const pattern of invalidPatterns) {
@@ -517,7 +544,34 @@ function parseComments(comments, djName = null) {
   }
 
   console.log(`Parsed ${tracks.length} tracks from comments`);
-  return tracks.sort((a, b) => a.timestamp - b.timestamp);
+
+  const sorted = tracks.sort((a, b) => a.timestamp - b.timestamp);
+
+  // Normalize helper for dedup comparison
+  const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Dedup: if two tracks are within 60 seconds and have similar titles, keep the higher-confidence one
+  const deduped = [];
+  for (const track of sorted) {
+    const existing = deduped.find(t =>
+      Math.abs(t.timestamp - track.timestamp) < 60 &&
+      (normalize(t.title) === normalize(track.title) ||
+       normalize(t.artist + t.title).includes(normalize(track.title)) ||
+       normalize(track.artist + track.title).includes(normalize(t.title)))
+    );
+    if (existing) {
+      // Keep the one with higher confidence
+      if (track.confidence > existing.confidence) {
+        const idx = deduped.indexOf(existing);
+        deduped[idx] = track;
+      }
+    } else {
+      deduped.push(track);
+    }
+  }
+
+  console.log(`After dedup: ${deduped.length} tracks (removed ${sorted.length - deduped.length} duplicates)`);
+  return deduped;
 }
 
 function parseDescription(description, djName = null) {

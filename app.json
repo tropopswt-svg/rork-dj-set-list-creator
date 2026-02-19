@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "TRACK'D",
+    "name": "trakd",
     "slug": "trackd",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -17,7 +17,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.trackd.music",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "TRACK'D needs access to your microphone to identify tracks playing nearby using audio fingerprinting."
+        "NSMicrophoneUsageDescription": "TRACK'D needs access to your microphone to identify tracks playing nearby using audio fingerprinting.",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {

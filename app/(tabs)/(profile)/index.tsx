@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn, User } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import IDentifiedLogo from '@/components/IDentifiedLogo';
+import TrackdLogo from '@/components/TrackdLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -150,12 +150,12 @@ export default function ProfileScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.headerBar}>
             <View style={styles.headerSpacer} />
-            <IDentifiedLogo size="medium" />
+            <TrackdLogo size="medium" />
             <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
-              <IDentifiedLogo size="xlarge" />
+              <TrackdLogo size="xlarge" />
             </View>
             <Text style={styles.loginPromptTitle}>Join the community</Text>
             <Text style={styles.loginPromptText}>
@@ -190,7 +190,7 @@ export default function ProfileScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View style={styles.headerBar}>
           <View style={styles.headerSpacer} />
-          <IDentifiedLogo size="medium" />
+          <TrackdLogo size="medium" />
           <Pressable style={styles.settingsButton} onPress={() => router.push('/(tabs)/(profile)/settings')}>
             <Settings size={22} color={Colors.dark.text} />
           </Pressable>

@@ -21,6 +21,8 @@ const POINTS_VALUES: Record<PointsReason, number> = {
   source_added: 25,
   track_confirmed: 15,
   first_import: 10,
+  id_suggestion: 5,
+  id_suggestion_accepted: 20,
 };
 
 // Descriptions for point reasons
@@ -30,6 +32,8 @@ const POINTS_DESCRIPTIONS: Record<PointsReason, string> = {
   source_added: 'Added a new source link to a set',
   track_confirmed: 'Track identification confirmed',
   first_import: 'First to import this set',
+  id_suggestion: 'Suggested a track ID',
+  id_suggestion_accepted: 'Your track ID suggestion was accepted',
 };
 
 export const [UserProvider, useUser] = createContextHook(() => {
@@ -37,7 +41,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
   const [userId, setUserId] = useState<string>('');
   const [points, setPoints] = useState<UserPoints>({
-    oderId: '',
+    userId: '',
     total: 0,
     breakdown: {
       voting: 0,
@@ -103,7 +107,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
       } else {
         // Initialize points for new user
         const newPoints: UserPoints = {
-          oderId: storedUserId,
+          userId: storedUserId,
           total: 0,
           breakdown: {
             voting: 0,
@@ -170,7 +174,7 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
         // Clear local points after successful sync
         const emptyPoints: UserPoints = {
-          oderId: userId,
+          userId: userId,
           total: 0,
           breakdown: {
             voting: 0,
@@ -238,6 +242,8 @@ export const [UserProvider, useUser] = createContextHook(() => {
           newBreakdown.contributions += amount;
           break;
         case 'track_confirmed':
+        case 'id_suggestion':
+        case 'id_suggestion_accepted':
           newBreakdown.trackIds += amount;
           break;
       }

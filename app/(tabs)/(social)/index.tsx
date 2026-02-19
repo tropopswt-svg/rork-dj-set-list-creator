@@ -6,7 +6,7 @@ import { Heart, Music, Clock, Bookmark, ChevronRight, Disc, Settings, User } fro
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import IDentifiedLogo from '@/components/IDentifiedLogo';
+import TrackdLogo from '@/components/TrackdLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSavedSets, useLikedSets, useContributions } from '@/hooks/useSocial';
 
@@ -132,12 +132,12 @@ export default function MyStuffScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
             <View style={styles.headerSpacer} />
-            <IDentifiedLogo size="medium" />
+            <TrackdLogo size="medium" />
             <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
-              <IDentifiedLogo size="xlarge" />
+              <TrackdLogo size="xlarge" />
             </View>
             <Text style={styles.loginPromptTitle}>Your personal crate</Text>
             <Text style={styles.loginPromptText}>

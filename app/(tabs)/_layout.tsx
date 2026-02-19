@@ -6,11 +6,14 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import FABActionModal from '@/components/FABActionModal';
 import LiveIdentifyModal from '@/components/LiveIdentifyModal';
+import SetRecordingModal from '@/components/SetRecordingModal';
+import SetRecordingBanner from '@/components/SetRecordingBanner';
+import { stopSetRecording, getRecordingStatus, IdentifiedTrack } from '@/components/SetRecordingService';
 import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 
 // Animated Vinyl FAB with "trackd" text in center
-const VinylFAB = ({ onPress }: { onPress: () => void }) => {
+const VinylFAB = ({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const spinCircleOpacity = useRef(new Animated.Value(0)).current;
   const spinCircleRotation = useRef(new Animated.Value(0)).current;
@@ -86,7 +89,7 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
   });
 
   return (
-    <Pressable style={styles.fab} onPress={onPress}>
+    <Pressable style={styles.fab} onPress={onPress} onLongPress={onLongPress} delayLongPress={500}>
       {/* Multiple vinyl grooves (static) */}
       <View style={styles.vinylGroove1} />
       <View style={styles.vinylGroove2} />
@@ -103,7 +106,7 @@ const VinylFAB = ({ onPress }: { onPress: () => void }) => {
       />
       {/* Center with trackd - pulses */}
       <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.fabText}>track<Text style={styles.fabTextD}>d</Text></Text>
+        <Text style={styles.fabText}>trak<Text style={styles.fabTextD}>d</Text></Text>
       </Animated.View>
     </Pressable>
   );
@@ -115,6 +118,11 @@ export default function TabLayout() {
   const { isAuthenticated } = useAuth();
   const [showActionModal, setShowActionModal] = useState(false);
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
+  const [showContinuousIdentifyModal, setShowContinuousIdentifyModal] = useState(false);
+  const [showRecordModal, setShowRecordModal] = useState(false);
+  const [isRecordingSet, setIsRecordingSet] = useState(false);
+  const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null);
+  const [recordingTrackCount, setRecordingTrackCount] = useState(0);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [authGateMessage, setAuthGateMessage] = useState('');
 
@@ -147,12 +155,12 @@ export default function TabLayout() {
 
   const handleFABPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    if (!isAuthenticated) {
-      setAuthGateMessage('Sign up to import sets and identify tracks from your favorite DJ mixes.');
-      setShowAuthGate(true);
-      return;
-    }
     setShowActionModal(true);
+  };
+
+  const handleFABLongPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setShowContinuousIdentifyModal(true);
   };
 
   const handleAddSet = () => {
@@ -164,6 +172,42 @@ export default function TabLayout() {
     setShowActionModal(false);
     setShowIdentifyModal(true);
   };
+
+  const handleRecordSet = () => {
+    setShowActionModal(false);
+    setShowRecordModal(true);
+  };
+
+  const handleRecordingStart = () => {
+    setIsRecordingSet(true);
+    setRecordingStartTime(new Date());
+    setRecordingTrackCount(0);
+  };
+
+  const handleRecordingEnd = (tracks: IdentifiedTrack[]) => {
+    setIsRecordingSet(false);
+    setRecordingStartTime(null);
+    setRecordingTrackCount(0);
+  };
+
+  const handleStopFromBanner = async () => {
+    const result = await stopSetRecording();
+    setIsRecordingSet(false);
+    setRecordingStartTime(null);
+    setRecordingTrackCount(0);
+    // Open modal to show results
+    setShowRecordModal(true);
+  };
+
+  // Poll track count while recording
+  useEffect(() => {
+    if (!isRecordingSet) return;
+    const interval = setInterval(() => {
+      const status = getRecordingStatus();
+      setRecordingTrackCount(status.trackCount);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isRecordingSet]);
 
   // Gate certain tabs for unauthenticated users
   const handleTabPress = (tabName: string, e: any) => {
@@ -182,6 +226,14 @@ export default function TabLayout() {
 
   return (
     <View style={styles.container}>
+      {isRecordingSet && recordingStartTime && (
+        <SetRecordingBanner
+          startTime={recordingStartTime}
+          trackCount={recordingTrackCount}
+          onPress={() => setShowRecordModal(true)}
+          onStop={handleStopFromBanner}
+        />
+      )}
       <Tabs
       screenOptions={{
         headerShown: false,
@@ -240,18 +292,33 @@ export default function TabLayout() {
       />
     </Tabs>
 
-      {showFAB && <VinylFAB onPress={handleFABPress} />}
+      {showFAB && <VinylFAB onPress={handleFABPress} onLongPress={handleFABLongPress} />}
 
       <FABActionModal
         visible={showActionModal}
         onClose={() => setShowActionModal(false)}
         onAddSet={handleAddSet}
         onIdentify={handleIdentify}
+        onRecordSet={handleRecordSet}
       />
 
       <LiveIdentifyModal
         visible={showIdentifyModal}
         onClose={() => setShowIdentifyModal(false)}
+      />
+
+      <LiveIdentifyModal
+        visible={showContinuousIdentifyModal}
+        onClose={() => setShowContinuousIdentifyModal(false)}
+        continuousMode={true}
+      />
+
+      <SetRecordingModal
+        visible={showRecordModal}
+        onClose={() => setShowRecordModal(false)}
+        onRecordingStart={handleRecordingStart}
+        onRecordingEnd={handleRecordingEnd}
+        isRecordingActive={isRecordingSet}
       />
 
       <AuthGateModal

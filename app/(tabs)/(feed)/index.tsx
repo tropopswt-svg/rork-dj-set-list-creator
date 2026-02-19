@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn, MapPin, Headphones, Archive } from 'lucide-react-native';
+import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn, MapPin, Headphones, Archive, User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
@@ -224,10 +224,6 @@ function DiscoverArtistCard({ artist }: { artist: DbArtist }) {
 
   const handleFollow = () => {
     Haptics.selectionAsync();
-    if (!user) {
-      router.push('/(auth)/login');
-      return;
-    }
     toggleFollow();
   };
 
@@ -274,10 +270,6 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
   const router = useRouter();
 
   const handleLike = () => {
-    if (!user) {
-      router.push('/(auth)/login');
-      return;
-    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     toggleLike();
   };
@@ -312,12 +304,12 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
             />
           ) : (
             <View style={[styles.feedArtistImage, styles.feedArtistPlaceholder]}>
-              <User size={18} color="rgba(255,255,255,0.4)" />
+              <User size={18} color="rgba(0,0,0,0.3)" />
             </View>
           )}
           <View style={styles.feedHeaderText}>
             <Text style={styles.feedArtistName}>{item.artist.name}</Text>
-            <Text style={styles.feedAction}>posted a new set</Text>
+            <Text style={styles.feedAction}>played a new set</Text>
           </View>
           <Text style={styles.feedTime}>{item.set.date}</Text>
         </View>
@@ -331,7 +323,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
               />
             ) : (
               <View style={[styles.feedCover, styles.feedCoverPlaceholder]}>
-                <Headphones size={28} color="rgba(255,255,255,0.3)" />
+                <Headphones size={28} color="rgba(0,0,0,0.2)" />
               </View>
             )}
             <View style={styles.feedPlayOverlay}>
@@ -347,7 +339,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
               <Text style={styles.feedSetDuration}>{item.set.duration}</Text>
               {item.set.duration && <View style={styles.feedSetDivider} />}
               <View style={styles.feedTracksRow}>
-                <Music size={12} color="rgba(255,255,255,0.45)" />
+                <Music size={12} color="rgba(0,0,0,0.35)" />
                 <Text style={styles.feedSetTracks}>{item.set.tracksIdentified} tracks</Text>
               </View>
             </View>
@@ -364,7 +356,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
         >
           <Heart
             size={20}
-            color={isLiked ? '#EF4444' : 'rgba(255,255,255,0.5)'}
+            color={isLiked ? '#EF4444' : 'rgba(0,0,0,0.35)'}
             fill={isLiked ? '#EF4444' : 'none'}
           />
           <Text style={[styles.actionText, isLiked && styles.actionTextActive]}>
@@ -373,12 +365,12 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
         </Pressable>
 
         <Pressable style={styles.actionButton} onPress={handleComment}>
-          <MessageCircle size={20} color="rgba(255,255,255,0.5)" />
+          <MessageCircle size={20} color="rgba(0,0,0,0.35)" />
           <Text style={styles.actionText}>Comment</Text>
         </Pressable>
 
         <Pressable style={styles.actionButton} onPress={handleShare}>
-          <Share2 size={20} color="rgba(255,255,255,0.5)" />
+          <Share2 size={20} color="rgba(0,0,0,0.35)" />
           <Text style={styles.actionText}>Share</Text>
         </Pressable>
       </View>
@@ -495,7 +487,7 @@ export default function FeedScreen() {
   const getYTThumb = (url?: string) => {
     if (!url) return null;
     const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    return match ? `https://img.youtube.com/vi/${match[1]}/mqdefault.jpg` : null;
+    return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
   };
 
   // Use database sets from followed artists, fall back to recent DB sets
@@ -590,10 +582,6 @@ export default function FeedScreen() {
 
   const handleNotifications = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (!user) {
-      router.push('/(auth)/login');
-      return;
-    }
     router.push('/(tabs)/(social)/notifications');
   };
 
@@ -611,15 +599,6 @@ export default function FeedScreen() {
           <View style={styles.headerLeft} />
           <Text style={styles.headerTitle}>Feed</Text>
           <View style={styles.headerRight}>
-            {!user && (
-              <Pressable
-                style={styles.loginButton}
-                onPress={() => router.push('/(auth)/login')}
-              >
-                <LogIn size={16} color="#fff" />
-                <Text style={styles.loginButtonText}>Login</Text>
-              </Pressable>
-            )}
             <Pressable style={styles.notifButton} onPress={handleNotifications}>
               <Bell size={22} color="#1A1A1A" />
               {unreadCount > 0 && (
@@ -1132,17 +1111,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   feedCard: {
-    backgroundColor: 'rgba(15, 15, 15, 0.85)',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
     borderRadius: 16,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.7)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
   feedHeader: {
     flexDirection: 'row',
@@ -1156,12 +1135,12 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   feedArtistPlaceholder: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   feedCoverPlaceholder: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1171,16 +1150,16 @@ const styles = StyleSheet.create({
   feedArtistName: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: '#F5F5F5',
+    color: '#1A1A1A',
   },
   feedAction: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(0, 0, 0, 0.45)',
     marginTop: 1,
   },
   feedTime: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.4)',
+    color: 'rgba(0, 0, 0, 0.35)',
   },
   feedContent: {
     flexDirection: 'row',
@@ -1223,13 +1202,13 @@ const styles = StyleSheet.create({
   feedSetName: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: '#F5F5F5',
+    color: '#1A1A1A',
     lineHeight: 20,
     marginBottom: 4,
   },
   feedSetVenue: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(0, 0, 0, 0.45)',
     marginBottom: 10,
   },
   feedSetStats: {
@@ -1238,14 +1217,14 @@ const styles = StyleSheet.create({
   },
   feedSetDuration: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.45)',
+    color: 'rgba(0, 0, 0, 0.4)',
     fontWeight: '500' as const,
   },
   feedSetDivider: {
     width: 3,
     height: 3,
     borderRadius: 1.5,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
     marginHorizontal: 8,
   },
   feedTracksRow: {
@@ -1255,14 +1234,14 @@ const styles = StyleSheet.create({
   },
   feedSetTracks: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.45)',
+    color: 'rgba(0, 0, 0, 0.4)',
     fontWeight: '500' as const,
   },
   socialActions: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(0, 0, 0, 0.08)',
     marginTop: 12,
     paddingTop: 12,
   },
@@ -1275,7 +1254,7 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 13,
-    color: 'rgba(255, 255, 255, 0.5)',
+    color: 'rgba(0, 0, 0, 0.4)',
     fontWeight: '500',
   },
   actionTextActive: {

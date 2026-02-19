@@ -100,6 +100,42 @@ export interface ListeningSession {
   startTime: Date;
   endTime?: Date;
   tracksIdentified: Track[];
+  title?: string;
+  status?: 'active' | 'ended';
+  tracksCount?: number;
+}
+
+export interface SessionTrack {
+  id?: string;
+  sessionId: string;
+  title: string;
+  artist: string;
+  confidence: number;
+  identifiedAt: Date;
+  position: number;
+  spotifyUrl?: string;
+}
+
+export interface IDSuggestion {
+  id: string;
+  set_id: string;
+  track_timestamp: number;
+  track_id?: string;
+  user_id: string;
+  suggested_title: string;
+  suggested_artist: string;
+  votes_up: number;
+  votes_down: number;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  suggestion_votes?: SuggestionVote[];
+}
+
+export interface SuggestionVote {
+  id: string;
+  suggestion_id: string;
+  user_id: string;
+  vote_type: 'up' | 'down';
 }
 
 export interface TrackContribution {
@@ -180,7 +216,7 @@ export interface ConflictOption {
 }
 
 export interface ConflictVote {
-  oderId: string; // User who voted
+  userId: string; // User who voted
   optionId: string; // Which option they chose
   votedAt: Date;
 }
@@ -190,7 +226,7 @@ export interface ConflictVote {
 // ==========================================
 
 export interface UserPoints {
-  oderId: string;
+  userId: string;
   total: number;
   breakdown: PointsBreakdown;
   history: PointsTransaction[];
@@ -213,11 +249,13 @@ export interface PointsTransaction {
 }
 
 export type PointsReason =
-  | 'vote_cast'           // +5 for voting
-  | 'vote_correct'        // +10 bonus for correct vote
-  | 'source_added'        // +25 for adding secondary source
-  | 'track_confirmed'     // +15 for confirmed track ID
-  | 'first_import';       // +10 for first import of a set
+  | 'vote_cast'              // +5 for voting
+  | 'vote_correct'           // +10 bonus for correct vote
+  | 'source_added'           // +25 for adding secondary source
+  | 'track_confirmed'        // +15 for confirmed track ID
+  | 'first_import'           // +10 for first import of a set
+  | 'id_suggestion'          // +5 for suggesting a track ID
+  | 'id_suggestion_accepted'; // +20 when your suggestion is accepted
 
 export type PointsCategory = 'voting' | 'contributions' | 'track_ids';
 

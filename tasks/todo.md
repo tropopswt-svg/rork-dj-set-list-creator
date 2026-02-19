@@ -57,8 +57,14 @@ node scripts/test-bucket-upload.js ./path/to/audio.mp3
 bun scripts/unreleased-scraper.ts https://soundcloud.com/username
 ```
 
+## Social Media Scraper
+- [x] Instagram/TikTok scraping via Apify (`scripts/social-scraper.ts`)
+- [x] Hashtag auto-discovery (`scripts/discover-trending.ts`)
+- [x] Shared scraper pipeline (`lib/scraper-pipeline.ts`)
+- [x] Spotify release checking for social scraper (`lib/spotify.ts`)
+- [x] Fuzzy dedup against bucket for social scraper
+- [x] Automated daily scraping via GitHub Actions (`.github/workflows/scrape-social.yml`)
+
 ## Future Tasks
 - [ ] Admin dashboard for unreleased tracks
 - [ ] Chrome extension for community submission
-- [ ] Instagram/TikTok support
-- [ ] Scheduled scraper runs

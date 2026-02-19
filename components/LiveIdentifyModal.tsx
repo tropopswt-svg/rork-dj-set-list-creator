@@ -49,6 +49,7 @@ interface LiveIdentifyModalProps {
   visible: boolean;
   onClose: () => void;
   onTrackIdentified?: (track: IdentifiedTrack) => void;
+  continuousMode?: boolean;
 }
 
 type IdentifyState = 'idle' | 'recording' | 'analyzing' | 'success' | 'no_match' | 'error';
@@ -355,11 +356,18 @@ export default function LiveIdentifyModal({
   visible,
   onClose,
   onTrackIdentified,
+  continuousMode = false,
 }: LiveIdentifyModalProps) {
   const [state, setState] = useState<IdentifyState>('idle');
   const [identifiedTrack, setIdentifiedTrack] = useState<IdentifiedTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+
+  // Continuous mode state
+  const [sessionTracks, setSessionTracks] = useState<IdentifiedTrack[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const autoRestartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -394,6 +402,9 @@ export default function LiveIdentifyModal({
       setState('idle');
       setIdentifiedTrack(null);
       setError(null);
+      setSessionTracks([]);
+      setSessionId(null);
+      setIsSessionActive(false);
       overlayAnim.setValue(0);
       overlaySlideAnim.setValue(-1);
       progressAnim.setValue(0);
@@ -403,14 +414,83 @@ export default function LiveIdentifyModal({
         duration: 300,
         useNativeDriver: true,
       }).start();
+
+      // Auto-start recording in continuous mode
+      if (continuousMode) {
+        setIsSessionActive(true);
+        // Create session via API (fire and forget)
+        createSession();
+      }
     } else {
       fadeAnim.setValue(0);
       overlayAnim.setValue(0);
       overlaySlideAnim.setValue(-1);
       progressAnim.setValue(0);
       stopRecording();
+      if (autoRestartRef.current) {
+        clearTimeout(autoRestartRef.current);
+        autoRestartRef.current = null;
+      }
     }
   }, [visible]);
+
+  // Create a session for continuous mode
+  const createSession = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: 'anonymous', // Will be replaced with actual userId from context
+          title: `Live Session - ${new Date().toLocaleTimeString()}`,
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.session) {
+        setSessionId(data.session.id);
+      }
+    } catch (e) {
+      if (__DEV__) console.error('[LiveIdentify] Failed to create session:', e);
+    }
+  };
+
+  // Add track to session
+  const addTrackToSession = async (track: IdentifiedTrack) => {
+    if (!sessionId) return;
+    try {
+      await fetch(`${API_URL}/api/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'add_track',
+          track: {
+            title: track.title,
+            artist: track.artist,
+            confidence: track.confidence,
+            spotifyUrl: track.links?.spotify,
+            album: track.album,
+            label: track.label,
+          },
+        }),
+      });
+    } catch (e) {
+      if (__DEV__) console.error('[LiveIdentify] Failed to add track to session:', e);
+    }
+  };
+
+  // End session
+  const endSession = async () => {
+    if (!sessionId) return;
+    try {
+      await fetch(`${API_URL}/api/sessions/${sessionId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'end' }),
+      });
+    } catch (e) {
+      if (__DEV__) console.error('[LiveIdentify] Failed to end session:', e);
+    }
+  };
 
   // Pulse, glow, and floating animations
   useEffect(() => {
@@ -655,12 +735,37 @@ export default function LiveIdentifyModal({
         console.log('[LiveIdentify] Track identified:', result.result);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         setIdentifiedTrack(result.result);
-        setState('success');
         onTrackIdentified?.(result.result);
+
+        // Continuous mode: add to session and auto-restart
+        if (continuousMode && isSessionActive) {
+          setSessionTracks(prev => [result.result, ...prev]);
+          addTrackToSession(result.result);
+          setState('success');
+          // Auto-restart after 3s delay
+          autoRestartRef.current = setTimeout(() => {
+            if (isSessionActive) {
+              startRecording();
+            }
+          }, 3000);
+        } else {
+          setState('success');
+        }
       } else if (result.success && !result.result) {
         console.log('[LiveIdentify] No match found');
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setState('no_match');
+
+        // Continuous mode: auto-restart even on no match
+        if (continuousMode && isSessionActive) {
+          setState('no_match');
+          autoRestartRef.current = setTimeout(() => {
+            if (isSessionActive) {
+              startRecording();
+            }
+          }, 2000);
+        } else {
+          setState('no_match');
+        }
       } else {
         console.error('[LiveIdentify] Error:', result.error);
         setError(result.error || 'Failed to identify track');
@@ -707,6 +812,28 @@ export default function LiveIdentifyModal({
 
   const handleClose = () => {
     stopRecording();
+    if (autoRestartRef.current) {
+      clearTimeout(autoRestartRef.current);
+      autoRestartRef.current = null;
+    }
+    if (continuousMode && sessionId) {
+      endSession();
+    }
+    setIsSessionActive(false);
+    onClose();
+  };
+
+  const handleEndSession = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    stopRecording();
+    if (autoRestartRef.current) {
+      clearTimeout(autoRestartRef.current);
+      autoRestartRef.current = null;
+    }
+    setIsSessionActive(false);
+    if (sessionId) {
+      endSession();
+    }
     onClose();
   };
 
@@ -931,6 +1058,32 @@ export default function LiveIdentifyModal({
 
   const isScanning = state === 'recording' || state === 'analyzing';
 
+  // Render session track history for continuous mode
+  const renderSessionHistory = () => {
+    if (!continuousMode || sessionTracks.length === 0) return null;
+
+    return (
+      <View style={styles.sessionHistory}>
+        <View style={styles.sessionHistoryHeader}>
+          <View style={styles.sessionDot} />
+          <Text style={styles.sessionHistoryTitle}>
+            Session • {sessionTracks.length} track{sessionTracks.length !== 1 ? 's' : ''}
+          </Text>
+        </View>
+        {sessionTracks.map((track, index) => (
+          <View key={`session-${index}`} style={styles.sessionTrackItem}>
+            <Text style={styles.sessionTrackNumber}>{sessionTracks.length - index}</Text>
+            <View style={styles.sessionTrackInfo}>
+              <Text style={styles.sessionTrackTitle} numberOfLines={1}>{track.title}</Text>
+              <Text style={styles.sessionTrackArtist} numberOfLines={1}>{track.artist}</Text>
+            </View>
+            <Text style={styles.sessionTrackConfidence}>{track.confidence}%</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={handleClose}>
       <View style={styles.container}>
@@ -942,7 +1095,7 @@ export default function LiveIdentifyModal({
           style={[
             styles.darkOverlay,
             {
-              opacity: 0.95, // Solid opacity - no fade, just slide
+              opacity: 0.95,
               transform: [{
                 translateY: overlaySlideAnim.interpolate({
                   inputRange: [-1, 0, 1],
@@ -955,7 +1108,7 @@ export default function LiveIdentifyModal({
         />
 
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-          {/* Close button - fades out during scanning (locked) */}
+          {/* Close button / End Session button */}
           <Animated.View style={[styles.closeButtonContainer, {
             opacity: overlaySlideAnim.interpolate({
               inputRange: [-1, -0.5, 0],
@@ -963,18 +1116,35 @@ export default function LiveIdentifyModal({
               extrapolate: 'clamp',
             }),
           }]}>
-            <Pressable style={styles.closeButton} onPress={handleClose}>
-              <X size={24} color={Colors.dark.text} />
-            </Pressable>
+            {continuousMode && isSessionActive ? (
+              <Pressable style={styles.endSessionButton} onPress={handleEndSession}>
+                <Text style={styles.endSessionText}>End Session</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.closeButton} onPress={handleClose}>
+                <X size={24} color={Colors.dark.text} />
+              </Pressable>
+            )}
           </Animated.View>
 
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Identify Track</Text>
+            <Text style={styles.title}>
+              {continuousMode ? 'Live Mode' : 'Identify Track'}
+            </Text>
+            {continuousMode && isSessionActive && (
+              <View style={styles.liveIndicator}>
+                <View style={styles.liveDot} />
+                <Text style={styles.liveText}>LIVE</Text>
+              </View>
+            )}
           </View>
 
           {/* Content */}
           {renderContent()}
+
+          {/* Session track history */}
+          {renderSessionHistory()}
         </Animated.View>
       </View>
     </Modal>
@@ -1384,5 +1554,92 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     marginBottom: 32,
     lineHeight: 22,
+  },
+  // Continuous mode styles
+  endSessionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    backgroundColor: Colors.dark.primary,
+  },
+  endSessionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  liveIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Colors.dark.error,
+  },
+  liveText: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: Colors.dark.error,
+    letterSpacing: 1,
+  },
+  sessionHistory: {
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
+    marginTop: 16,
+  },
+  sessionHistoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  sessionDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: Colors.dark.success,
+  },
+  sessionHistoryTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.dark.textSecondary,
+  },
+  sessionTrackItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 6,
+    gap: 10,
+  },
+  sessionTrackNumber: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.dark.textMuted,
+    width: 20,
+    textAlign: 'center',
+  },
+  sessionTrackInfo: {
+    flex: 1,
+  },
+  sessionTrackTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.dark.text,
+  },
+  sessionTrackArtist: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+    marginTop: 1,
+  },
+  sessionTrackConfidence: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.dark.primary,
   },
 });

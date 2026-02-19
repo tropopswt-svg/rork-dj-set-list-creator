@@ -9,7 +9,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
-import { Plus, Radio, X, ListMusic } from 'lucide-react-native';
+import { Plus, Radio, X, ListMusic, Disc3 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 
@@ -20,6 +20,7 @@ interface FABActionModalProps {
   onClose: () => void;
   onAddSet: () => void;
   onIdentify: () => void;
+  onRecordSet?: () => void;
 }
 
 export default function FABActionModal({
@@ -27,11 +28,13 @@ export default function FABActionModal({
   onClose,
   onAddSet,
   onIdentify,
+  onRecordSet,
 }: FABActionModalProps) {
   const slideAnim = useRef(new Animated.Value(300)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim1 = useRef(new Animated.Value(0)).current;
   const scaleAnim2 = useRef(new Animated.Value(0)).current;
+  const scaleAnim3 = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -41,6 +44,7 @@ export default function FABActionModal({
       fadeAnim.setValue(0);
       scaleAnim1.setValue(0);
       scaleAnim2.setValue(0);
+      scaleAnim3.setValue(0);
 
       // Animate in
       Animated.parallel([
@@ -71,6 +75,16 @@ export default function FABActionModal({
       Animated.sequence([
         Animated.delay(200),
         Animated.spring(scaleAnim2, {
+          toValue: 1,
+          useNativeDriver: true,
+          tension: 100,
+          friction: 8,
+        }),
+      ]).start();
+
+      Animated.sequence([
+        Animated.delay(300),
+        Animated.spring(scaleAnim3, {
           toValue: 1,
           useNativeDriver: true,
           tension: 100,
@@ -124,6 +138,11 @@ export default function FABActionModal({
     onIdentify();
   };
 
+  const handleRecordSet = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onRecordSet?.();
+  };
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
@@ -171,11 +190,31 @@ export default function FABActionModal({
               </Pressable>
             </Animated.View>
 
-            {/* Add Set - Secondary option */}
+            {/* Record a Set - Secondary option */}
             <Animated.View
               style={[
                 styles.addSetButtonWrapper,
                 { transform: [{ scale: scaleAnim2 }] },
+              ]}
+            >
+              <Pressable style={styles.addSetButton} onPress={handleRecordSet}>
+                <View style={[styles.addSetIconContainer, styles.recordSetIconContainer]}>
+                  <Disc3 size={28} color={Colors.dark.primary} />
+                </View>
+                <View style={styles.addSetTextContainer}>
+                  <Text style={styles.addSetText}>Record a Set</Text>
+                  <Text style={styles.addSetSubtext}>
+                    Auto-ID every track at a live set
+                  </Text>
+                </View>
+              </Pressable>
+            </Animated.View>
+
+            {/* Add Set - Tertiary option */}
+            <Animated.View
+              style={[
+                styles.addSetButtonWrapper,
+                { transform: [{ scale: scaleAnim3 }] },
               ]}
             >
               <Pressable style={styles.addSetButton} onPress={handleAddSet}>
@@ -305,6 +344,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+  },
+  recordSetIconContainer: {
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
   },
   addSetTextContainer: {
     flex: 1,

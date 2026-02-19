@@ -29,7 +29,7 @@ import DraggableTrackCard from '@/components/DraggableTrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import FillGapModal from '@/components/FillGapModal';
 import ArtistLink from '@/components/ArtistLink';
-import IDentifiedLogo from '@/components/IDentifiedLogo';
+import TrackdLogo from '@/components/TrackdLogo';
 import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
@@ -39,6 +39,9 @@ import TrackDetailModal from '@/components/TrackDetailModal';
 import AudioPreviewModal from '@/components/AudioPreviewModal';
 import IdentifyTrackModal from '@/components/IdentifyTrackModal';
 import CommentsSection from '@/components/CommentsSection';
+import WaveformTimeline from '@/components/WaveformTimeline';
+import SimilarSets from '@/components/SimilarSets';
+import IDThisModal from '@/components/IDThisModal';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
 import { useSets } from '@/contexts/SetsContext';
@@ -80,6 +83,10 @@ export default function SetDetailScreen() {
   // Identify Track Modal state (for ACRCloud identification)
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
   const [identifyTimestamp, setIdentifyTimestamp] = useState(0);
+
+  // ID This Modal state
+  const [showIDThisModal, setShowIDThisModal] = useState(false);
+  const [idThisTrack, setIdThisTrack] = useState<Track | null>(null);
 
   // Track votes on timestamp conflicts (conflictTimestamp -> selected track)
   const [timestampVotes, setTimestampVotes] = useState<Record<number, Track>>({});
@@ -211,19 +218,49 @@ export default function SetDetailScreen() {
       ? setList.totalDuration + 60 // Add 1 min buffer for tracks that might start near the end
       : 7200; // Default 2 hour max if no duration
 
-    // Helper: check if a track is a pure ID placeholder (no real info)
-    const isPureIdTrack = (track: Track): boolean => {
-      const title = (track.title || '').toLowerCase().trim();
-      const artist = (track.artist || '').toLowerCase().trim();
-      const isIdTitle = title === 'id' || title === '' || title === 'unknown' || title === 'unknown track';
-      const isIdArtist = artist === 'id' || artist === '' || artist === 'unknown' || artist === 'unknown artist';
-      return isIdTitle && isIdArtist;
+    // Helper: check if a track is low quality (garbage, placeholder, or noise)
+    const isLowQualityTrack = (track: Track): boolean => {
+      const title = (track.title || '').trim();
+      const artist = (track.artist || '').trim();
+      const titleLower = title.toLowerCase();
+      const artistLower = artist.toLowerCase();
+
+      // 1. Pure ID/unknown placeholders (existing check)
+      const idValues = ['id', '', 'unknown', 'unknown track', 'unknown artist', 'tba', 'tbc'];
+      if (idValues.includes(titleLower) && idValues.includes(artistLower)) return true;
+
+      // 2. Very short content (< 3 alpha chars in title)
+      const titleAlpha = (title.match(/[a-zA-Z]/g) || []).length;
+      const artistAlpha = (artist.match(/[a-zA-Z]/g) || []).length;
+      if (titleAlpha < 3 && artistAlpha < 3) return true;
+
+      // 3. Title is a reaction/comment, not a track name
+      const garbagePatterns = [
+        /^(love|loving|loved)\s/i, /^(this|that)\s+(is|was|set)/i,
+        /^(so|very|really)\s+(good|fire|sick|crazy)/i,
+        /^(banger|fire|heater|sick|insane|crazy|absolute|unreal)!*$/i,
+        /^anyone\s+(know|got)/i, /^what\s+(is|was|a)\s/i,
+        /^(can|does)\s+(someone|anyone)/i, /^not\s+sure/i,
+        /^i\s+(love|need|remember|think)/i, /^(ooph|grimy|dark|sheez|oooi)/i,
+        /^listen\s+to/i, /^check\s+(out|it)/i,
+        /^(the|this|that)\s+\w+\s+(is|was)\s/i,
+        /^(amazing|incredible)\s/i, /starting\s+at/i,
+      ];
+      if (garbagePatterns.some(p => p.test(title))) return true;
+
+      // 4. Title equals artist (parsing error — same text landed in both fields)
+      if (titleLower === artistLower && titleLower !== '') return true;
+
+      // 5. Confidence below threshold (if available from track metadata)
+      if (track.confidence !== undefined && track.confidence < 0.35) return true;
+
+      return false;
     };
 
     // Filter out tracks that have active conflicts, invalid timestamps, or are pure ID placeholders
     const tracksWithoutConflicts = sortedTracks.filter(track => {
-      // Skip pure ID/ID tracks - they have no useful info
-      if (isPureIdTrack(track)) {
+      // Skip low-quality tracks - garbage, placeholders, noise
+      if (isLowQualityTrack(track)) {
         return false;
       }
       // Skip tracks with conflicts
@@ -275,10 +312,10 @@ export default function SetDetailScreen() {
       // If both title and artist partially match, likely same track
       if (titleMatch && artistMatch) return true;
 
-      // Check for very similar titles with same artist base
+      // Check for very similar titles with same artist base (raised minimums to avoid short-string false positives)
       if (artistMatch && (
-        titleA.length > 3 && titleB.length > 3 &&
-        (titleA.includes(titleB.slice(0, 4)) || titleB.includes(titleA.slice(0, 4)))
+        titleA.length > 5 && titleB.length > 5 &&
+        (titleA.includes(titleB.slice(0, 6)) || titleB.includes(titleA.slice(0, 6)))
       )) {
         return true;
       }
@@ -286,10 +323,10 @@ export default function SetDetailScreen() {
       // Check for swapped title/artist (common parsing error)
       // e.g., "What Are You Waiting For (Sunrise Mix)" by "Chris Stussy"
       // vs "Sunrise Mix" by "What Are You Waiting For"
-      const titleInOtherArtist = titleA.length > 3 && artistB.includes(titleA.slice(0, Math.min(8, titleA.length)));
-      const artistInOtherTitle = artistA.length > 3 && titleB.includes(artistA.slice(0, Math.min(8, artistA.length)));
-      const otherTitleInArtist = titleB.length > 3 && artistA.includes(titleB.slice(0, Math.min(8, titleB.length)));
-      const otherArtistInTitle = artistB.length > 3 && titleA.includes(artistB.slice(0, Math.min(8, artistB.length)));
+      const titleInOtherArtist = titleA.length > 5 && artistB.includes(titleA.slice(0, Math.min(8, titleA.length)));
+      const artistInOtherTitle = artistA.length > 5 && titleB.includes(artistA.slice(0, Math.min(8, artistA.length)));
+      const otherTitleInArtist = titleB.length > 5 && artistA.includes(titleB.slice(0, Math.min(8, titleB.length)));
+      const otherArtistInTitle = artistB.length > 5 && titleA.includes(artistB.slice(0, Math.min(8, artistB.length)));
 
       // If one track's title appears in the other's artist (or vice versa), likely swapped
       if ((titleInOtherArtist || otherArtistInTitle) && (artistInOtherTitle || otherTitleInArtist)) {
@@ -305,11 +342,22 @@ export default function SetDetailScreen() {
         return true;
       }
 
+      // Word overlap check for longer titles (Jaccard similarity on word sets)
+      if (titleA.length > 10 && titleB.length > 10) {
+        const wordsA = new Set(titleA.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+        const wordsB = new Set(titleB.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
+        if (wordsA.size > 0 && wordsB.size > 0) {
+          const intersection = [...wordsA].filter(w => wordsB.has(w));
+          const smaller = Math.min(wordsA.size, wordsB.size);
+          if (intersection.length / smaller >= 0.6) return true;
+        }
+      }
+
       // Check if one title appears in the other's combined title+artist
       const combinedA = titleA + artistA;
       const combinedB = titleB + artistB;
-      if (titleA.length > 6 && combinedB.includes(titleA)) return true;
-      if (titleB.length > 6 && combinedA.includes(titleB)) return true;
+      if (titleA.length > 8 && combinedB.includes(titleA)) return true;
+      if (titleB.length > 8 && combinedA.includes(titleB)) return true;
 
       return false;
     };
@@ -343,6 +391,28 @@ export default function SetDetailScreen() {
         if ((current.title?.length || 0) > (best.title?.length || 0)) return current;
         return best;
       });
+    };
+
+    // Score a track's quality (higher = more trustworthy)
+    const trackQualityScore = (t: Track): number => {
+      let score = 0;
+      const title = (t.title || '').toLowerCase();
+      const artist = (t.artist || '').toLowerCase();
+
+      // Real artist name (not unknown/empty)
+      if (artist && artist !== 'unknown' && artist !== 'unknown artist' && artist !== 'id') score += 3;
+      // Real title (not unknown/empty)
+      if (title && title !== 'unknown' && title !== 'unknown track' && title !== 'id') score += 3;
+      // From reliable source
+      if (t.source === 'database' || t.source === '1001tracklists') score += 4;
+      if (t.source === 'youtube' || t.source === 'soundcloud') score += 1;
+      // Verified
+      if (t.verified) score += 3;
+      // Confidence
+      if (t.confidence && t.confidence > 0.7) score += 2;
+      else if (t.confidence && t.confidence > 0.5) score += 1;
+
+      return score;
     };
 
     // Check for gap at the START of the set (before first track)
@@ -447,12 +517,30 @@ export default function SetDetailScreen() {
         }
 
         if (uniqueTracks.length > 1) {
-          // Different tracks too close together - show as conflict
-          items.push({
-            type: 'timestamp-conflict' as const,
-            tracks: uniqueTracks,
-            timestamp: Math.min(...uniqueTracks.map(t => t.timestamp || 0)),
-          });
+          // Score each track — if there's a clear winner, don't show conflict
+          const scored = uniqueTracks
+            .map(t => ({ track: t, score: trackQualityScore(t) }))
+            .sort((a, b) => b.score - a.score);
+
+          const topScore = scored[0].score;
+          const runnerUpScore = scored[1].score;
+
+          // If top track is significantly better (3+ point gap), just show it
+          if (topScore - runnerUpScore >= 3) {
+            items.push({ type: 'track' as const, data: scored[0].track });
+          } else {
+            // Genuine conflict — filter out any low-quality entries before showing
+            const worthyTracks = scored.filter(s => s.score >= 3).map(s => s.track);
+            if (worthyTracks.length > 1) {
+              items.push({
+                type: 'timestamp-conflict' as const,
+                tracks: worthyTracks,
+                timestamp: Math.min(...worthyTracks.map(t => t.timestamp || 0)),
+              });
+            } else {
+              items.push({ type: 'track' as const, data: scored[0].track });
+            }
+          }
         } else {
           // Same track identified multiple times OR only one real track - just show the best one
           items.push({
@@ -532,7 +620,7 @@ export default function SetDetailScreen() {
   if (isLoadingSet || !setList) {
     return (
       <View style={styles.loadingContainer}>
-        <IDentifiedLogo size="large" />
+        <TrackdLogo size="large" />
         {!isLoadingSet && loadError && (
           <View style={{ alignItems: 'center', marginTop: 16, paddingHorizontal: 32 }}>
             <Text style={styles.loadingText}>{loadError}</Text>
@@ -1425,6 +1513,18 @@ export default function SetDetailScreen() {
             );
           })()}
 
+          {/* Waveform Timeline */}
+          {(setList.totalDuration || 0) > 0 && tracks.length > 0 && (
+            <WaveformTimeline
+              tracks={tracks}
+              totalDuration={setList.totalDuration || 0}
+              onGapPress={(timestamp) => {
+                setIdentifyTimestamp(timestamp);
+                setShowIdentifyModal(true);
+              }}
+            />
+          )}
+
           {/* Inline conflict indicator */}
           {conflicts.length > 0 && (
             <View style={styles.conflictHintBanner}>
@@ -1646,6 +1746,10 @@ export default function SetDetailScreen() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       setAudioPreviewTrack(track);
                     } : undefined}
+                    onIDThis={isUnidentified ? () => {
+                      setIdThisTrack(track);
+                      setShowIDThisModal(true);
+                    } : undefined}
                   />
                 );
               }
@@ -1735,6 +1839,9 @@ export default function SetDetailScreen() {
           </View>
 
           {/* Comments Section */}
+          {/* Similar Sets */}
+          {id && <SimilarSets setId={id} />}
+
           {id && <CommentsSection setId={id} />}
         </View>
       </ScrollView>
@@ -1938,6 +2045,16 @@ export default function SetDetailScreen() {
         timestamp={identifyTimestamp}
         setTitle={setList?.name}
         audioUrl={audioSource?.url}
+      />
+
+      <IDThisModal
+        visible={showIDThisModal}
+        onClose={() => {
+          setShowIDThisModal(false);
+          setIdThisTrack(null);
+        }}
+        track={idThisTrack}
+        setId={id || ''}
       />
     </View>
   );

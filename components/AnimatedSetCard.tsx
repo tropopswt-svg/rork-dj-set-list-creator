@@ -33,9 +33,6 @@ export default function AnimatedSetCard({
   // The scroll value when this card should be perfectly centered
   const scrollYWhenCentered = index * CARD_HEIGHT - centerOffset;
 
-  // Use prop directly - no local state to avoid re-renders
-  const isSelected = isSelectedProp;
-
   // 5-point input range for scroll wheel effect
   const wideInputRange = [
     scrollYWhenCentered - CARD_HEIGHT * 2,  // Two cards away
@@ -66,6 +63,14 @@ export default function AnimatedSetCard({
     extrapolate: 'clamp',
   });
 
+  // Accent bar white overlay opacity - 1 when centered, 0 when away
+  // Uses opacity which is native-driver compatible
+  const accentOpacity = scrollY.interpolate({
+    inputRange: wideInputRange,
+    outputRange: [0, 0, 1, 0, 0],
+    extrapolate: 'clamp',
+  });
+
   const animatedStyle: Animated.WithAnimatedObject<ViewStyle> = {
     transform: [{ scale }, { translateY }],
     opacity,
@@ -79,7 +84,8 @@ export default function AnimatedSetCard({
         onLongPress={onLongPress}
         onArtistPress={onArtistPress}
         onEventPress={onEventPress}
-        isSelected={isSelected}
+        isSelected={isSelectedProp}
+        accentOpacity={accentOpacity}
       />
     </Animated.View>
   );

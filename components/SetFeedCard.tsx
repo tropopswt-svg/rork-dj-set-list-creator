@@ -14,6 +14,7 @@ interface SetFeedCardProps {
   onArtistPress?: (artist: string) => void;
   onEventPress?: (eventId: string) => void;
   isSelected?: boolean; // Whether this card is the main/centered one in the scroll wheel
+  accentOpacity?: Animated.AnimatedInterpolation<number>; // 0-1 opacity for white accent bar overlay
   fillProgress?: Animated.AnimatedInterpolation<number>; // 0-1 for liquid fill effect on chips
   fillDirection?: Animated.AnimatedInterpolation<number>; // 1 = fill up, -1 = drain down
 }
@@ -269,7 +270,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'FUSE': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, fillProgress, fillDirection }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, fillProgress, fillDirection }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
   // Pulsing glow animation for selected card's artist chips
@@ -1359,7 +1360,11 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
 
           {/* Set name with accent bar - max 50 chars to prevent layout issues */}
           <View style={styles.nameContainer}>
-            <View style={[styles.nameAccent, isSelected && styles.nameAccentSelected]} />
+            <View style={styles.nameAccent}>
+              {accentOpacity && (
+                <Animated.View style={[styles.nameAccentWhite, { opacity: accentOpacity }]} />
+              )}
+            </View>
             <Text
               style={[styles.name, isIdentified && styles.nameTrackd, isSelected && styles.nameSelected]}
               numberOfLines={2}
@@ -1487,6 +1492,7 @@ const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
     marginBottom: 12,
+    height: 108, // Fixed height (border-box: includes 1px border) to ensure consistent card heights for scroll wheel
     backgroundColor: '#0A0A0A',
     borderRadius: 14,
     overflow: 'visible',
@@ -1795,13 +1801,12 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     marginRight: 8,
     alignSelf: 'stretch',
+    overflow: 'hidden',
   },
-  nameAccentSelected: {
-    backgroundColor: '#C41E3A', // Circoloco red
-    shadowColor: '#C41E3A',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 4,
+  nameAccentWhite: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 2,
   },
   name: {
     flex: 1,

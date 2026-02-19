@@ -509,7 +509,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   const voteOnConflict = useCallback(async (
     conflictId: string,
     optionId: string,
-    oderId: string
+    userId: string
   ): Promise<{ success: boolean; resolved?: boolean; winnerId?: string }> => {
     const conflict = conflicts.find(c => c.id === conflictId);
     if (!conflict) {
@@ -517,12 +517,12 @@ export const [SetsProvider, useSets] = createContextHook(() => {
     }
 
     // Check if user already voted
-    if (conflict.votes.some(v => v.oderId === oderId)) {
+    if (conflict.votes.some(v => v.userId === userId)) {
       return { success: false }; // Already voted
     }
 
     const newVote: ConflictVote = {
-      oderId,
+      userId,
       optionId,
       votedAt: new Date(),
     };
@@ -628,7 +628,7 @@ export const [SetsProvider, useSets] = createContextHook(() => {
   const getConflictsNeedingVotes = useCallback((userId: string): TrackConflict[] => {
     return conflicts.filter(c =>
       c.status === 'active' &&
-      !c.votes.some(v => v.oderId === userId)
+      !c.votes.some(v => v.userId === userId)
     );
   }, [conflicts]);
 
