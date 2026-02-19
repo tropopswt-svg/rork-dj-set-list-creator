@@ -86,9 +86,9 @@ export default async function handler(req, res) {
 
     // Transform to match app's SetList type
     const transformedSets = sets.map(set => {
-      // Generate cover URL from YouTube video if available
+      // Use stored cover_url first, then fall back to YouTube thumbnail
       const youtubeVideoId = extractYouTubeVideoId(set.youtube_url);
-      const coverUrl = getYouTubeThumbnail(youtubeVideoId);
+      const coverUrl = set.cover_url || getYouTubeThumbnail(youtubeVideoId);
 
       return {
         id: set.id,
