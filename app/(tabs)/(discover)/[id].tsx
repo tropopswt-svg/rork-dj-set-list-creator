@@ -179,12 +179,61 @@ export default function SetDetailScreen() {
     return getActiveConflicts(id);
   }, [id, getActiveConflicts]);
 
+  // Helper: check if a track is low quality (garbage, placeholder, or noise)
+  // Defined here so it can be used for both timeline and unplaced filtering
+  const isLowQualityTrack = useCallback((track: Track): boolean => {
+    const title = (track.title || '').trim();
+    const artist = (track.artist || '').trim();
+    const titleLower = title.toLowerCase();
+    const artistLower = artist.toLowerCase();
+
+    // 1. Pure ID/unknown placeholders
+    const idValues = ['id', '', 'unknown', 'unknown track', 'unknown artist', 'tba', 'tbc'];
+    if (idValues.includes(titleLower) && idValues.includes(artistLower)) return true;
+
+    // 2. ID - ID patterns (catch "ID - ID", "ID ID", "ID?", etc.)
+    if (/^id\s*[-–—]?\s*id$/i.test(`${titleLower} ${artistLower}`.trim())) return true;
+    if (/^id\s*[-–—]\s*id$/i.test(title)) return true;
+    if (/^id\?*$/i.test(titleLower) && /^id\?*$/i.test(artistLower)) return true;
+    if (/\bid\b.*\bid\b/i.test(title)) return true;
+
+    // 3. Very short content (< 3 alpha chars in title)
+    const titleAlpha = (title.match(/[a-zA-Z]/g) || []).length;
+    const artistAlpha = (artist.match(/[a-zA-Z]/g) || []).length;
+    if (titleAlpha < 3 && artistAlpha < 3) return true;
+
+    // 4. Title is a reaction/comment, not a track name
+    const garbagePatterns = [
+      /^(love|loving|loved)\s/i, /^(this|that)\s+(is|was|set)/i,
+      /^(so|very|really)\s+(good|fire|sick|crazy)/i,
+      /^(banger|fire|heater|sick|insane|crazy|absolute|unreal)!*$/i,
+      /^anyone\s+(know|got)/i, /^what\s+(is|was|a)\s/i,
+      /^(can|does)\s+(someone|anyone)/i, /^not\s+sure/i,
+      /^i\s+(love|need|remember|think)/i, /^(ooph|grimy|dark|sheez|oooi)/i,
+      /^listen\s+to/i, /^check\s+(out|it)/i,
+      /^(the|this|that)\s+\w+\s+(is|was)\s/i,
+      /^(amazing|incredible)\s/i, /starting\s+at/i,
+    ];
+    if (garbagePatterns.some(p => p.test(title))) return true;
+
+    // 5. Title equals artist (parsing error — same text landed in both fields)
+    if (titleLower === artistLower && titleLower !== '') return true;
+
+    // 6. Confidence below threshold
+    if (track.confidence !== undefined && track.confidence < 0.35) return true;
+
+    return false;
+  }, []);
+
   // Separate tracks into those with timestamps (timeline) and those without (unplaced)
   const { timedTracks, unplacedTracks } = useMemo(() => {
     const timed: Track[] = [];
     const unplaced: Track[] = [];
 
     for (const track of tracks) {
+      // Filter out low quality tracks from BOTH lists
+      if (isLowQualityTrack(track)) continue;
+
       if (track.timestamp && track.timestamp > 0) {
         timed.push(track);
       } else {
@@ -192,11 +241,33 @@ export default function SetDetailScreen() {
       }
     }
 
+    // Deduplicate unplaced tracks (same title+artist appearing multiple times)
+    const normalizeStr = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const dedupedUnplaced: Track[] = [];
+    for (const track of unplaced) {
+      const isDupe = dedupedUnplaced.some(existing => {
+        const existTitle = normalizeStr(existing.title);
+        const existArtist = normalizeStr(existing.artist);
+        const newTitle = normalizeStr(track.title);
+        const newArtist = normalizeStr(track.artist);
+        // Exact match
+        if (existTitle === newTitle && existArtist === newArtist) return true;
+        // Title substring match (one contains the other)
+        if (existTitle && newTitle && (existTitle.includes(newTitle) || newTitle.includes(existTitle))) {
+          if (!existArtist || !newArtist || existArtist === newArtist) return true;
+        }
+        return false;
+      });
+      if (!isDupe) {
+        dedupedUnplaced.push(track);
+      }
+    }
+
     // Sort timed tracks by timestamp
     timed.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-    return { timedTracks: timed, unplacedTracks: unplaced };
-  }, [tracks]);
+    return { timedTracks: timed, unplacedTracks: dedupedUnplaced };
+  }, [tracks, isLowQualityTrack]);
 
   // For backward compatibility
   const sortedTracks = timedTracks;
@@ -217,45 +288,6 @@ export default function SetDetailScreen() {
     const maxValidTimestamp = (setList?.totalDuration && setList.totalDuration > 0)
       ? setList.totalDuration + 60 // Add 1 min buffer for tracks that might start near the end
       : 7200; // Default 2 hour max if no duration
-
-    // Helper: check if a track is low quality (garbage, placeholder, or noise)
-    const isLowQualityTrack = (track: Track): boolean => {
-      const title = (track.title || '').trim();
-      const artist = (track.artist || '').trim();
-      const titleLower = title.toLowerCase();
-      const artistLower = artist.toLowerCase();
-
-      // 1. Pure ID/unknown placeholders (existing check)
-      const idValues = ['id', '', 'unknown', 'unknown track', 'unknown artist', 'tba', 'tbc'];
-      if (idValues.includes(titleLower) && idValues.includes(artistLower)) return true;
-
-      // 2. Very short content (< 3 alpha chars in title)
-      const titleAlpha = (title.match(/[a-zA-Z]/g) || []).length;
-      const artistAlpha = (artist.match(/[a-zA-Z]/g) || []).length;
-      if (titleAlpha < 3 && artistAlpha < 3) return true;
-
-      // 3. Title is a reaction/comment, not a track name
-      const garbagePatterns = [
-        /^(love|loving|loved)\s/i, /^(this|that)\s+(is|was|set)/i,
-        /^(so|very|really)\s+(good|fire|sick|crazy)/i,
-        /^(banger|fire|heater|sick|insane|crazy|absolute|unreal)!*$/i,
-        /^anyone\s+(know|got)/i, /^what\s+(is|was|a)\s/i,
-        /^(can|does)\s+(someone|anyone)/i, /^not\s+sure/i,
-        /^i\s+(love|need|remember|think)/i, /^(ooph|grimy|dark|sheez|oooi)/i,
-        /^listen\s+to/i, /^check\s+(out|it)/i,
-        /^(the|this|that)\s+\w+\s+(is|was)\s/i,
-        /^(amazing|incredible)\s/i, /starting\s+at/i,
-      ];
-      if (garbagePatterns.some(p => p.test(title))) return true;
-
-      // 4. Title equals artist (parsing error — same text landed in both fields)
-      if (titleLower === artistLower && titleLower !== '') return true;
-
-      // 5. Confidence below threshold (if available from track metadata)
-      if (track.confidence !== undefined && track.confidence < 0.35) return true;
-
-      return false;
-    };
 
     // Filter out tracks that have active conflicts, invalid timestamps, or are pure ID placeholders
     const tracksWithoutConflicts = sortedTracks.filter(track => {
@@ -484,13 +516,6 @@ export default function SetDetailScreen() {
         }
       }
 
-      // Helper: check if a track is an unidentified "ID"
-      const isIdTrack = (t: Track): boolean => {
-        const title = normalizeStr(t.title);
-        const artist = normalizeStr(t.artist);
-        return (title === 'id' || title === '') && (artist === 'id' || artist === '' || artist === 'unknown' || artist === 'unknownartist');
-      };
-
       // If multiple tracks are grouped together, check if they're actually different
       if (closeGroup.length > 1) {
         // Group truly unique tracks (not same song with different metadata)
@@ -509,10 +534,9 @@ export default function SetDetailScreen() {
         // Pick best track from each group of duplicates
         let uniqueTracks = uniqueGroups.map(group => pickBestTrack(group));
 
-        // Filter out ID/ID tracks if there are real identified tracks
-        const realTracks = uniqueTracks.filter(t => !isIdTrack(t));
+        // Filter out low-quality tracks (ID placeholders, garbage, reactions) from conflict options
+        const realTracks = uniqueTracks.filter(t => !isLowQualityTrack(t));
         if (realTracks.length > 0) {
-          // We have real tracks - use only those (ignore ID placeholders)
           uniqueTracks = realTracks;
         }
 
@@ -577,7 +601,7 @@ export default function SetDetailScreen() {
     });
 
     return { tracklistItems: combined, estimatedMissingTracks: missingCount };
-  }, [sortedTracks, conflicts]);
+  }, [sortedTracks, conflicts, isLowQualityTrack]);
 
   const handleSave = useCallback(async () => {
     if (!setList) return;
