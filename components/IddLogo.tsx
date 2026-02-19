@@ -4,7 +4,7 @@ import Colors from '@/constants/colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-// TRACK'D Logo with scanning effect and volume bars
+// trakd Logo with scanning effect and volume bars
 
 interface IddLogoProps {
   size?: 'small' | 'medium' | 'large';
@@ -251,7 +251,7 @@ export function IddBadge({ size = 'small' }: { size?: 'small' | 'medium' }) {
 
   return (
     <View style={[styles.badge, { paddingHorizontal: sizeConfig.padding + 2, paddingVertical: sizeConfig.padding }]}>
-      <Text style={[styles.badgeText, { fontSize: sizeConfig.fontSize }]}>TRACK'D</Text>
+      <Text style={[styles.badgeText, { fontSize: sizeConfig.fontSize }]}>trakd</Text>
     </View>
   );
 }

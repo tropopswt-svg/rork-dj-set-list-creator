@@ -527,17 +527,17 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
     onArtistPress?.(artistName);
   };
 
-  // Handle TRACK'D badge press - show explanation popup
+  // Handle trakd badge press - show explanation popup
   const handleTrackdBadgePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      'TRACK\'D Status',
+      'trakd Status',
       isIdentified
-        ? `This set has been TRACK'D! ${trackCount} track${trackCount !== 1 ? 's' : ''} ${trackCount !== 1 ? 'have' : 'has'} been identified.\n\n` +
+        ? `This set has been trakd! ${trackCount} track${trackCount !== 1 ? 's' : ''} ${trackCount !== 1 ? 'have' : 'has'} been identified.\n\n` +
           (isFullyIdentified
-            ? '⭐ Fully TRACK\'D - all tracks in this set have been found!'
+            ? 'Fully trakd - all tracks in this set have been found!'
             : 'Some tracks may still be unidentified or have gaps.')
-        : 'This set has not been TRACK\'D yet.\n\n' +
+        : 'This set has not been trakd yet.\n\n' +
           'Once analyzed, we\'ll identify the tracks played in this set using audio fingerprinting and tracklist databases.',
       [{ text: 'Got it', style: 'default' }]
     );
@@ -547,9 +547,9 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const handleUnanalyzedBadgePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
-      'Not Yet TRACK\'D',
-      'This set hasn\'t been TRACK\'D yet.\n\n' +
-      'Tap the set to view details and start the TRACK\'D process.',
+      'Not Yet trakd',
+      'This set hasn\'t been trakd yet.\n\n' +
+      'Tap the set to view details and start the trakd process.',
       [{ text: 'Got it', style: 'default' }]
     );
   };
@@ -559,13 +559,13 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Alert.alert(
       'Source Link Required',
-      'This set needs a YouTube or SoundCloud link to get TRACK\'D.\n\n' +
-      '📎 How to add a link:\n' +
+      'This set needs a YouTube or SoundCloud link to get trakd.\n\n' +
+      'How to add a link:\n' +
       '1. Tap on this set to open it\n' +
       '2. Look for the "Add Source" button\n' +
       '3. Paste a YouTube or SoundCloud URL\n\n' +
-      '🎵 What happens next:\n' +
-      'Once linked, TRACK\'D will analyze the audio to automatically identify every track played!',
+      'What happens next:\n' +
+      'Once linked, trakd will analyze the audio to automatically identify every track played!',
       [{ text: 'Got it', style: 'default' }]
     );
   };
@@ -1086,7 +1086,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   );
   const needsSource = !hasAnalyzableSource;
 
-  // Check if set has been TRACK'D (analyzed via YouTube/SoundCloud)
+  // Check if set has been trackd (analyzed via YouTube/SoundCloud)
   const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
   const isIdentified = hasAnalyzableSource && (setList.aiProcessed || trackCount > 0);
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
@@ -1156,10 +1156,10 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
       delayLongPress={400}
       accessibilityLabel={searchableText}
     >
-      {/* TRACKD badge - top left corner, floating like venue badge */}
+      {/* trackd badge - top left corner, floating like venue badge */}
       {isIdentified && (
         <Pressable onPress={handleTrackdBadgePress} hitSlop={4} style={styles.trackdBadgeFloating}>
-          <Text style={styles.trackdBadgeFloatingText}>TRACKD</Text>
+          <Text style={styles.trackdBadgeFloatingText}>trakd</Text>
         </Pressable>
       )}
 
@@ -1932,7 +1932,7 @@ const styles = StyleSheet.create({
     color: '#D4C4B0',
     fontWeight: '700' as const,
   },
-  // TRACKD badge - inline small pill
+  // trackd badge - inline small pill
   trackdBadge: {
     flexDirection: 'row',
     alignItems: 'center',

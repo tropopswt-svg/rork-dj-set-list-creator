@@ -1230,7 +1230,7 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `TRACK'D ${importResult.setList.tracks.length} tracks from this source`);
+                              Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
                               Alert.alert('No Results', 'No tracks could be identified from this source');
                             }
@@ -1246,7 +1246,7 @@ export default function SetDetailScreen() {
                       </Pressable>
                     ) : hasTimestamps ? (
                       <View style={styles.identifiedBadge}>
-                        <Text style={styles.identifiedBadgeId}>TRACK'D</Text>
+                        <Text style={styles.identifiedBadgeId}>trakd</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1353,7 +1353,7 @@ export default function SetDetailScreen() {
                                 setDbSet(refreshedSet);
                               }
 
-                              Alert.alert('Success', `TRACK'D ${importResult.setList.tracks.length} tracks from this source`);
+                              Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
                             } else {
                               Alert.alert('No Results', 'No tracks could be identified from this source');
                             }
@@ -1369,7 +1369,7 @@ export default function SetDetailScreen() {
                       </Pressable>
                     ) : hasTimestamps ? (
                       <View style={styles.identifiedBadge}>
-                        <Text style={styles.identifiedBadgeId}>TRACK'D</Text>
+                        <Text style={styles.identifiedBadgeId}>trakd</Text>
                       </View>
                     ) : null}
                   </View>
@@ -1486,7 +1486,7 @@ export default function SetDetailScreen() {
             <View style={styles.aiInfoBanner}>
               <Sparkles size={14} color={Colors.dark.primary} />
               <Text style={styles.aiInfoText}>
-                TRACK'D • {setList.commentsScraped?.toLocaleString()} data points analyzed
+                trakd • {setList.commentsScraped?.toLocaleString()} data points analyzed
               </Text>
             </View>
           )}

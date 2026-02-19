@@ -192,7 +192,7 @@ export default function FindFriendsScreen() {
               ) : (
                 <View style={styles.emptyState}>
                   <Text style={styles.emptyText}>
-                    No contacts found on TRACK'D
+                    No contacts found on trakd
                   </Text>
                   <Pressable style={styles.resyncButton} onPress={handleContactSync}>
                     <Text style={styles.resyncText}>Try Again</Text>

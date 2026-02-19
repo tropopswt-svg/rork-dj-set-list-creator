@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions, InteractionManager } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock, SlidersHorizontal, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings, Heart, Bookmark, Play, Share2, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
@@ -130,16 +130,41 @@ interface Filters {
   eventId: string | null; // Filter by event/venue badge
 }
 
-// Extract country from location string (last part after comma)
+// Known countries for validation
+const KNOWN_COUNTRIES = new Set([
+  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Argentina', 'Armenia',
+  'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados',
+  'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia', 'Botswana',
+  'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Cambodia', 'Cameroon', 'Canada',
+  'Chile', 'China', 'Colombia', 'Congo', 'Costa Rica', 'Croatia', 'Cuba', 'Cyprus',
+  'Czech Republic', 'Czechia', 'Denmark', 'Dominican Republic', 'Ecuador', 'Egypt',
+  'El Salvador', 'England', 'Estonia', 'Ethiopia', 'Fiji', 'Finland', 'France',
+  'Georgia', 'Germany', 'Ghana', 'Greece', 'Guatemala', 'Haiti', 'Honduras',
+  'Hong Kong', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland',
+  'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kosovo',
+  'Kuwait', 'Laos', 'Latvia', 'Lebanon', 'Libya', 'Lithuania', 'Luxembourg',
+  'Madagascar', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Mexico', 'Moldova',
+  'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia',
+  'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Nigeria', 'North Macedonia',
+  'Norway', 'Oman', 'Pakistan', 'Palestine', 'Panama', 'Paraguay', 'Peru',
+  'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
+  'Saudi Arabia', 'Scotland', 'Senegal', 'Serbia', 'Singapore', 'Slovakia', 'Slovenia',
+  'Somalia', 'South Africa', 'South Korea', 'Spain', 'Sri Lanka', 'Sudan', 'Sweden',
+  'Switzerland', 'Syria', 'Taiwan', 'Tanzania', 'Thailand', 'Tunisia', 'Turkey',
+  'UAE', 'Uganda', 'UK', 'Ukraine', 'United Arab Emirates', 'United Kingdom',
+  'United States', 'Uruguay', 'USA', 'Uzbekistan', 'Venezuela', 'Vietnam', 'Wales',
+  'Yemen', 'Zambia', 'Zimbabwe',
+]);
+
+// Extract country from location string — only returns validated country names
 const extractCountry = (name: string): string | null => {
   const atMatch = name.match(/@\s*(.+)$/);
   if (atMatch) {
     const parts = atMatch[1].split(',').map(p => p.trim());
-    if (parts.length >= 2) {
-      // Remove any date from the end
-      let country = parts[parts.length - 1];
-      country = country.replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
-      if (country && country.length > 1) return country;
+    // Check parts from last to first for a known country
+    for (let i = parts.length - 1; i >= 0; i--) {
+      let candidate = parts[i].replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
+      if (candidate && KNOWN_COUNTRIES.has(candidate)) return candidate;
     }
   }
   return null;
@@ -172,7 +197,6 @@ export default function DiscoverScreen() {
   const [expandedFilter, setExpandedFilter] = useState<'artists' | 'years' | 'countries' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
-  const dropdownAnim = useRef(new Animated.Value(0)).current;
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<ScrollView>(null);
   const lastCenteredIndex = useRef(-1);
@@ -618,7 +642,7 @@ export default function DiscoverScreen() {
 
     return {
       artists: Array.from(artists).sort(),
-      years: Array.from(years).sort((a, b) => b.localeCompare(a)), // Newest first
+      years: Array.from(years).sort((a, b) => b.localeCompare(a)),
       countries: Array.from(countries).sort(),
     };
   }, [setLists]);
@@ -626,7 +650,7 @@ export default function DiscoverScreen() {
   const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0) + (selectedFilters.eventId ? 1 : 0);
   const hasActiveFilters = activeFilterCount > 0 || debouncedSearchQuery.length > 0;
 
-  // Check if a set has been TRACK'D (analyzed via YouTube/SoundCloud)
+  // Check if a set has been trakd (analyzed via YouTube/SoundCloud)
   const isSetIdentified = (set: SetList): boolean => {
     // Check if set has YouTube or SoundCloud sources
     const hasAnalyzableSource = set.sourceLinks?.some(
@@ -658,7 +682,7 @@ export default function DiscoverScreen() {
           if (!matchesSearch) return false;
         }
 
-        // TRACK'D / Source filter
+        // trakd / Source filter
         if (selectedFilters.identified !== 'all') {
           if (selectedFilters.identified === 'needs-source') {
             if (!setNeedsSource(set)) return false;
@@ -715,16 +739,15 @@ export default function DiscoverScreen() {
 
   useEffect(() => {
     if (filteredSets.length > 0 && scrollViewRef.current) {
-      setTimeout(() => {
+      const task = InteractionManager.runAfterInteractions(() => {
         if (isInitialLoad.current) {
-          // First load: start in the middle
           scrollViewRef.current?.scrollTo({ y: initialScrollOffset, animated: false });
           isInitialLoad.current = false;
         } else {
-          // Filter/sort change: scroll to top smoothly
-          scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          scrollViewRef.current?.scrollTo({ y: 0, animated: false });
         }
-      }, 100);
+      });
+      return () => task.cancel();
     }
   }, [filteredSetKey]);
 
@@ -801,7 +824,7 @@ export default function DiscoverScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSetKey]);
 
-  const toggleFilter = (type: keyof Filters, value: string) => {
+  const toggleFilter = (type: 'artists' | 'years' | 'countries', value: string) => {
     setSelectedFilters(prev => {
       const current = prev[type];
       const arr = Array.isArray(current) ? current : [current].filter(Boolean);
@@ -819,29 +842,18 @@ export default function DiscoverScreen() {
 
   // Clear all filters and close dropdown
   const handleClearAllFilters = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.selectionAsync();
     clearFilters();
     if (showFilterDropdown) {
       setShowFilterDropdown(false);
       setExpandedFilter(null);
-      Animated.timing(dropdownAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: false,
-      }).start();
     }
   };
 
   const toggleFilterDropdown = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    resetInactivityTimer();
+    Haptics.selectionAsync();
     const toValue = showFilterDropdown ? 0 : 1;
     setShowFilterDropdown(!showFilterDropdown);
-    Animated.timing(dropdownAnim, {
-      toValue,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
     if (showFilterDropdown) {
       setExpandedFilter(null);
     }
@@ -904,8 +916,7 @@ export default function DiscoverScreen() {
           <Pressable
             style={[styles.filterChip, activeFilter === 'trending' && styles.filterChipActive]}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-              resetInactivityTimer();
+              Haptics.selectionAsync();
               setActiveFilter('trending');
             }}
           >
@@ -915,8 +926,7 @@ export default function DiscoverScreen() {
           <Pressable
             style={[styles.filterChip, activeFilter === 'recent' && styles.filterChipActive]}
             onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-              resetInactivityTimer();
+              Haptics.selectionAsync();
               setActiveFilter('recent');
             }}
           >
@@ -958,7 +968,7 @@ export default function DiscoverScreen() {
 
         {/* Filter Dropdown */}
         {showFilterDropdown && (
-          <Animated.View style={[styles.filterDropdown]}>
+          <View style={styles.filterDropdown}>
             {/* Filter section buttons */}
             <View style={styles.filterSectionButtons}>
               <Pressable
@@ -1058,7 +1068,7 @@ export default function DiscoverScreen() {
                 <Text style={styles.clearFiltersBtnText}>Clear all filters</Text>
               </Pressable>
             )}
-          </Animated.View>
+          </View>
         )}
         </View>
 

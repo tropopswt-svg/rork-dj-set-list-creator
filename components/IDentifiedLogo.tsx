@@ -145,7 +145,7 @@ export default function IDentifiedLogo({ size = 'medium' }: IDentifiedLogoProps)
 
       {/* Text on top of bars */}
       <Text style={[styles.text, { fontSize: sizeConfig.fontSize }]}>
-        TRACK'D
+        trakd
       </Text>
     </View>
   );

@@ -303,7 +303,7 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
     try {
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(`https://trackd.app/set/${item.set.id}`, {
-          dialogTitle: `Check out ${item.set.name} on TRACK'D`,
+          dialogTitle: `Check out ${item.set.name} on trakd`,
         });
       }
     } catch (error) {

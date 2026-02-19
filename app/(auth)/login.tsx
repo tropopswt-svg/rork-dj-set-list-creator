@@ -119,7 +119,7 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.modalTitle}>You're All Set!</Text>
             <Text style={styles.modalMessage}>
-              Your email has been verified successfully. You can now log in to your TRACK'D account.
+              Your email has been verified successfully. You can now log in to your trakd account.
             </Text>
             <Pressable
               style={styles.modalButton}
