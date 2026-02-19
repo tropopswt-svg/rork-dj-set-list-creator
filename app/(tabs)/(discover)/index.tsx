@@ -125,47 +125,19 @@ type FilterType = 'trending' | 'recent';
 interface Filters {
   artists: string[];
   years: string[];
-  countries: string[];
+  venues: string[];
   identified: 'all' | 'identified' | 'unidentified' | 'needs-source';
   eventId: string | null; // Filter by event/venue badge
 }
 
-// Known countries for validation
-const KNOWN_COUNTRIES = new Set([
-  'Afghanistan', 'Albania', 'Algeria', 'Andorra', 'Angola', 'Argentina', 'Armenia',
-  'Australia', 'Austria', 'Azerbaijan', 'Bahamas', 'Bahrain', 'Bangladesh', 'Barbados',
-  'Belarus', 'Belgium', 'Belize', 'Benin', 'Bhutan', 'Bolivia', 'Bosnia', 'Botswana',
-  'Brazil', 'Brunei', 'Bulgaria', 'Burkina Faso', 'Cambodia', 'Cameroon', 'Canada',
-  'Chile', 'China', 'Colombia', 'Congo', 'Costa Rica', 'Croatia', 'Cuba', 'Cyprus',
-  'Czech Republic', 'Czechia', 'Denmark', 'Dominican Republic', 'Ecuador', 'Egypt',
-  'El Salvador', 'England', 'Estonia', 'Ethiopia', 'Fiji', 'Finland', 'France',
-  'Georgia', 'Germany', 'Ghana', 'Greece', 'Guatemala', 'Haiti', 'Honduras',
-  'Hong Kong', 'Hungary', 'Iceland', 'India', 'Indonesia', 'Iran', 'Iraq', 'Ireland',
-  'Israel', 'Italy', 'Jamaica', 'Japan', 'Jordan', 'Kazakhstan', 'Kenya', 'Kosovo',
-  'Kuwait', 'Laos', 'Latvia', 'Lebanon', 'Libya', 'Lithuania', 'Luxembourg',
-  'Madagascar', 'Malaysia', 'Maldives', 'Mali', 'Malta', 'Mexico', 'Moldova',
-  'Monaco', 'Mongolia', 'Montenegro', 'Morocco', 'Mozambique', 'Myanmar', 'Namibia',
-  'Nepal', 'Netherlands', 'New Zealand', 'Nicaragua', 'Nigeria', 'North Macedonia',
-  'Norway', 'Oman', 'Pakistan', 'Palestine', 'Panama', 'Paraguay', 'Peru',
-  'Philippines', 'Poland', 'Portugal', 'Qatar', 'Romania', 'Russia', 'Rwanda',
-  'Saudi Arabia', 'Scotland', 'Senegal', 'Serbia', 'Singapore', 'Slovakia', 'Slovenia',
-  'Somalia', 'South Africa', 'South Korea', 'Spain', 'Sri Lanka', 'Sudan', 'Sweden',
-  'Switzerland', 'Syria', 'Taiwan', 'Tanzania', 'Thailand', 'Tunisia', 'Turkey',
-  'UAE', 'Uganda', 'UK', 'Ukraine', 'United Arab Emirates', 'United Kingdom',
-  'United States', 'Uruguay', 'USA', 'Uzbekistan', 'Venezuela', 'Vietnam', 'Wales',
-  'Yemen', 'Zambia', 'Zimbabwe',
-]);
-
-// Extract country from location string — only returns validated country names
-const extractCountry = (name: string): string | null => {
+// Extract venue from set name — parses "Artist @ Venue, Location" pattern
+const extractVenue = (name: string): string | null => {
   const atMatch = name.match(/@\s*(.+)$/);
   if (atMatch) {
     const parts = atMatch[1].split(',').map(p => p.trim());
-    // Check parts from last to first for a known country
-    for (let i = parts.length - 1; i >= 0; i--) {
-      let candidate = parts[i].replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
-      if (candidate && KNOWN_COUNTRIES.has(candidate)) return candidate;
-    }
+    // First part after @ is typically the venue
+    const venue = parts[0].replace(/\s*\d{4}-\d{2}-\d{2}\s*$/, '').trim();
+    if (venue && venue.length > 1) return venue;
   }
   return null;
 };
@@ -194,7 +166,7 @@ export default function DiscoverScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [expandedFilter, setExpandedFilter] = useState<'artists' | 'years' | 'countries' | null>(null);
+  const [expandedFilter, setExpandedFilter] = useState<'artists' | 'years' | 'venues' | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
@@ -208,7 +180,7 @@ export default function DiscoverScreen() {
   const [selectedFilters, setSelectedFilters] = useState<Filters>({
     artists: [],
     years: [],
-    countries: [],
+    venues: [],
     identified: 'all',
     eventId: null,
   });
@@ -631,23 +603,24 @@ export default function DiscoverScreen() {
   const filterOptions = useMemo(() => {
     const artists = new Set<string>();
     const years = new Set<string>();
-    const countries = new Set<string>();
+    const venues = new Set<string>();
 
     setLists.forEach(set => {
       if (set.artist) artists.add(set.artist);
       if (set.date) years.add(extractYear(set.date));
-      const country = extractCountry(set.name);
-      if (country) countries.add(country);
+      // Use explicit venue field first, fall back to parsing from name
+      const venue = set.venue || extractVenue(set.name);
+      if (venue) venues.add(venue);
     });
 
     return {
       artists: Array.from(artists).sort(),
       years: Array.from(years).sort((a, b) => b.localeCompare(a)),
-      countries: Array.from(countries).sort(),
+      venues: Array.from(venues).sort(),
     };
   }, [setLists]);
 
-  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.countries.length + (selectedFilters.identified !== 'all' ? 1 : 0) + (selectedFilters.eventId ? 1 : 0);
+  const activeFilterCount = selectedFilters.artists.length + selectedFilters.years.length + selectedFilters.venues.length + (selectedFilters.identified !== 'all' ? 1 : 0) + (selectedFilters.eventId ? 1 : 0);
   const hasActiveFilters = activeFilterCount > 0 || debouncedSearchQuery.length > 0;
 
   // Check if a set has been trakd (analyzed via YouTube/SoundCloud)
@@ -704,10 +677,10 @@ export default function DiscoverScreen() {
           if (!selectedFilters.years.includes(setYear)) return false;
         }
 
-        // Country filter
-        if (selectedFilters.countries.length > 0) {
-          const country = extractCountry(set.name);
-          if (!country || !selectedFilters.countries.includes(country)) return false;
+        // Venue filter
+        if (selectedFilters.venues.length > 0) {
+          const venue = set.venue || extractVenue(set.name);
+          if (!venue || !selectedFilters.venues.includes(venue)) return false;
         }
 
         // Event/Venue badge filter
@@ -824,7 +797,7 @@ export default function DiscoverScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filteredSetKey]);
 
-  const toggleFilter = (type: 'artists' | 'years' | 'countries', value: string) => {
+  const toggleFilter = (type: 'artists' | 'years' | 'venues', value: string) => {
     setSelectedFilters(prev => {
       const current = prev[type];
       const arr = Array.isArray(current) ? current : [current].filter(Boolean);
@@ -836,7 +809,7 @@ export default function DiscoverScreen() {
   };
 
   const clearFilters = () => {
-    setSelectedFilters({ artists: [], years: [], countries: [], identified: 'all', eventId: null });
+    setSelectedFilters({ artists: [], years: [], venues: [], identified: 'all', eventId: null });
     setSearchQuery('');
   };
 
@@ -859,14 +832,14 @@ export default function DiscoverScreen() {
     }
   };
 
-  const toggleFilterSection = (section: 'artists' | 'years' | 'countries') => {
+  const toggleFilterSection = (section: 'artists' | 'years' | 'venues') => {
     Haptics.selectionAsync();
     setFilterSearch('');
     setExpandedFilter(expandedFilter === section ? null : section);
   };
 
   // Filter options based on search
-  const getFilteredOptions = (type: 'artists' | 'years' | 'countries') => {
+  const getFilteredOptions = (type: 'artists' | 'years' | 'venues') => {
     const options = filterOptions[type];
     if (!filterSearch || type === 'years') return options;
     const search = filterSearch.toLowerCase();
@@ -983,13 +956,12 @@ export default function DiscoverScreen() {
                 }));
               }}
             >
-              <Sparkles size={13} color={selectedFilters.identified === 'identified' ? '#FFF8E7' : '#D4AF37'} />
               <Text style={[
                 styles.trakdToggleText,
                 selectedFilters.identified === 'identified' && styles.trakdToggleTextActive,
               ]}>trakd</Text>
               {selectedFilters.identified === 'identified' && (
-                <X size={12} color="#FFF8E7" />
+                <X size={12} color="rgba(255, 248, 231, 0.8)" />
               )}
             </Pressable>
 
@@ -1018,27 +990,27 @@ export default function DiscoverScreen() {
               </Pressable>
 
               <Pressable
-                style={[styles.filterSectionBtn, expandedFilter === 'countries' && styles.filterSectionBtnActive]}
-                onPress={() => toggleFilterSection('countries')}
+                style={[styles.filterSectionBtn, expandedFilter === 'venues' && styles.filterSectionBtnActive]}
+                onPress={() => toggleFilterSection('venues')}
               >
-                <MapPin size={14} color={expandedFilter === 'countries' ? Colors.dark.background : Colors.dark.text} />
-                <Text style={[styles.filterSectionBtnText, expandedFilter === 'countries' && styles.filterSectionBtnTextActive]}>
-                  Country {selectedFilters.countries.length > 0 && `(${selectedFilters.countries.length})`}
+                <MapPin size={14} color={expandedFilter === 'venues' ? Colors.dark.background : Colors.dark.text} />
+                <Text style={[styles.filterSectionBtnText, expandedFilter === 'venues' && styles.filterSectionBtnTextActive]}>
+                  Venue {selectedFilters.venues.length > 0 && `(${selectedFilters.venues.length})`}
                 </Text>
-                <ChevronDown size={12} color={expandedFilter === 'countries' ? Colors.dark.background : Colors.dark.textMuted} />
+                <ChevronDown size={12} color={expandedFilter === 'venues' ? Colors.dark.background : Colors.dark.textMuted} />
               </Pressable>
             </View>
 
             {/* Expanded filter options */}
             {expandedFilter && (
               <View style={styles.expandedSection}>
-                {/* Search input for artists and countries */}
-                {(expandedFilter === 'artists' || expandedFilter === 'countries') && (
+                {/* Search input for artists and venues */}
+                {(expandedFilter === 'artists' || expandedFilter === 'venues') && (
                   <View style={styles.filterSearchContainer}>
                     <Search size={14} color={Colors.dark.textMuted} />
                     <TextInput
                       style={styles.filterSearchInput}
-                      placeholder={`Search ${expandedFilter === 'artists' ? 'artists' : 'countries'}...`}
+                      placeholder={`Search ${expandedFilter === 'artists' ? 'artists' : 'venues'}...`}
                       placeholderTextColor={Colors.dark.textMuted}
                       value={filterSearch}
                       onChangeText={setFilterSearch}
@@ -1693,25 +1665,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 11,
     marginBottom: 10,
     borderRadius: 10,
-    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    backgroundColor: 'rgba(212, 175, 55, 0.06)',
     borderWidth: 1.5,
-    borderColor: 'rgba(212, 175, 55, 0.25)',
+    borderColor: 'rgba(212, 175, 55, 0.2)',
   },
   trakdToggleBtnActive: {
-    backgroundColor: 'rgba(212, 175, 55, 0.75)',
-    borderColor: 'rgba(255, 223, 100, 0.6)',
-    borderBottomColor: 'rgba(160, 120, 20, 0.3)',
+    backgroundColor: 'rgba(218, 180, 50, 0.82)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 230, 120, 0.7)',
+    borderTopColor: 'rgba(255, 240, 160, 0.85)',
+    borderLeftColor: 'rgba(255, 235, 140, 0.65)',
+    borderBottomColor: 'rgba(160, 120, 10, 0.35)',
+    borderRightColor: 'rgba(180, 140, 20, 0.3)',
+    shadowColor: '#D4AF37',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 6,
+    elevation: 5,
   },
   trakdToggleText: {
-    fontSize: 13,
-    fontWeight: '700' as const,
-    color: '#D4AF37',
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: '#C9A830',
+    letterSpacing: 0.3,
   },
   trakdToggleTextActive: {
-    color: '#FFF8E7',
+    color: '#FFFDE7',
+    textShadowColor: 'rgba(120, 85, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 0.5 },
+    textShadowRadius: 2,
   },
   filterSectionButtons: {
     flexDirection: 'row',
