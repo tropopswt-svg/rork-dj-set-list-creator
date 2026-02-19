@@ -289,34 +289,6 @@ export default function SetDetailScreen() {
       ? setList.totalDuration + 60 // Add 1 min buffer for tracks that might start near the end
       : 7200; // Default 2 hour max if no duration
 
-    // Filter out tracks that have active conflicts, invalid timestamps, or are pure ID placeholders
-    const tracksWithoutConflicts = sortedTracks.filter(track => {
-      // Skip low-quality tracks - garbage, placeholders, noise
-      if (isLowQualityTrack(track)) {
-        return false;
-      }
-      // Skip tracks with conflicts
-      if (track.hasConflict && track.conflictId) {
-        if (conflicts.some(c => c.id === track.conflictId)) {
-          return false;
-        }
-      }
-      // Skip tracks with timestamps beyond set duration (invalid data from comments)
-      const timestamp = track.timestamp || 0;
-      if (timestamp > maxValidTimestamp) {
-        if (__DEV__) console.log('[TrackFilter] Skipping track with invalid timestamp:', track.title, 'at', timestamp, '(max:', maxValidTimestamp, ')');
-        return false;
-      }
-      return true;
-    });
-
-    const items: TracklistItem[] = [];
-    const avgTrackDuration = 210; // ~3.5 min average track length in DJ sets
-    const minTrackGap = 75; // Tracks < 1.25 min apart are suspicious (likely same track or conflict)
-    const gapThreshold = 270; // 4.5+ min gap suggests missing track(s)
-    let missingCount = 0;
-    let gapCounter = 0;
-
     // Helper: normalize string for comparison (remove special chars, lowercase)
     const normalizeStr = (s: string | undefined): string => {
       if (!s) return '';
@@ -344,7 +316,7 @@ export default function SetDetailScreen() {
       // If both title and artist partially match, likely same track
       if (titleMatch && artistMatch) return true;
 
-      // Check for very similar titles with same artist base (raised minimums to avoid short-string false positives)
+      // Check for very similar titles with same artist base
       if (artistMatch && (
         titleA.length > 5 && titleB.length > 5 &&
         (titleA.includes(titleB.slice(0, 6)) || titleB.includes(titleA.slice(0, 6)))
@@ -353,28 +325,20 @@ export default function SetDetailScreen() {
       }
 
       // Check for swapped title/artist (common parsing error)
-      // e.g., "What Are You Waiting For (Sunrise Mix)" by "Chris Stussy"
-      // vs "Sunrise Mix" by "What Are You Waiting For"
       const titleInOtherArtist = titleA.length > 5 && artistB.includes(titleA.slice(0, Math.min(8, titleA.length)));
       const artistInOtherTitle = artistA.length > 5 && titleB.includes(artistA.slice(0, Math.min(8, artistA.length)));
       const otherTitleInArtist = titleB.length > 5 && artistA.includes(titleB.slice(0, Math.min(8, titleB.length)));
       const otherArtistInTitle = artistB.length > 5 && titleA.includes(artistB.slice(0, Math.min(8, artistB.length)));
 
-      // If one track's title appears in the other's artist (or vice versa), likely swapped
       if ((titleInOtherArtist || otherArtistInTitle) && (artistInOtherTitle || otherTitleInArtist)) {
         return true;
       }
 
       // Check if title contains mix/remix info that matches
-      // e.g., "What Are You Waiting For (Sunrise Mix)" contains "Sunrise Mix"
-      if (titleA.length > titleB.length && titleA.includes(titleB) && titleB.length > 5) {
-        return true;
-      }
-      if (titleB.length > titleA.length && titleB.includes(titleA) && titleA.length > 5) {
-        return true;
-      }
+      if (titleA.length > titleB.length && titleA.includes(titleB) && titleB.length > 5) return true;
+      if (titleB.length > titleA.length && titleB.includes(titleA) && titleA.length > 5) return true;
 
-      // Word overlap check for longer titles (Jaccard similarity on word sets)
+      // Word overlap check for longer titles (Jaccard similarity)
       if (titleA.length > 10 && titleB.length > 10) {
         const wordsA = new Set(titleA.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
         const wordsB = new Set(titleB.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
@@ -394,7 +358,7 @@ export default function SetDetailScreen() {
       return false;
     };
 
-    // Helper: check if title has metadata noise (release dates, brackets with dates, etc.)
+    // Helper: check if title has metadata noise
     const hasMetadataNoise = (title: string | undefined): boolean => {
       if (!title) return false;
       return /\[.*\d{4}.*\]|\(.*\d{4}.*\)|release|unreleased|out soon|coming soon/i.test(title);
@@ -403,23 +367,18 @@ export default function SetDetailScreen() {
     // Helper: pick the "best" track from duplicates (prefer verified, database source, clean titles)
     const pickBestTrack = (tracks: Track[]): Track => {
       return tracks.reduce((best, current) => {
-        // Prefer verified tracks
         if (current.verified && !best.verified) return current;
         if (best.verified && !current.verified) return best;
-        // Prefer database/1001tracklists source
         if (current.source === 'database' || current.source === '1001tracklists') return current;
         if (best.source === 'database' || best.source === '1001tracklists') return best;
-        // Prefer tracks without metadata noise in title
         const currentHasNoise = hasMetadataNoise(current.title);
         const bestHasNoise = hasMetadataNoise(best.title);
         if (!currentHasNoise && bestHasNoise) return current;
         if (currentHasNoise && !bestHasNoise) return best;
-        // Prefer tracks with proper artist (not "Unknown" or containing release info)
         const currentArtistClean = !hasMetadataNoise(current.artist) && current.artist?.toLowerCase() !== 'unknown';
         const bestArtistClean = !hasMetadataNoise(best.artist) && best.artist?.toLowerCase() !== 'unknown';
         if (currentArtistClean && !bestArtistClean) return current;
         if (bestArtistClean && !currentArtistClean) return best;
-        // Prefer tracks with more complete titles (not truncated)
         if ((current.title?.length || 0) > (best.title?.length || 0)) return current;
         return best;
       });
@@ -430,22 +389,49 @@ export default function SetDetailScreen() {
       let score = 0;
       const title = (t.title || '').toLowerCase();
       const artist = (t.artist || '').toLowerCase();
-
-      // Real artist name (not unknown/empty)
       if (artist && artist !== 'unknown' && artist !== 'unknown artist' && artist !== 'id') score += 3;
-      // Real title (not unknown/empty)
       if (title && title !== 'unknown' && title !== 'unknown track' && title !== 'id') score += 3;
-      // From reliable source
       if (t.source === 'database' || t.source === '1001tracklists') score += 4;
       if (t.source === 'youtube' || t.source === 'soundcloud') score += 1;
-      // Verified
       if (t.verified) score += 3;
-      // Confidence
       if (t.confidence && t.confidence > 0.7) score += 2;
-      else if (t.confidence && t.confidence > 0.5) score += 1;
-
+      if (t.confidence && t.confidence > 0.5) score += 1;
+      if (!hasMetadataNoise(t.title)) score += 1;
       return score;
     };
+
+    // Filter out tracks that have active conflicts, invalid timestamps, or are pure ID placeholders
+    const filteredTracks = sortedTracks.filter(track => {
+      if (isLowQualityTrack(track)) return false;
+      if (track.hasConflict && track.conflictId) {
+        if (conflicts.some(c => c.id === track.conflictId)) return false;
+      }
+      const timestamp = track.timestamp || 0;
+      if (timestamp > maxValidTimestamp) return false;
+      return true;
+    });
+
+    // GLOBAL DEDUP: Same track appearing at different timestamps across the whole set
+    // e.g., "Won't Stop" at 20:00 and "Won't Stop" at 55:00 — keep the best one
+    const tracksWithoutConflicts: Track[] = [];
+    for (const track of filteredTracks) {
+      const existingIdx = tracksWithoutConflicts.findIndex(existing => isSameTrack(existing, track));
+      if (existingIdx !== -1) {
+        // Same track found at a different timestamp — keep the better version
+        const existing = tracksWithoutConflicts[existingIdx];
+        const better = pickBestTrack([existing, track]);
+        tracksWithoutConflicts[existingIdx] = better;
+      } else {
+        tracksWithoutConflicts.push(track);
+      }
+    }
+
+    const items: TracklistItem[] = [];
+    const avgTrackDuration = 210; // ~3.5 min average track length in DJ sets
+    const minTrackGap = 75; // Tracks < 1.25 min apart are suspicious (likely same track or conflict)
+    const gapThreshold = 270; // 4.5+ min gap suggests missing track(s)
+    let missingCount = 0;
+    let gapCounter = 0;
 
     // Check for gap at the START of the set (before first track)
     if (tracksWithoutConflicts.length > 0) {
