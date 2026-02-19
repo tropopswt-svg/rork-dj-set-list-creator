@@ -969,6 +969,47 @@ export default function DiscoverScreen() {
         {/* Filter Dropdown */}
         {showFilterDropdown && (
           <View style={styles.filterDropdown}>
+            {/* trakd / not trakd toggle */}
+            <View style={styles.trakdToggleRow}>
+              <Pressable
+                style={[
+                  styles.trakdToggleBtn,
+                  selectedFilters.identified === 'identified' && styles.trakdToggleBtnActive,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedFilters(prev => ({
+                    ...prev,
+                    identified: prev.identified === 'identified' ? 'all' : 'identified',
+                  }));
+                }}
+              >
+                <Sparkles size={12} color={selectedFilters.identified === 'identified' ? '#fff' : Colors.dark.primary} />
+                <Text style={[
+                  styles.trakdToggleText,
+                  selectedFilters.identified === 'identified' && styles.trakdToggleTextActive,
+                ]}>trakd</Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.trakdToggleBtn,
+                  selectedFilters.identified === 'unidentified' && styles.trakdToggleBtnActive,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedFilters(prev => ({
+                    ...prev,
+                    identified: prev.identified === 'unidentified' ? 'all' : 'unidentified',
+                  }));
+                }}
+              >
+                <Text style={[
+                  styles.trakdToggleText,
+                  selectedFilters.identified === 'unidentified' && styles.trakdToggleTextActive,
+                ]}>not trakd</Text>
+              </Pressable>
+            </View>
+
             {/* Filter section buttons */}
             <View style={styles.filterSectionButtons}>
               <Pressable
@@ -1662,6 +1703,35 @@ const styles = StyleSheet.create({
     borderColor: '#FF6B35',
   },
   needsSourceToggleTextActive: {
+    color: '#fff',
+  },
+  trakdToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  trakdToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+  },
+  trakdToggleBtnActive: {
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+  },
+  trakdToggleText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: Colors.dark.primary,
+  },
+  trakdToggleTextActive: {
     color: '#fff',
   },
   filterSectionButtons: {
