@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRAKD — Know Every Track</title>
+  <meta name="description" content="Discover DJ sets, ID every track, and sync to Spotify. Join the waitlist for early access.">
+  <meta property="og:title" content="TRAKD — Know Every Track">
+  <meta property="og:description" content="Discover DJ sets, ID every track, and sync to Spotify. Join the waitlist.">
+  <meta property="og:image" content="/icon.png">
+  <meta name="theme-color" content="#1A1A1A">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: #1A1A1A;
+      color: #F5F0E8;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    .container {
+      max-width: 480px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Hero */
+    .hero {
+      padding: 60px 0 48px;
+      text-align: center;
+    }
+
+    .hero-icon {
+      width: 88px;
+      height: 88px;
+      border-radius: 22px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: 48px;
+      font-weight: 800;
+      letter-spacing: 6px;
+      margin-bottom: 12px;
+    }
+
+    .hero .tagline {
+      font-size: 18px;
+      color: rgba(245, 240, 232, 0.7);
+      margin-bottom: 36px;
+      line-height: 1.5;
+    }
+
+    /* Form */
+    .signup-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .signup-form input[type="email"] {
+      width: 100%;
+      padding: 16px 20px;
+      border-radius: 12px;
+      border: 2px solid rgba(245, 240, 232, 0.15);
+      background: rgba(245, 240, 232, 0.06);
+      color: #F5F0E8;
+      font-size: 16px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .signup-form input[type="email"]::placeholder {
+      color: rgba(245, 240, 232, 0.4);
+    }
+
+    .signup-form input[type="email"]:focus {
+      border-color: #C41E3A;
+    }
+
+    .signup-form button {
+      width: 100%;
+      padding: 16px 20px;
+      border-radius: 12px;
+      border: none;
+      background: #C41E3A;
+      color: #F5F0E8;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .signup-form button:hover {
+      background: #a8182f;
+    }
+
+    .signup-form button:active {
+      transform: scale(0.98);
+    }
+
+    .signup-form button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .form-message {
+      text-align: center;
+      font-size: 14px;
+      min-height: 20px;
+    }
+
+    .form-message.success {
+      color: #4ade80;
+    }
+
+    .form-message.error {
+      color: #f87171;
+    }
+
+    /* Success state */
+    .success-state {
+      display: none;
+      text-align: center;
+      padding: 20px 0;
+    }
+
+    .success-state .checkmark {
+      font-size: 40px;
+      margin-bottom: 12px;
+    }
+
+    .success-state h3 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .success-state p {
+      color: rgba(245, 240, 232, 0.6);
+      font-size: 15px;
+    }
+
+    /* Features */
+    .features {
+      padding: 48px 0;
+    }
+
+    .feature-card {
+      background: rgba(245, 240, 232, 0.04);
+      border: 1px solid rgba(245, 240, 232, 0.08);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 12px;
+    }
+
+    .feature-card .icon {
+      font-size: 28px;
+      margin-bottom: 12px;
+    }
+
+    .feature-card h3 {
+      font-size: 17px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .feature-card p {
+      font-size: 14px;
+      color: rgba(245, 240, 232, 0.6);
+      line-height: 1.5;
+    }
+
+    /* Counter */
+    .counter-section {
+      text-align: center;
+      padding: 32px 0;
+    }
+
+    .counter-section .count {
+      font-size: 36px;
+      font-weight: 800;
+      color: #C41E3A;
+    }
+
+    .counter-section .label {
+      font-size: 15px;
+      color: rgba(245, 240, 232, 0.6);
+      margin-top: 4px;
+    }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 32px 0 48px;
+      border-top: 1px solid rgba(245, 240, 232, 0.08);
+    }
+
+    .social-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .social-links a {
+      color: rgba(245, 240, 232, 0.6);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .social-links a:hover {
+      color: #F5F0E8;
+    }
+
+    footer .coming-soon {
+      font-size: 13px;
+      color: rgba(245, 240, 232, 0.35);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Hero -->
+    <section class="hero">
+      <img src="/icon.png" alt="TRAKD" class="hero-icon">
+      <h1>TRAKD</h1>
+      <p class="tagline">Know every track.<br>From the set to your playlist.</p>
+
+      <form class="signup-form" id="waitlistForm">
+        <input type="email" id="emailInput" placeholder="Enter your email" required autocomplete="email" inputmode="email">
+        <button type="submit" id="submitBtn">Join the Waitlist</button>
+        <p class="form-message" id="formMessage"></p>
+      </form>
+
+      <div class="success-state" id="successState">
+        <div class="checkmark">&#10003;</div>
+        <h3>You're in!</h3>
+        <p>We'll let you know when TRAKD launches.</p>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features">
+      <div class="feature-card">
+        <div class="icon">&#127911;</div>
+        <h3>Discover Sets</h3>
+        <p>Browse tracklists from your favorite DJs and festivals. Every set, broken down track by track.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#128269;</div>
+        <h3>ID Every Track</h3>
+        <p>No more Shazam fails. Get verified track IDs with artist, label, and BPM info.</p>
+      </div>
+      <div class="feature-card">
+        <div class="icon">&#127925;</div>
+        <h3>Sync to Spotify</h3>
+        <p>One tap to save tracks straight to your Spotify library. Verified links, no guesswork.</p>
+      </div>
+    </section>
+
+    <!-- Waitlist Counter -->
+    <section class="counter-section" id="counterSection" style="display:none;">
+      <div class="count" id="waitlistCount">0</div>
+      <div class="label">people on the waitlist</div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="social-links">
+        <a href="https://tiktok.com/@trakdapp" target="_blank" rel="noopener">TikTok</a>
+        <a href="https://instagram.com/trakdapp" target="_blank" rel="noopener">Instagram</a>
+      </div>
+      <p class="coming-soon">Coming Soon to iOS &amp; Android</p>
+    </footer>
+
+  </div>
+
+  <script>
+    (function() {
+      // Get source from URL params
+      const params = new URLSearchParams(window.location.search);
+      const source = params.get('ref') || 'direct';
+
+      const form = document.getElementById('waitlistForm');
+      const emailInput = document.getElementById('emailInput');
+      const submitBtn = document.getElementById('submitBtn');
+      const formMessage = document.getElementById('formMessage');
+      const successState = document.getElementById('successState');
+      const counterSection = document.getElementById('counterSection');
+      const waitlistCount = document.getElementById('waitlistCount');
+
+      // Fetch waitlist count
+      fetch('/api/waitlist')
+        .then(r => r.json())
+        .then(data => {
+          if (data.count > 0) {
+            waitlistCount.textContent = data.count.toLocaleString();
+            counterSection.style.display = 'block';
+          }
+        })
+        .catch(() => {});
+
+      // Form submit
+      form.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const email = emailInput.value.trim();
+
+        if (!email) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Joining...';
+        formMessage.textContent = '';
+        formMessage.className = 'form-message';
+
+        try {
+          const res = await fetch('/api/waitlist', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, source })
+          });
+
+          const data = await res.json();
+
+          if (res.ok && data.success) {
+            form.style.display = 'none';
+            successState.style.display = 'block';
+
+            // Bump counter
+            const currentCount = parseInt(waitlistCount.textContent.replace(/,/g, '')) || 0;
+            waitlistCount.textContent = (currentCount + 1).toLocaleString();
+            counterSection.style.display = 'block';
+          } else {
+            formMessage.textContent = data.error || 'Something went wrong. Try again.';
+            formMessage.className = 'form-message error';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Join the Waitlist';
+          }
+        } catch (err) {
+          formMessage.textContent = 'Connection error. Try again.';
+          formMessage.className = 'form-message error';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Join the Waitlist';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
