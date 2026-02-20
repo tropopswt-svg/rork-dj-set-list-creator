@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Platform,
+  Animated,
 } from 'react-native';
 import { MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
@@ -29,6 +30,39 @@ if (Platform.OS !== 'web') {
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 const { width: screenWidth } = Dimensions.get('window');
+const CIRCOLOCO_RED = '#C41E3A';
+
+// Pulsing red dot marker for map pins
+function PulsingPin() {
+  const pulse = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1.8, duration: 1200, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ])
+    ).start();
+  }, [pulse]);
+
+  return (
+    <View style={pinStyles.container}>
+      <Animated.View
+        style={[
+          pinStyles.pulseRing,
+          { transform: [{ scale: pulse }], opacity: pulse.interpolate({ inputRange: [1, 1.8], outputRange: [0.6, 0] }) },
+        ]}
+      />
+      <View style={pinStyles.dot} />
+    </View>
+  );
+}
+
+const pinStyles = StyleSheet.create({
+  container: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  pulseRing: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: CIRCOLOCO_RED },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: CIRCOLOCO_RED, borderWidth: 1.5, borderColor: '#fff' },
+});
 
 interface VenueData {
   name: string;
@@ -100,13 +134,8 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     };
   }, [venues]);
 
-  // Get marker color based on frequency
-  const getMarkerColor = (setsCount: number) => {
-    if (setsCount >= 5) return '#EF4444'; // Red - frequent
-    if (setsCount >= 3) return '#F97316'; // Orange
-    if (setsCount >= 2) return '#FBBF24'; // Yellow
-    return Colors.dark.textMuted; // Muted - single appearance
-  };
+  // All pins use Circoloco red
+  const getMarkerColor = (_setsCount: number) => CIRCOLOCO_RED;
 
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
@@ -165,8 +194,9 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
           <Marker
             key={idx}
             coordinate={{ latitude: venue.lat, longitude: venue.lng }}
-            pinColor={getMarkerColor(venue.setsCount)}
+            anchor={{ x: 0.5, y: 0.5 }}
           >
+            <PulsingPin />
             {Callout && !backgroundMode && (
               <Callout>
                 <View style={styles.callout}>
@@ -228,18 +258,20 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
   );
 }
 
-// Dark map styling for Google Maps
+// Greyed-out dark map styling — desaturated so red pins pop
 const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+  { elementType: 'geometry', stylers: [{ color: '#2a2a2a' }, { saturation: -100 }] },
   { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#555555' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
+  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#444444' }] },
+  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+  { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
 ];
 
 const styles = StyleSheet.create({

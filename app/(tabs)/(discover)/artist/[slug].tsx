@@ -119,9 +119,12 @@ export default function ArtistProfileScreen() {
             <ArtistHeatMap artistSlug={slug} backgroundMode />
           </View>
 
+          {/* Grey desaturation overlay */}
+          <View style={styles.greyOverlay} />
+
           {/* Gradient overlay for readability */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.8)']}
+            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.75)']}
             style={StyleSheet.absoluteFill}
           />
 
@@ -379,6 +382,10 @@ const styles = StyleSheet.create({
   mapBg: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1a1a1a',
+  },
+  greyOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(40, 40, 40, 0.35)',
   },
   header: {
     alignItems: 'center',
