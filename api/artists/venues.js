@@ -54,11 +54,11 @@ export default async function handler(req, res) {
       artistName = artist.name;
     }
 
-    // Get all sets by this artist with venue info (sets table uses artist name, not id)
+    // Get all sets by this artist with venue info (sets table uses dj_name)
     const { data: sets, error } = await supabase
       .from('sets')
       .select('id, venue, event_date')
-      .eq('artist', artistName)
+      .eq('dj_name', artistName)
       .not('venue', 'is', null);
 
     if (error) throw error;
