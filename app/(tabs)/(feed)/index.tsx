@@ -929,7 +929,8 @@ export default function FeedScreen() {
     soundRef.current?.setVolumeAsync(isMuted ? 0 : 0.7).catch(() => {});
   }, [isMuted]);
 
-  // Play a Spotify preview for a set's tracks
+  // Play an audio preview for a set's tracks
+  // Priority: Spotify preview → Deezer preview (free, no auth, reliable)
   const playPreviewFromTracks = useCallback(async (setId: string, tracks: any[]) => {
     if (currentPlayingRef.current === setId) return;
 
@@ -941,33 +942,54 @@ export default function FeedScreen() {
 
     currentPlayingRef.current = setId;
 
-    // Find the first track with a Spotify preview URL
-    const previewTrack = (tracks || []).find((t: any) => t.previewUrl);
-    if (!previewTrack) {
-      if (__DEV__) {
-        const total = (tracks || []).length;
-        console.log(`[Feed Audio] No preview URL found in ${total} tracks for set ${setId}`);
-      }
-      setNowPlaying(null);
-      return;
+    // 1. Try Spotify preview first
+    const spotifyTrack = (tracks || []).find((t: any) => t.previewUrl);
+    if (spotifyTrack) {
+      if (__DEV__) console.log(`[Feed Audio] Spotify preview: ${spotifyTrack.title}`);
+      const played = await tryPlayUrl(setId, spotifyTrack.previewUrl, spotifyTrack.title, spotifyTrack.artist);
+      if (played) return;
     }
-    if (__DEV__) console.log(`[Feed Audio] Playing preview: ${previewTrack.title} — ${previewTrack.artist}`);
 
+    // 2. Fallback: search Deezer for a preview (free API, 30s MP3 previews)
+    const candidates = (tracks || []).filter((t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID');
+    for (const track of candidates.slice(0, 3)) {
+      if (currentPlayingRef.current !== setId) return; // user scrolled away
+      try {
+        const q = encodeURIComponent(`artist:"${track.artist}" track:"${track.title}"`);
+        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
+        const data = await res.json();
+        const preview = data?.data?.[0]?.preview;
+        if (preview) {
+          if (__DEV__) console.log(`[Feed Audio] Deezer preview: ${track.title}`);
+          const played = await tryPlayUrl(setId, preview, track.title, track.artist);
+          if (played) return;
+        }
+      } catch {}
+    }
+
+    // No preview available
+    if (__DEV__) console.log(`[Feed Audio] No preview found for set ${setId}`);
+    setNowPlaying(null);
+  }, []);
+
+  // Helper: attempt to play a URL, returns true on success
+  const tryPlayUrl = useCallback(async (setId: string, url: string, title: string, artist: string): Promise<boolean> => {
     try {
       const { sound } = await Audio.Sound.createAsync(
-        { uri: previewTrack.previewUrl },
+        { uri: url },
         { shouldPlay: true, isLooping: true, volume: isMutedRef.current ? 0 : 0.7 }
       );
       // Stale check: user may have scrolled during load
       if (currentPlayingRef.current !== setId) {
         await sound.unloadAsync();
-        return;
+        return false;
       }
       soundRef.current = sound;
-      setNowPlaying({ title: previewTrack.title, artist: previewTrack.artist });
+      setNowPlaying({ title, artist });
+      return true;
     } catch (err) {
-      if (__DEV__) console.log('[Feed] Audio preview error:', err);
-      setNowPlaying(null);
+      if (__DEV__) console.log('[Feed Audio] Playback error:', err);
+      return false;
     }
   }, []);
 
