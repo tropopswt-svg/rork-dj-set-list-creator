@@ -902,128 +902,132 @@ export default function FeedScreen() {
   const [commentSheetSetId, setCommentSheetSetId] = useState<string | null>(null);
   const feedListRef = useRef<FlatList>(null);
 
-  // ── Audio Preview State ──
+  // ── Audio Preview ──
   const soundRef = useRef<Audio.Sound | null>(null);
-  const currentPlayingRef = useRef<string | null>(null);
+  const audioGenRef = useRef(0);           // generation counter — prevents stale async ops
   const visibleSetIdRef = useRef<string | null>(null);
   const tracksCacheRef = useRef<Map<string, any[]>>(new Map());
+  const fetchAbortRef = useRef<AbortController | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(false);
   const [nowPlaying, setNowPlaying] = useState<{ title: string; artist: string } | null>(null);
 
-  // Configure audio session
+  // Configure audio session once
   useEffect(() => {
     Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: false,
       shouldDuckAndroid: true,
     });
-    return () => {
-      soundRef.current?.unloadAsync().catch(() => {});
-    };
+    return () => { stopAudio(); };
   }, []);
 
-  // Sync muted state to ref and active sound
+  // Sync muted state
   useEffect(() => {
     isMutedRef.current = isMuted;
     soundRef.current?.setVolumeAsync(isMuted ? 0 : 0.7).catch(() => {});
   }, [isMuted]);
 
-  // Play an audio preview for a set's tracks
-  // Priority: Spotify preview → Deezer preview (free, no auth, reliable)
-  const playPreviewFromTracks = useCallback(async (setId: string, tracks: any[]) => {
-    if (currentPlayingRef.current === setId) return;
+  // ── Core helpers ──
 
-    // Stop current playback
+  const stopAudio = useCallback(() => {
+    audioGenRef.current++;
+    fetchAbortRef.current?.abort();
+    fetchAbortRef.current = null;
     if (soundRef.current) {
-      try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
+      const s = soundRef.current;
       soundRef.current = null;
+      s.stopAsync().then(() => s.unloadAsync()).catch(() => {});
     }
-
-    currentPlayingRef.current = setId;
-
-    // 1. Try Spotify preview first
-    const spotifyTrack = (tracks || []).find((t: any) => t.previewUrl);
-    if (spotifyTrack) {
-      if (__DEV__) console.log(`[Feed Audio] Spotify preview: ${spotifyTrack.title}`);
-      const played = await tryPlayUrl(setId, spotifyTrack.previewUrl, spotifyTrack.title, spotifyTrack.artist);
-      if (played) return;
-    }
-
-    // 2. Fallback: search Deezer for a preview (free API, 30s MP3 previews)
-    const candidates = (tracks || []).filter((t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID');
-    for (const track of candidates.slice(0, 3)) {
-      if (currentPlayingRef.current !== setId) return; // user scrolled away
-      try {
-        const q = encodeURIComponent(`artist:"${track.artist}" track:"${track.title}"`);
-        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
-        const data = await res.json();
-        const preview = data?.data?.[0]?.preview;
-        if (preview) {
-          if (__DEV__) console.log(`[Feed Audio] Deezer preview: ${track.title}`);
-          const played = await tryPlayUrl(setId, preview, track.title, track.artist);
-          if (played) return;
-        }
-      } catch {}
-    }
-
-    // No preview available
-    if (__DEV__) console.log(`[Feed Audio] No preview found for set ${setId}`);
     setNowPlaying(null);
   }, []);
 
-  // Helper: attempt to play a URL, returns true on success
-  const tryPlayUrl = useCallback(async (setId: string, url: string, title: string, artist: string): Promise<boolean> => {
+  const loadAndPlay = useCallback(async (gen: number, url: string, title: string, artist: string): Promise<boolean> => {
+    if (audioGenRef.current !== gen) return false;
     try {
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
         { shouldPlay: true, isLooping: true, volume: isMutedRef.current ? 0 : 0.7 }
       );
-      // Stale check: user may have scrolled during load
-      if (currentPlayingRef.current !== setId) {
-        await sound.unloadAsync();
+      if (audioGenRef.current !== gen) {
+        sound.unloadAsync().catch(() => {});
         return false;
+      }
+      // Unload any previous sound that snuck in
+      if (soundRef.current) {
+        const old = soundRef.current;
+        soundRef.current = null;
+        old.stopAsync().then(() => old.unloadAsync()).catch(() => {});
       }
       soundRef.current = sound;
       setNowPlaying({ title, artist });
       return true;
-    } catch (err) {
-      if (__DEV__) console.log('[Feed Audio] Playback error:', err);
+    } catch {
       return false;
     }
   }, []);
 
-  // Called by FeedCard when track data loads
-  const handleTracksLoaded = useCallback((setId: string, tracks: any[]) => {
-    tracksCacheRef.current.set(setId, tracks);
-    // If this is the currently visible card, start playing
-    if (visibleSetIdRef.current === setId) {
-      playPreviewFromTracks(setId, tracks);
-    }
-  }, [playPreviewFromTracks]);
+  // ── Main play logic ──
 
-  // Called when a card scrolls into center position
-  const handleSetBecameVisible = useCallback(async (setId: string) => {
+  const playPreviewForSet = useCallback(async (setId: string, tracks: any[]) => {
+    // Bump generation — any in-flight work from previous calls becomes stale
+    stopAudio();
+    const gen = audioGenRef.current;
     visibleSetIdRef.current = setId;
 
-    // Try cached tracks first
+    // 1. Spotify preview (already in track data)
+    const spotifyTrack = (tracks || []).find((t: any) => t.previewUrl);
+    if (spotifyTrack) {
+      if (await loadAndPlay(gen, spotifyTrack.previewUrl, spotifyTrack.title, spotifyTrack.artist)) return;
+    }
+
+    // 2. Deezer fallback — search first 3 identified tracks
+    const candidates = (tracks || []).filter(
+      (t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID'
+    ).slice(0, 3);
+
+    for (const track of candidates) {
+      if (audioGenRef.current !== gen) return;
+      try {
+        const q = encodeURIComponent(`artist:"${track.artist}" track:"${track.title}"`);
+        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
+        if (audioGenRef.current !== gen) return;
+        const json = await res.json();
+        const preview = json?.data?.[0]?.preview;
+        if (preview && await loadAndPlay(gen, preview, track.title, track.artist)) return;
+      } catch {}
+    }
+  }, [stopAudio, loadAndPlay]);
+
+  // ── Visibility handling ──
+
+  const handleSetBecameVisible = useCallback(async (setId: string) => {
+    if (visibleSetIdRef.current === setId && soundRef.current) return; // already playing this
+
+    // Stop old audio immediately
+    stopAudio();
+    visibleSetIdRef.current = setId;
+    const gen = audioGenRef.current;
+
+    // Try cache
     const cached = tracksCacheRef.current.get(setId);
     if (cached) {
-      playPreviewFromTracks(setId, cached);
+      playPreviewForSet(setId, cached);
       return;
     }
 
-    // Not cached yet — fetch independently (don't rely on FeedCard's tracksIdentified check)
+    // Fetch tracks
+    const abort = new AbortController();
+    fetchAbortRef.current = abort;
     try {
-      const res = await fetch(`${FEED_API_BASE_URL}/api/sets/${setId}`);
+      const res = await fetch(`${FEED_API_BASE_URL}/api/sets/${setId}`, { signal: abort.signal });
       const data = await res.json();
+      if (audioGenRef.current !== gen) return; // scrolled away during fetch
+
       if (data.success && data.set?.tracks?.length > 0) {
         tracksCacheRef.current.set(setId, data.set.tracks);
-        // Check we're still viewing this card
-        if (visibleSetIdRef.current === setId) {
-          playPreviewFromTracks(setId, data.set.tracks);
-        }
-        // Trigger Spotify enrichment in background if needed
+        playPreviewForSet(setId, data.set.tracks);
+        // Background enrichment
         if (data.needsEnrichment) {
           fetch(`${FEED_API_BASE_URL}/api/spotify-enrich`, {
             method: 'POST',
@@ -1031,13 +1035,20 @@ export default function FeedScreen() {
             body: JSON.stringify({ action: 'enrich-set', setId }),
           }).catch(() => {});
         }
-      } else if (__DEV__) {
-        console.log(`[Feed Audio] No tracks found for set ${setId}`);
       }
-    } catch (err) {
-      if (__DEV__) console.log('[Feed Audio] Track fetch error:', err);
+    } catch (err: any) {
+      if (err?.name === 'AbortError') return; // expected on fast scroll
     }
-  }, [playPreviewFromTracks]);
+  }, [stopAudio, playPreviewForSet]);
+
+  // Called by FeedCard when its track data loads (supplements cache)
+  const handleTracksLoaded = useCallback((setId: string, tracks: any[]) => {
+    tracksCacheRef.current.set(setId, tracks);
+    // If this card is visible and no audio is playing yet, start
+    if (visibleSetIdRef.current === setId && !soundRef.current) {
+      playPreviewForSet(setId, tracks);
+    }
+  }, [playPreviewForSet]);
 
   const toggleMute = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1091,13 +1102,9 @@ export default function FeedScreen() {
     setActiveCategory(cat);
     // Scroll back to top when switching tabs
     feedListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    // Reset audio — new data will trigger playback for the first card
-    soundRef.current?.stopAsync().catch(() => {});
-    soundRef.current?.unloadAsync().catch(() => {});
-    soundRef.current = null;
-    currentPlayingRef.current = null;
+    // Stop audio cleanly — new data will trigger playback for the first card
+    stopAudio();
     visibleSetIdRef.current = null;
-    setNowPlaying(null);
   };
 
   const loadFollowedArtistSets = async () => {
@@ -1252,7 +1259,7 @@ export default function FeedScreen() {
   const cardPageHeight = fullFeedHeight - CARD_GAP - 16; // slightly shorter cards
 
   // ── Audio: detect visible card from paging scroll ──
-  const handleMomentumScrollEnd = useCallback((e: any) => {
+  const handleScrollEnd = useCallback((e: any) => {
     if (fullFeedHeight <= 0) return;
     const offsetY = e.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / fullFeedHeight);
@@ -1275,19 +1282,14 @@ export default function FeedScreen() {
         cardHeight={cardPageHeight}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          // Stop audio when navigating to set detail
-          soundRef.current?.stopAsync().catch(() => {});
-          soundRef.current?.unloadAsync().catch(() => {});
-          soundRef.current = null;
-          currentPlayingRef.current = null;
-          setNowPlaying(null);
+          stopAudio();
           router.push(`/(tabs)/(discover)/${item.set.id}`);
         }}
-        onOpenComments={(setId) => setCommentSheetSetId(setId)}
+        onOpenComments={(setId) => { stopAudio(); setCommentSheetSetId(setId); }}
         onTracksLoaded={handleTracksLoaded}
       />
     </View>
-  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded]);
+  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded, stopAudio]);
 
   return (
     <View style={styles.container}>
@@ -1375,7 +1377,8 @@ export default function FeedScreen() {
               pagingEnabled
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.feedListContent}
-              onMomentumScrollEnd={handleMomentumScrollEnd}
+              onMomentumScrollEnd={handleScrollEnd}
+              onScrollEndDrag={handleScrollEnd}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -1414,7 +1417,13 @@ export default function FeedScreen() {
       <CommentSheet
         visible={!!commentSheetSetId}
         setId={commentSheetSetId || ''}
-        onClose={() => setCommentSheetSetId(null)}
+        onClose={() => {
+          setCommentSheetSetId(null);
+          // Resume audio for the visible card
+          if (visibleSetIdRef.current) {
+            handleSetBecameVisible(visibleSetIdRef.current);
+          }
+        }}
       />
     </View>
   );
