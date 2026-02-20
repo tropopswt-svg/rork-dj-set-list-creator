@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Animated,
   Dimensions,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -190,7 +192,7 @@ function GlassStatCard({
   );
 }
 
-// ─── Vinyl Crate Stack ──────────────────────────────────────
+// ─── Animated Crate Browser ─────────────────────────────────
 function CrateStack({
   sets,
   onPress,
@@ -199,7 +201,136 @@ function CrateStack({
   onPress: (setId: string) => void;
 }) {
   const covers = sets.slice(0, 5);
+  const [isOpen, setIsOpen] = useState(false);
+  const slideAnim = useRef(new Animated.Value(0)).current;
+  const recordAnims = useRef(sets.map(() => new Animated.Value(0))).current;
+  const lidAnim = useRef(new Animated.Value(0)).current;
+
   if (covers.length === 0) return null;
+
+  const openCrate = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setIsOpen(true);
+
+    // 1. Slide up the modal
+    Animated.spring(slideAnim, {
+      toValue: 1,
+      tension: 65,
+      friction: 11,
+      useNativeDriver: true,
+    }).start();
+
+    // 2. Animate crate lid opening
+    Animated.spring(lidAnim, {
+      toValue: 1,
+      tension: 40,
+      friction: 8,
+      useNativeDriver: true,
+      delay: 150,
+    }).start();
+
+    // 3. Stagger records popping out
+    const staggered = sets.slice(0, 20).map((_, i) =>
+      Animated.spring(recordAnims[i] || new Animated.Value(0), {
+        toValue: 1,
+        tension: 80,
+        friction: 8,
+        useNativeDriver: true,
+        delay: 200 + i * 60,
+      })
+    );
+    Animated.stagger(60, staggered).start();
+  };
+
+  const closeCrate = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    // Reverse: records drop back in
+    const reverseAnims = sets.slice(0, 20).map((_, i) =>
+      Animated.spring(recordAnims[i] || new Animated.Value(0), {
+        toValue: 0,
+        tension: 100,
+        friction: 10,
+        useNativeDriver: true,
+      })
+    );
+    Animated.stagger(30, reverseAnims).start();
+
+    // Lid closes
+    Animated.spring(lidAnim, {
+      toValue: 0,
+      tension: 80,
+      friction: 10,
+      useNativeDriver: true,
+    }).start();
+
+    // Slide down
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      tension: 80,
+      friction: 12,
+      useNativeDriver: true,
+      delay: 150,
+    }).start(() => setIsOpen(false));
+  };
+
+  const RECORD_SIZE = (SCREEN_WIDTH - 48 - 12) / 2; // 2 columns, 16px padding + 12px gap
+
+  const renderCrateRecord = ({ item, index }: { item: any; index: number }) => {
+    const set = item.set;
+    if (!set) return null;
+    const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
+    const anim = recordAnims[index] || new Animated.Value(1);
+
+    return (
+      <PressableCard
+        style={[styles.crateModalRecord, { width: RECORD_SIZE, height: RECORD_SIZE + 56 }]}
+        onPress={() => {
+          closeCrate();
+          setTimeout(() => onPress(set.id), 400);
+        }}
+      >
+        <Animated.View
+          style={{
+            transform: [
+              {
+                translateY: anim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [80, 0],
+                }),
+              },
+              {
+                scale: anim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.7, 1],
+                }),
+              },
+              {
+                rotate: anim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['8deg', '0deg'],
+                }),
+              },
+            ],
+            opacity: anim,
+          }}
+        >
+          <Image
+            source={{ uri: coverUrl }}
+            style={[styles.crateModalRecordImage, { width: RECORD_SIZE - 2, height: RECORD_SIZE - 2 }]}
+            contentFit="cover"
+          />
+          <View style={styles.crateModalRecordVinylHole} />
+          <Text style={styles.crateModalRecordTitle} numberOfLines={1}>
+            {set.name}
+          </Text>
+          <Text style={styles.crateModalRecordArtist} numberOfLines={1}>
+            {set.artist_name}
+          </Text>
+        </Animated.View>
+      </PressableCard>
+    );
+  };
 
   return (
     <View style={styles.crateContainer}>
@@ -208,14 +339,9 @@ function CrateStack({
         <Text style={styles.crateTitle}>Your Crate</Text>
         <Text style={styles.crateCount}>{sets.length} sets</Text>
       </View>
-      <PressableCard
-        style={styles.crateStack}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          if (covers[0]?.set?.id) onPress(covers[0].set.id);
-        }}
-      >
-        {/* Stacked vinyl covers */}
+
+      {/* Collapsed crate preview */}
+      <PressableCard style={styles.crateStack} onPress={openCrate}>
         <View style={styles.crateVisual}>
           {covers.map((savedSet, i) => {
             const set = savedSet.set;
@@ -226,7 +352,7 @@ function CrateStack({
             const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
 
             return (
-              <Animated.View
+              <View
                 key={savedSet.id || i}
                 style={[
                   styles.crateRecord,
@@ -244,16 +370,12 @@ function CrateStack({
                   style={styles.crateRecordImage}
                   contentFit="cover"
                 />
-                {/* Vinyl hole overlay */}
                 <View style={styles.vinylHole} />
-                {/* Edge shadow */}
-                <View style={styles.crateRecordShadow} />
-              </Animated.View>
+              </View>
             );
           })}
         </View>
 
-        {/* Crate info */}
         <View style={styles.crateInfo}>
           <Text style={styles.crateInfoTitle}>
             {covers[0]?.set?.name || 'Your Collection'}
@@ -267,6 +389,97 @@ function CrateStack({
           </View>
         </View>
       </PressableCard>
+
+      {/* ─── Full-screen Animated Crate Modal ─── */}
+      <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeCrate}>
+        <Animated.View
+          style={[
+            styles.crateModalOverlay,
+            {
+              opacity: slideAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, 1],
+              }),
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.crateModalContainer,
+              {
+                transform: [
+                  {
+                    translateY: slideAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [600, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            {/* Crate lid */}
+            <Animated.View
+              style={[
+                styles.crateModalLid,
+                {
+                  transform: [
+                    { perspective: 800 },
+                    {
+                      rotateX: lidAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0deg', '-75deg'],
+                      }),
+                    },
+                  ],
+                  opacity: lidAnim.interpolate({
+                    inputRange: [0, 0.5, 1],
+                    outputRange: [1, 0.6, 0.15],
+                  }),
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={['#D4A574', '#B8864E', '#A0713A']}
+                style={styles.crateModalLidGradient}
+              >
+                <View style={styles.crateModalLidPlank} />
+                <View style={styles.crateModalLidPlank} />
+                <View style={styles.crateModalLidPlank} />
+                <View style={styles.crateModalLidHandle}>
+                  <View style={styles.crateModalLidHandleBar} />
+                </View>
+              </LinearGradient>
+            </Animated.View>
+
+            {/* Header bar */}
+            <View style={styles.crateModalHeader}>
+              <View style={styles.crateModalHeaderLeft}>
+                <Disc3 size={20} color={Colors.dark.primary} />
+                <Text style={styles.crateModalTitle}>Your Crate</Text>
+              </View>
+              <Pressable style={styles.crateModalClose} onPress={closeCrate}>
+                <Text style={styles.crateModalCloseText}>Done</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.crateModalSubtitle}>
+              {sets.length} set{sets.length !== 1 ? 's' : ''} saved
+            </Text>
+
+            {/* Records grid */}
+            <FlatList
+              data={sets}
+              renderItem={renderCrateRecord}
+              keyExtractor={(item) => item.id}
+              numColumns={2}
+              columnWrapperStyle={styles.crateModalRow}
+              contentContainerStyle={styles.crateModalGrid}
+              showsVerticalScrollIndicator={false}
+            />
+          </Animated.View>
+        </Animated.View>
+      </Modal>
     </View>
   );
 }
@@ -1138,6 +1351,148 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.dark.primary,
+  },
+
+  // ─── Crate Modal ───
+  crateModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  crateModalContainer: {
+    backgroundColor: Colors.dark.background,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingTop: 0,
+    maxHeight: '92%',
+    minHeight: '70%',
+    overflow: 'hidden',
+  },
+  crateModalLid: {
+    height: 56,
+    overflow: 'hidden',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    transformOrigin: 'top center',
+  },
+  crateModalLidGradient: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  crateModalLidPlank: {
+    flex: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  crateModalLidHandle: {
+    position: 'absolute',
+    top: 18,
+    alignSelf: 'center',
+  },
+  crateModalLidHandleBar: {
+    width: 48,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+  },
+  crateModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  crateModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  crateModalTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: Colors.dark.text,
+    letterSpacing: -0.5,
+  },
+  crateModalClose: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  crateModalCloseText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.dark.primary,
+  },
+  crateModalSubtitle: {
+    fontSize: 13,
+    color: Colors.dark.textMuted,
+    paddingHorizontal: 20,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  crateModalGrid: {
+    paddingHorizontal: 16,
+    paddingBottom: 40,
+  },
+  crateModalRow: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  crateModalRecord: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: Colors.dark.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  crateModalRecordImage: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+  },
+  crateModalRecordVinylHole: {
+    position: 'absolute',
+    top: '28%',
+    left: '50%',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    marginTop: -7,
+    marginLeft: -7,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  crateModalRecordTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+  },
+  crateModalRecordArtist: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Colors.dark.primary,
+    paddingHorizontal: 10,
+    paddingTop: 2,
+    paddingBottom: 10,
   },
 
   // ─── Sections ───
