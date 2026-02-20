@@ -95,6 +95,9 @@ function PulsingPin() {
   );
 }
 
+// Animated SVG circle (must be created outside component)
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
 // Pulsing SVG dot for the SVG fallback map
 function PulsingSvgPin({ x, y }: { x: number; y: number }) {
   const pulse = useRef(new Animated.Value(0)).current;
@@ -108,7 +111,6 @@ function PulsingSvgPin({ x, y }: { x: number; y: number }) {
     ).start();
   }, [pulse]);
 
-  const AnimatedCircle = Animated.createAnimatedComponent(Circle);
   const animatedR = pulse.interpolate({ inputRange: [0, 1], outputRange: [4, 10] });
   const animatedOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] });
 
