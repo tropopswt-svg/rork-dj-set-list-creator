@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
   },
   bgFallback: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#222228',
   },
   bgFallbackDotContainer: {
     position: 'absolute' as const,

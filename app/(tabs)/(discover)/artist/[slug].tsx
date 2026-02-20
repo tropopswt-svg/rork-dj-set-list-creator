@@ -11,6 +11,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import {
   ArrowLeft,
   Music,
@@ -119,12 +120,13 @@ export default function ArtistProfileScreen() {
             <ArtistHeatMap artistSlug={slug} backgroundMode />
           </View>
 
-          {/* Grey desaturation overlay */}
-          <View style={styles.greyOverlay} />
+          {/* Frosted glass overlay */}
+          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={styles.glassOverlay} />
 
           {/* Gradient overlay for readability */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.2)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.75)']}
+            colors={['rgba(30,30,30,0.3)', 'rgba(20,20,20,0.5)', 'rgba(10,10,10,0.8)']}
             style={StyleSheet.absoluteFill}
           />
 
@@ -320,6 +322,12 @@ export default function ArtistProfileScreen() {
                         {set.event_date && ` • ${new Date(set.event_date).getFullYear()}`}
                       </Text>
                     </View>
+                    {(set.track_count || 0) > 0 && (
+                      <View style={styles.trakdBadge}>
+                        <CheckCircle size={10} color="#fff" />
+                        <Text style={styles.trakdText}>trakd</Text>
+                      </View>
+                    )}
                     <View style={styles.setStats}>
                       <Music size={12} color={Colors.dark.textMuted} />
                       <Text style={styles.setTracksCount}>{set.track_count || 0}</Text>
@@ -383,9 +391,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1a1a1a',
   },
-  greyOverlay: {
+  glassOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(40, 40, 40, 0.35)',
+    backgroundColor: 'rgba(50, 50, 55, 0.4)',
   },
   header: {
     alignItems: 'center',
@@ -681,6 +689,22 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.dark.textMuted,
     marginTop: 2,
+  },
+  trakdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: Colors.dark.primary,
+    borderRadius: 6,
+    marginRight: 6,
+  },
+  trakdText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.3,
   },
   setStats: {
     flexDirection: 'row',
