@@ -57,38 +57,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ success: true, message: `${platform} link already set`, setId, platform, url });
     }
 
-    // Generate a cover image URL from the source if the set doesn't have one
     const update = { [urlField]: url };
-
-    // Check if set already has a cover_url
-    const { data: currentSet } = await supabase
-      .from('sets')
-      .select('cover_url')
-      .eq('id', setId)
-      .single();
-
-    if (!currentSet?.cover_url) {
-      if (platform === 'youtube') {
-        // Extract YouTube video ID and generate thumbnail
-        const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
-        if (videoIdMatch) {
-          update.cover_url = `https://img.youtube.com/vi/${videoIdMatch[1]}/maxresdefault.jpg`;
-        }
-      } else if (platform === 'soundcloud') {
-        // Try to fetch SoundCloud thumbnail via oEmbed
-        try {
-          const oembedRes = await fetch(`https://soundcloud.com/oembed?format=json&url=${encodeURIComponent(url)}`);
-          if (oembedRes.ok) {
-            const oembed = await oembedRes.json();
-            if (oembed.thumbnail_url) {
-              update.cover_url = oembed.thumbnail_url.replace('-large', '-t500x500');
-            }
-          }
-        } catch (e) {
-          // SoundCloud thumbnail fetch failed, skip
-        }
-      }
-    }
 
     const { error: updateError } = await supabase
       .from('sets')

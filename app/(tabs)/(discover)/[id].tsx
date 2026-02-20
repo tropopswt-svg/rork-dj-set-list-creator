@@ -1976,100 +1976,89 @@ export default function SetDetailScreen() {
 
           // For database sets, save the source URL first, then try analysis
           if (dbSet) {
+            // Update local state IMMEDIATELY so UI reflects the source no matter what
+            setDbSet(prev => prev ? {
+              ...prev,
+              sourceLinks: [...(prev.sourceLinks || []).filter(l => l.platform !== selectedPlatform), { platform: selectedPlatform, url }],
+            } : prev);
+
+            let importStats = { matched: 0, newFromSecondary: 0, commentsScraped: 0 };
+
+            // Save the source URL to the database (don't let errors block the flow)
             try {
-              // Save the source URL to the database FIRST
-              const addSourceResponse = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
+              await fetch(`${API_BASE_URL}/api/sets/add-source`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  setId: setList.id,
-                  url,
-                  platform: selectedPlatform,
-                }),
+                body: JSON.stringify({ setId: setList.id, url, platform: selectedPlatform }),
               });
-              const addSourceResult = await addSourceResponse.json();
+            } catch (e: any) {
+              if (__DEV__) console.warn('[AddSource] Save failed:', e.message);
+            }
 
-              if (!addSourceResult.success) {
-                if (__DEV__) console.log('Add source warning:', addSourceResult.error);
-              }
+            // Try to scrape/analyze the URL for track IDs
+            try {
+              const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url }),
+              });
 
-              // Update local state immediately so UI reflects the new source
-              setDbSet(prev => prev ? {
-                ...prev,
-                sourceLinks: [...(prev.sourceLinks || []), { platform: selectedPlatform, url }],
-              } : prev);
+              if (importResponse.ok) {
+                const importResult = await importResponse.json();
 
-              // Now try to scrape the URL for track IDs (non-blocking for source save)
-              let importStats = { matched: 0, newFromSecondary: 0, commentsScraped: 0 };
-              try {
-                const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ url }),
-                });
-
-                if (importResponse.ok) {
-                  const importResult = await importResponse.json();
-
-                  if (importResult.success) {
-                    // Update set tracks with timestamps from the scraped data
-                    const scrapedTracks = importResult.setList?.tracks || [];
-                    if (scrapedTracks.length > 0) {
-                      const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                          setId: setList.id,
-                          tracks: scrapedTracks,
-                          source: selectedPlatform,
-                          coverUrl: importResult.setList?.coverUrl,
-                        }),
-                      });
-                      const updateResult = await updateResponse.json();
-                      if (__DEV__) console.log('[AddSource] Updated tracks:', updateResult);
-                    }
-
-                    // Update cover if we got one
-                    const newCoverUrl = importResult.setList?.coverUrl;
-                    if (newCoverUrl) {
-                      setDbSet(prev => prev ? { ...prev, coverUrl: newCoverUrl } : prev);
-                    }
-
-                    importStats = {
-                      matched: importResult.tracksCount || 0,
-                      newFromSecondary: scrapedTracks.length,
-                      commentsScraped: importResult.commentsCount || 0,
-                    };
-
-                    // Kick off Spotify enrichment (non-blocking)
-                    fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                if (importResult.success) {
+                  const scrapedTracks = importResult.setList?.tracks || [];
+                  if (scrapedTracks.length > 0) {
+                    await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
-                    }).catch(() => {});
+                      body: JSON.stringify({
+                        setId: setList.id,
+                        tracks: scrapedTracks,
+                        source: selectedPlatform,
+                        coverUrl: importResult.setList?.coverUrl,
+                      }),
+                    });
                   }
+
+                  if (importResult.setList?.coverUrl) {
+                    setDbSet(prev => prev ? { ...prev, coverUrl: importResult.setList.coverUrl } : prev);
+                  }
+
+                  importStats = {
+                    matched: importResult.tracksCount || 0,
+                    newFromSecondary: scrapedTracks.length,
+                    commentsScraped: importResult.commentsCount || 0,
+                  };
+
+                  // Kick off Spotify enrichment (non-blocking)
+                  fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
+                  }).catch(() => {});
                 }
-              } catch (importError: any) {
-                if (__DEV__) console.warn('[AddSource] Import/analysis failed:', importError.message);
-                // Source URL is already saved, analysis can be retried later
               }
-
-              // Refresh the set data
-              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
-              const refreshData = await refreshResponse.json();
-              if (refreshData.success && refreshData.set) {
-                setDbSet(transformApiSet(refreshData.set));
-              }
-
-              await addPoints('source_added', setList.id);
-
-              return {
-                success: true,
-                stats: importStats,
-              };
-            } catch (error: any) {
-              return { success: false, error: error.message || 'Network error' };
+            } catch (importError: any) {
+              if (__DEV__) console.warn('[AddSource] Import/analysis failed:', importError.message);
             }
+
+            // Always refresh set data from the API
+            try {
+              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+              if (refreshResponse.ok) {
+                const refreshData = await refreshResponse.json();
+                if (refreshData.success && refreshData.set) {
+                  setDbSet(transformApiSet(refreshData.set));
+                }
+              }
+            } catch (e: any) {
+              if (__DEV__) console.warn('[AddSource] Refresh failed:', e.message);
+            }
+
+            try { await addPoints('source_added', setList.id); } catch (e) {}
+
+            return { success: true, stats: importStats };
           }
 
           // For local sets, use the context
