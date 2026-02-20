@@ -234,8 +234,8 @@ function parseTrackInfo(text) {
   cleaned = cleaned.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
   // Remove trailing punctuation
   cleaned = cleaned.replace(/[\s|:\-–—.\[\]()]+$/, '').trim();
-  // Remove numbered list prefixes like "1." or "2)"
-  cleaned = cleaned.replace(/^\d{1,2}[.)]\s*/, '').trim();
+  // Remove numbered list prefixes like "1.", "2)", "75."
+  cleaned = cleaned.replace(/^\d{1,3}[.)]\s*/, '').trim();
 
   // STRICT FILTERING - Reject obvious garbage
   
@@ -305,11 +305,20 @@ function parseTrackInfo(text) {
   // Reject text with unbalanced parentheses (broken parsing)
   const openParens = (cleaned.match(/\(/g) || []).length;
   const closeParens = (cleaned.match(/\)/g) || []).length;
-  if (Math.abs(openParens - closeParens) > 1) return null;
-  
+  if (openParens !== closeParens) return null;
+
   // Reject if it starts or ends with a broken parenthesis pattern
   if (/^\)/.test(cleaned) || /\($/.test(cleaned)) return null;
-  
+
+  // Reject truncated text: ends with open paren + tiny fragment like "Drive (I" or "(mixed"
+  if (/\([a-zA-Z]{1,3}$/.test(cleaned)) return null;
+
+  // Reject text that starts with a lowercase letter (truncated from the start, e.g., "ree Style Dub")
+  // Exception: known lowercase prefixes (dj, mc, etc.) and intentional lowercase artists
+  if (/^[a-z]/.test(cleaned) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/.test(cleaned.toLowerCase())) {
+    return null;
+  }
+
   // Reject pure emoji or too short
   const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu;
   const emojis = cleaned.match(emojiRegex) || [];
@@ -329,11 +338,25 @@ function parseTrackInfo(text) {
     'tune', 'song', 'track', 'music', 'sound', 'yeah', 'yes', 'wow', 'omg',
   ]);
 
+  // Strip "unreleased" tag that might be embedded in the text (it's metadata, not track info)
+  cleaned = cleaned.replace(/\bunreleased\b\s*/gi, '').trim();
+  // Strip "forthcoming" tag too
+  cleaned = cleaned.replace(/\bforthcoming\b\s*/gi, '').trim();
+  // Re-clean leading/trailing junk after stripping
+  cleaned = cleaned.replace(/^[\s|:\-–—.\[\]()]+/, '').replace(/[\s|:\-–—.\[\]()]+$/, '').trim();
+
+  // Reject if too short after cleaning
+  if (cleaned.length < 5) return null;
+
   // Standard format: "Artist - Title"
   const dashMatch = cleaned.match(/^(.+?)\s*[-–—]\s*(.+)$/);
   if (dashMatch) {
     let part1 = dashMatch[1].trim();
     let part2 = dashMatch[2].trim();
+
+    // Clean up any leftover "unreleased" fragments from parts
+    part1 = part1.replace(/\bunreleased\b\s*/gi, '').trim();
+    part2 = part2.replace(/\bunreleased\b\s*/gi, '').trim();
 
     // Validate both parts look like real track/artist info
     if (!isValidTrackPart(part1) || !isValidTrackPart(part2)) return null;
@@ -379,11 +402,29 @@ function parseTrackInfo(text) {
 function isValidTrackPart(str) {
   if (!str || str.length < 3) return false;
   if (str.length > 100) return false;
-  
+
   // Reject if it's mostly numbers or special characters
   const alphaCount = (str.match(/[a-zA-Z]/g) || []).length;
   if (alphaCount < 2) return false;
-  
+
+  // Reject truncated parts: ends with open paren + 0-2 chars (e.g., "Drive (I", "unreleased M")
+  if (/\([a-zA-Z]{0,2}$/.test(str)) return false;
+
+  // Reject unbalanced parentheses in individual parts
+  const open = (str.match(/\(/g) || []).length;
+  const close = (str.match(/\)/g) || []).length;
+  if (open !== close) return false;
+
+  // Reject parts that start with a closing paren
+  if (/^\)/.test(str)) return false;
+
+  // Reject parts that are metadata labels, not artist/title
+  if (/^unreleased\b/i.test(str)) return false;
+  if (/^forthcoming\b/i.test(str)) return false;
+
+  // Reject parts starting with lowercase (truncated text) unless known pattern
+  if (/^[a-z]/.test(str) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/i.test(str)) return false;
+
   // Reject common non-track patterns
   const invalidPatterns = [
     /^https?:/i,
@@ -404,6 +445,7 @@ function isValidTrackPart(str) {
     /^(yes|no|yeah|nah|yep|nope)$/i,             // Affirmatives
     /^(here|there|now|then|just|only)$/i,         // Adverbs alone
     /^\d+$/,                                       // Pure numbers
+    /^\d+\)\s*/,                                   // Starts with "75)" etc (leftover numbering)
   ];
   
   for (const pattern of invalidPatterns) {
@@ -464,7 +506,7 @@ function parseComments(comments, djName = null) {
   });
 
   // Helper to add a track if valid
-  const addTrack = (ts, info, comment, isMultiLine) => {
+  const addTrack = (ts, info, comment, isMultiLine, rawLineText = '') => {
     // If the parsed "artist" is actually the DJ name, fix it
     if (djName && areNamesSimilar(info.artist, djName)) {
       const reparsed = parseTrackInfo(info.title);
@@ -482,14 +524,17 @@ function parseComments(comments, djName = null) {
       if (isMultiLine) conf += 0.2; // Full tracklist comments are more reliable
       if (comment.likeCount > 100) conf += 0.15;
       else if (comment.likeCount > 10) conf += 0.05;
+      const isUnreleased = detectUnreleasedInText(rawLineText) || detectUnreleasedInText(comment.text);
+      const cleanTitle = isUnreleased ? stripUnreleasedFromTitle(info.title) : info.title;
       tracks.push({
         timestamp: ts.timestamp,
         timestampFormatted: ts.formatted,
-        title: info.title,
+        title: cleanTitle,
         artist: info.artist,
         confidence: Math.min(conf, 1),
         sourceAuthor: comment.authorName,
         likes: comment.likeCount,
+        isUnreleased,
       });
     }
   };
@@ -509,7 +554,7 @@ function parseComments(comments, djName = null) {
         afterText = afterText.replace(/^[\s|:\-–—.\[\]()]+/, '').trim();
         const info = parseTrackInfo(afterText);
         if (info) {
-          addTrack(ts, info, comment, true);
+          addTrack(ts, info, comment, true, line);
         }
       }
     }
@@ -529,7 +574,7 @@ function parseComments(comments, djName = null) {
 
         const info = parseTrackInfo(afterText);
         if (info) {
-          addTrack(ts, info, comment, false);
+          addTrack(ts, info, comment, false, afterText);
         }
       }
     }
@@ -538,7 +583,7 @@ function parseComments(comments, djName = null) {
     else if (comment.isReply && comment.parentTimestamp) {
       const info = parseTrackInfo(text);
       if (info) {
-        addTrack(comment.parentTimestamp, info, comment, false);
+        addTrack(comment.parentTimestamp, info, comment, false, text);
       }
     }
   }
@@ -600,7 +645,9 @@ function parseDescription(description, djName = null) {
         const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
         if (!seen.has(key)) {
           seen.add(key);
-          tracks.push({ timestamp: ts.timestamp, timestampFormatted: ts.formatted, title: info.title, artist: info.artist, confidence: 0.95, sourceAuthor: 'Uploader', likes: 0 });
+          const isUnreleased = detectUnreleasedInText(line);
+          const cleanTitle = isUnreleased ? stripUnreleasedFromTitle(info.title) : info.title;
+          tracks.push({ timestamp: ts.timestamp, timestampFormatted: ts.formatted, title: cleanTitle, artist: info.artist, confidence: 0.95, sourceAuthor: 'Uploader', likes: 0, isUnreleased });
         }
       }
     }
@@ -1489,7 +1536,11 @@ function parseSoundCloudTrackInfo(text) {
   // Reject text with unbalanced parentheses (broken parsing)
   const openParens = (cleaned.match(/\(/g) || []).length;
   const closeParens = (cleaned.match(/\)/g) || []).length;
-  if (Math.abs(openParens - closeParens) > 1) return null;
+  if (openParens !== closeParens) return null;
+
+  // Reject truncated text
+  if (/\([a-zA-Z]{1,3}$/.test(cleaned)) return null;
+  if (/^[a-z]/.test(cleaned) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/.test(cleaned.toLowerCase())) return null;
   
   // Reject if it starts or ends with a broken parenthesis pattern
   if (/^\)/.test(cleaned) || /\($/.test(cleaned)) return null;
@@ -1754,6 +1805,7 @@ async function importFromSoundCloud(url) {
       contributedBy: pt.sourceAuthor || 'Description',
       hasConflict: pt.hasConflict,
       conflictId: pt.conflictId,
+      isUnreleased: pt.isUnreleased || false,
     })),
     coverUrl: thumbnailUrl,
     sourceLinks: [{ platform: 'soundcloud', url }],
@@ -2133,6 +2185,7 @@ async function importFromYouTube(url, apiKey) {
       contributedBy: pt.sourceAuthor,
       hasConflict: pt.hasConflict,
       conflictId: pt.conflictId,
+      isUnreleased: pt.isUnreleased || false,
     })),
     coverUrl: video.thumbnailUrl,
     sourceLinks: [{ platform: 'youtube', url }],
@@ -2162,6 +2215,43 @@ const MIN_SIMILARITY = 0.55; // Threshold for tracks to be considered potentiall
 const HIGH_SIMILARITY = 0.80; // Threshold for auto-merge without conflict
 const CONFIDENCE_BOOST = 0.2;
 const MIN_TRACK_GAP = 60; // Minimum expected gap between tracks (1 min typical for DJ sets)
+
+// Unreleased indicator patterns — detect tracks flagged as unreleased in comments/descriptions
+const UNRELEASED_INDICATORS = [
+  /\(unreleased\s*\??\)/i,
+  /\(forthcoming\)/i,
+  /\(dub\s*\??\)/i,
+  /\(dubplate\)/i,
+  /\(white\s*label\)/i,
+  /\(VIP\)/i,
+  /\bunreleased\b/i,
+  /\bforthcoming\b/i,
+  /\bdubplate\b/i,
+  /\bwhite\s*label\b/i,
+];
+
+function detectUnreleasedInText(text) {
+  if (!text) return false;
+  return UNRELEASED_INDICATORS.some(pattern => pattern.test(text));
+}
+
+/**
+ * Strip unreleased indicator text from a track title so it displays cleanly.
+ * Handles both full parenthetical like "(unreleased)" and broken fragments like "(unreleased"
+ */
+function stripUnreleasedFromTitle(title) {
+  if (!title) return title;
+  let cleaned = title;
+  cleaned = cleaned.replace(/\s*\(?\s*unreleased\s*\??\s*\)?\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s*\(?\s*forthcoming\s*\)?\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s*\(\s*dub\s*\??\s*\)\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s*\(\s*dubplate\s*\)\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s*\(\s*white\s*label\s*\)\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s*\(\s*VIP\s*\)\s*/gi, ' ');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  cleaned = cleaned.replace(/\(\s*$/, '').replace(/^\s*\)/, '').trim();
+  return cleaned;
+}
 
 // Common user commentary patterns to strip from track info
 const USER_COMMENTARY_PATTERNS = [
@@ -2414,21 +2504,41 @@ function calculateTrackSimilarity(title1, artist1, title2, artist2) {
     artistSim = Math.max(artistSim, 0.8);
   }
   
+  // Cross-field matching: check if artist/title fields got swapped or mixed
+  // e.g., Track1: title="Drive (Downriver Dub)", artist="Aaron-Carl"
+  //        Track2: title="(downriver dub)", artist="Drive"
+  const crossTitleArtist = stringSimilarity(t1.cleaned, a2.normalized);
+  const crossArtistTitle = stringSimilarity(a1.normalized, t2.cleaned);
+  const crossScore = Math.max(crossTitleArtist, crossArtistTitle);
+
+  // Also check combined strings: join title+artist and compare
+  const combined1 = normalizeString(title1 + ' ' + artist1);
+  const combined2 = normalizeString(title2 + ' ' + artist2);
+  const combinedSim = stringSimilarity(combined1, combined2);
+
   // Weight: title is more important than artist for matching
   // because users often abbreviate artist names
-  const baseScore = titleSim * 0.7 + artistSim * 0.3;
-  
+  let baseScore = titleSim * 0.7 + artistSim * 0.3;
+
+  // If cross-field or combined matching is strong, boost the score
+  if (crossScore > 0.7) {
+    baseScore = Math.max(baseScore, crossScore * 0.85);
+  }
+  if (combinedSim > 0.7) {
+    baseScore = Math.max(baseScore, combinedSim * 0.9);
+  }
+
   // Boost if labels match
   if (t1.label && t2.label && stringSimilarity(t1.label, t2.label) > 0.8) {
     return Math.min(1, baseScore + 0.1);
   }
-  
+
   // Special case: if title similarity is very high (>0.8), it's likely same track
   // even if artist format differs significantly
   if (titleSim > 0.8) {
     return Math.max(baseScore, 0.75);
   }
-  
+
   return baseScore;
 }
 
@@ -3176,6 +3286,11 @@ async function handleChromeExtensionImport(req, res, data) {
             artistName = artistName.replace(/\bb2b\b/gi, 'B2B');
             let trackTitle = (track.title || '').trim().replace(/\s{2,}/g, ' ');
 
+            // Strip unreleased indicators from displayed title
+            if (track.is_unreleased || detectUnreleasedInText(trackTitle)) {
+              trackTitle = stripUnreleasedFromTitle(trackTitle);
+            }
+
             // Find track ID if it exists
             let trackId = null;
             const titleNormalized = normalizeText(trackTitle);
@@ -3199,6 +3314,8 @@ async function handleChromeExtensionImport(req, res, data) {
               timestamp_seconds: track.timestamp_seconds || null,
               timestamp_str: track.timestamp_str || null,
               is_id: track.is_unreleased || trackTitle?.toLowerCase() === 'id',
+              is_unreleased: track.is_unreleased || false,
+              unreleased_source: track.is_unreleased ? 'comment_hint' : null,
             });
           }
 
