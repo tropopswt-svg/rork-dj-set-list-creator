@@ -2001,39 +2001,10 @@ export default function SetDetailScreen() {
         onImport={async (url) => {
           if (!setList) return { success: false, error: 'Set not found' };
 
-          // For database sets, scrape comments and update the set
+          // For database sets, save the source URL first, then try analysis
           if (dbSet) {
             try {
-              // First, scrape the URL for track IDs
-              const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url }),
-              });
-              const importResult = await importResponse.json();
-
-              if (!importResult.success) {
-                return { success: false, error: importResult.error || 'Failed to scrape comments' };
-              }
-
-              // Update set tracks with timestamps from the scraped data
-              const scrapedTracks = importResult.setList?.tracks || [];
-              if (scrapedTracks.length > 0) {
-                const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    setId: setList.id,
-                    tracks: scrapedTracks,
-                    source: selectedPlatform,
-                    coverUrl: importResult.setList?.coverUrl,
-                  }),
-                });
-                const updateResult = await updateResponse.json();
-                if (__DEV__) console.log('[AddSource] Updated tracks:', updateResult);
-              }
-
-              // Save the source URL to the database
+              // Save the source URL to the database FIRST
               const addSourceResponse = await fetch(`${API_BASE_URL}/api/sets/add-source`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -2046,19 +2017,64 @@ export default function SetDetailScreen() {
               const addSourceResult = await addSourceResponse.json();
 
               if (!addSourceResult.success) {
-                // URL might already exist, but scraping worked
                 if (__DEV__) console.log('Add source warning:', addSourceResult.error);
               }
 
-              // Update local state to reflect the new source and coverUrl immediately
-              const newCoverUrl = importResult.setList?.coverUrl;
+              // Update local state immediately so UI reflects the new source
               setDbSet(prev => prev ? {
                 ...prev,
                 sourceLinks: [...(prev.sourceLinks || []), { platform: selectedPlatform, url }],
-                ...(newCoverUrl && { coverUrl: newCoverUrl }),
               } : prev);
 
-              // Refresh the set data to get updated tracks with timestamps
+              // Now try to scrape the URL for track IDs (non-blocking for source save)
+              let importStats = { matched: 0, newFromSecondary: 0, commentsScraped: 0 };
+              try {
+                const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ url }),
+                });
+
+                if (importResponse.ok) {
+                  const importResult = await importResponse.json();
+
+                  if (importResult.success) {
+                    // Update set tracks with timestamps from the scraped data
+                    const scrapedTracks = importResult.setList?.tracks || [];
+                    if (scrapedTracks.length > 0) {
+                      const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          setId: setList.id,
+                          tracks: scrapedTracks,
+                          source: selectedPlatform,
+                          coverUrl: importResult.setList?.coverUrl,
+                        }),
+                      });
+                      const updateResult = await updateResponse.json();
+                      if (__DEV__) console.log('[AddSource] Updated tracks:', updateResult);
+                    }
+
+                    // Update cover if we got one
+                    const newCoverUrl = importResult.setList?.coverUrl;
+                    if (newCoverUrl) {
+                      setDbSet(prev => prev ? { ...prev, coverUrl: newCoverUrl } : prev);
+                    }
+
+                    importStats = {
+                      matched: importResult.tracksCount || 0,
+                      newFromSecondary: scrapedTracks.length,
+                      commentsScraped: importResult.commentsCount || 0,
+                    };
+                  }
+                }
+              } catch (importError: any) {
+                if (__DEV__) console.warn('[AddSource] Import/analysis failed:', importError.message);
+                // Source URL is already saved, analysis can be retried later
+              }
+
+              // Refresh the set data
               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
               const refreshData = await refreshResponse.json();
               if (refreshData.success && refreshData.set) {
@@ -2097,14 +2113,9 @@ export default function SetDetailScreen() {
 
               await addPoints('source_added', setList.id);
 
-              // Return stats from the import
               return {
                 success: true,
-                stats: {
-                  matched: importResult.tracksCount || 0,
-                  newFromSecondary: scrapedTracks.length,
-                  commentsScraped: importResult.commentsCount || 0,
-                },
+                stats: importStats,
               };
             } catch (error: any) {
               return { success: false, error: error.message || 'Network error' };
