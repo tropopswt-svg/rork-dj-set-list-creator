@@ -11,18 +11,20 @@ import {
 import { MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 
-// Conditionally import react-native-maps
+// Only import react-native-maps on native platforms
 let MapView: any = null;
 let Marker: any = null;
 let Callout: any = null;
 
-try {
-  const Maps = require('react-native-maps');
-  MapView = Maps.default;
-  Marker = Maps.Marker;
-  Callout = Maps.Callout;
-} catch (e) {
-  // react-native-maps not installed - will render fallback
+if (Platform.OS !== 'web') {
+  try {
+    const Maps = require('react-native-maps');
+    MapView = Maps.default || Maps.MapView || null;
+    Marker = Maps.Marker || null;
+    Callout = Maps.Callout || null;
+  } catch (e) {
+    // react-native-maps not available
+  }
 }
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
