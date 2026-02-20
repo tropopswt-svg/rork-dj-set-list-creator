@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
 import { getSavedSets } from '@/utils/storage';
+import { getCoverImageUrl } from '@/utils/coverImage';
 
 export default function LibraryScreen() {
   const router = useRouter();
@@ -90,8 +91,8 @@ export default function LibraryScreen() {
                   style={styles.setCard}
                   onPress={() => handleSetPress(setList)}
                 >
-                  <Image 
-                    source={{ uri: setList.coverUrl || undefined }} 
+                  <Image
+                    source={{ uri: getCoverImageUrl(setList.coverUrl, setList.id, setList.venue) }}
                     style={styles.setCover}
                   />
                   <View style={styles.setInfo}>

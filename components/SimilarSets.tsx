@@ -9,10 +9,11 @@ import {
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { Disc3, Music, Sparkles } from 'lucide-react-native';
+import { Music, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
+import { getCoverImageUrl } from '@/utils/coverImage';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 const CARD_WIDTH = 160;
@@ -74,13 +75,7 @@ export default function SimilarSets({ setId }: SimilarSetsProps) {
 
   const renderItem = ({ item }: { item: SimilarSet }) => (
     <Pressable style={styles.card} onPress={() => handlePress(item.id)}>
-      {item.coverUrl ? (
-        <Image source={{ uri: item.coverUrl }} style={styles.cardImage} contentFit="cover" />
-      ) : (
-        <View style={styles.cardImagePlaceholder}>
-          <Disc3 size={28} color={Colors.dark.textMuted} />
-        </View>
-      )}
+      <Image source={{ uri: getCoverImageUrl(item.coverUrl, item.id, item.venue) }} style={styles.cardImage} contentFit="cover" />
       <View style={styles.cardInfo}>
         <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
         <Text style={styles.cardArtist} numberOfLines={1}>{item.artist}</Text>

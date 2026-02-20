@@ -26,6 +26,7 @@ import Colors from '@/constants/colors';
 import {
   browseVenues,
   getPopularVenues,
+  getTopVenues,
   type VenueInfo,
   type VenueSortOption,
 } from '@/lib/supabase/venueService';
@@ -116,6 +117,9 @@ export default function VenuesScreen() {
     setPopularVenues(data);
   };
 
+  // Whether we're in the default "top 100" view (no search, default sort)
+  const isDefaultView = searchQuery.length < 2 && sortOption === SORT_OPTIONS[0];
+
   // Load venues
   const loadVenues = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -125,6 +129,19 @@ export default function VenuesScreen() {
       setIsLoading(true);
     } else {
       setIsLoadingMore(true);
+    }
+
+    // Default view: show top 100 venues sorted A-Z
+    if (isDefaultView) {
+      const top = await getTopVenues(100);
+      setVenues(top);
+      setTotalCount(top.length);
+      setHasMore(false);
+      setOffset(top.length);
+      setIsLoading(false);
+      setIsLoadingMore(false);
+      setIsRefreshing(false);
+      return;
     }
 
     const currentOffset = refresh ? 0 : offset;
@@ -149,7 +166,7 @@ export default function VenuesScreen() {
     setIsLoading(false);
     setIsLoadingMore(false);
     setIsRefreshing(false);
-  }, [searchQuery, sortOption, offset]);
+  }, [searchQuery, sortOption, offset, isDefaultView]);
 
   // Initial load and reload on filter changes
   useEffect(() => {
@@ -220,8 +237,10 @@ export default function VenuesScreen() {
       {/* Results count */}
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsCount}>
-          {totalCount} venue{totalCount !== 1 ? 's' : ''}
-          {searchQuery && ` for "${searchQuery}"`}
+          {isDefaultView
+            ? 'Top 100 Venues'
+            : `${totalCount} venue${totalCount !== 1 ? 's' : ''}${searchQuery ? ` for "${searchQuery}"` : ''}`
+          }
         </Text>
       </View>
     </View>

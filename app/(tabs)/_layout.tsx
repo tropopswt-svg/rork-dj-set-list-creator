@@ -9,6 +9,8 @@ import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 import SetRecordingModal from '@/components/SetRecordingModal';
 import SetRecordingBanner from '@/components/SetRecordingBanner';
 import { stopSetRecording, getRecordingStatus, IdentifiedTrack } from '@/components/SetRecordingService';
+
+const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -125,6 +127,7 @@ export default function TabLayout() {
   const [recordingTrackCount, setRecordingTrackCount] = useState(0);
   const [showAuthGate, setShowAuthGate] = useState(false);
   const [authGateMessage, setAuthGateMessage] = useState('');
+  const lastSessionIdRef = useRef<string | null>(null);
 
   // Admin menu trigger - tap Discover tab 3 times, hold on 3rd
   const discoverTapCount = useRef(0);
@@ -184,13 +187,48 @@ export default function TabLayout() {
     setRecordingTrackCount(0);
   };
 
-  const handleRecordingEnd = (tracks: IdentifiedTrack[]) => {
+  const handleRecordingEnd = (tracks: IdentifiedTrack[], sid: string | null) => {
+    if (sid) {
+      lastSessionIdRef.current = sid;
+    }
     setIsRecordingSet(false);
     setRecordingStartTime(null);
     setRecordingTrackCount(0);
   };
 
+  const handleSaveAsSet = useCallback(async (tracks: IdentifiedTrack[], name: string, djName?: string, venue?: string) => {
+    const sid = lastSessionIdRef.current;
+    if (!sid) {
+      console.error('[Layout] No session ID to save as set');
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/sessions/${sid}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_as_set',
+          title: name,
+          dj_name: djName || undefined,
+          venue: venue || undefined,
+        }),
+      });
+      const data = await response.json();
+      if (data.success && data.setId) {
+        lastSessionIdRef.current = null;
+        router.push(`/(tabs)/(discover)/${data.setId}`);
+      }
+    } catch (e) {
+      console.error('[Layout] Failed to save as set:', e);
+    }
+  }, [router]);
+
   const handleStopFromBanner = async () => {
+    // Capture sessionId before stopSetRecording clears it
+    const status = getRecordingStatus();
+    if (status.sessionId) {
+      lastSessionIdRef.current = status.sessionId;
+    }
     const result = await stopSetRecording();
     setIsRecordingSet(false);
     setRecordingStartTime(null);
@@ -320,6 +358,7 @@ export default function TabLayout() {
         onClose={() => setShowRecordModal(false)}
         onRecordingStart={handleRecordingStart}
         onRecordingEnd={handleRecordingEnd}
+        onSaveAsSet={handleSaveAsSet}
         isRecordingActive={isRecordingSet}
       />
 

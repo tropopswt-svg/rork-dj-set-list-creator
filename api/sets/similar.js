@@ -135,7 +135,7 @@ export default async function handler(req, res) {
         venue: set.venue,
         date: set.event_date,
         coverUrl: set.cover_url || (set.youtube_url
-          ? `https://img.youtube.com/vi/${set.youtube_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1]}/mqdefault.jpg`
+          ? `https://img.youtube.com/vi/${set.youtube_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1]}/maxresdefault.jpg`
           : null),
         trackCount: set.track_count || 0,
         score: match.score,

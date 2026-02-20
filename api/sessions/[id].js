@@ -98,6 +98,116 @@ export default async function handler(req, res) {
         return res.status(201).json({ success: true, track: data });
       }
 
+      if (action === 'save_as_set') {
+        const { title, dj_name, venue, event_date } = req.body;
+
+        // Fetch the session and its tracks
+        const { data: session, error: sessionError } = await supabase
+          .from('listening_sessions')
+          .select('*, session_tracks(*)')
+          .eq('id', id)
+          .single();
+
+        if (sessionError || !session) {
+          return res.status(404).json({ success: false, error: 'Session not found' });
+        }
+
+        const tracks = session.session_tracks || [];
+
+        // Build set metadata
+        const setTitle = title || session.title || `Live Set - ${new Date().toLocaleDateString()}`;
+        const djName = dj_name || 'Recorded Live';
+
+        // Generate a slug from the title
+        const slug = setTitle
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .substring(0, 100)
+          + '-' + Date.now().toString(36);
+
+        // Try to find the DJ's artist record
+        let djId = null;
+        if (djName && djName !== 'Recorded Live') {
+          const djSlug = djName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+          const { data: djData } = await supabase
+            .from('artists')
+            .select('id')
+            .eq('slug', djSlug)
+            .single();
+          if (djData) djId = djData.id;
+        }
+
+        // Calculate duration from session timestamps
+        let durationSeconds = null;
+        if (session.started_at && session.ended_at) {
+          durationSeconds = Math.round(
+            (new Date(session.ended_at).getTime() - new Date(session.started_at).getTime()) / 1000
+          );
+        }
+
+        // Create a new set with source: 'recorded'
+        const { data: newSet, error: setError } = await supabase
+          .from('sets')
+          .insert({
+            title: setTitle,
+            slug,
+            dj_name: djName,
+            dj_id: djId,
+            venue: venue || null,
+            event_date: event_date || new Date().toISOString().split('T')[0],
+            duration_seconds: durationSeconds,
+            source: 'recorded',
+            track_count: tracks.length,
+          })
+          .select()
+          .single();
+
+        if (setError) throw setError;
+
+        // Copy session_tracks into set_tracks with all available data
+        if (tracks.length > 0) {
+          const setTracks = tracks
+            .sort((a, b) => a.position - b.position)
+            .map((t, index) => ({
+              set_id: newSet.id,
+              artist_name: t.artist,
+              track_title: t.title,
+              position: index + 1,
+              is_id: false,
+              spotify_data: t.spotify_url ? JSON.stringify({
+                external_urls: { spotify: t.spotify_url },
+                album: t.album ? { name: t.album } : undefined,
+                name: t.title,
+                artists: [{ name: t.artist }],
+              }) : null,
+            }));
+
+          const { error: insertError } = await supabase
+            .from('set_tracks')
+            .insert(setTracks);
+
+          if (insertError) throw insertError;
+        }
+
+        // Update artist track/set counts if we linked a DJ
+        if (djId) {
+          const { count: setsCount } = await supabase
+            .from('sets')
+            .select('*', { count: 'exact', head: true })
+            .eq('dj_id', djId);
+          await supabase
+            .from('artists')
+            .update({ sets_count: setsCount || 0 })
+            .eq('id', djId);
+        }
+
+        return res.status(201).json({ success: true, setId: newSet.id });
+      }
+
       return res.status(400).json({ success: false, error: 'Invalid action' });
     }
 

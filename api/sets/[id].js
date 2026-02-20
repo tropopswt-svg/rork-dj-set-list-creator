@@ -1,5 +1,6 @@
 // API endpoint to get a single set with its tracklist
 import { createClient } from '@supabase/supabase-js';
+import { batchCheckCache, generateLookupKey } from '../_lib/spotify-cache.js';
 
 // Format seconds to timestamp string (e.g., 3661 -> "1:01:01")
 function formatTimestamp(seconds) {
@@ -88,6 +89,53 @@ export default async function handler(req, res) {
     if (tracksError) {
       console.error('Tracks query error:', tracksError);
       return res.status(500).json({ error: tracksError.message });
+    }
+
+    // ========== Cache-first Spotify enrichment (zero API calls) ==========
+    let needsEnrichment = false;
+    const unEnrichedTracks = (setTracks || []).filter(t =>
+      !t.is_id && !t.spotify_data?.spotify_id && t.artist_name && t.track_title
+    );
+
+    if (unEnrichedTracks.length > 0) {
+      try {
+        // Use service role client for cache access
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const cacheClient = serviceKey
+          ? createClient(process.env.EXPO_PUBLIC_SUPABASE_URL, serviceKey)
+          : supabase;
+
+        const { hits, misses } = await batchCheckCache(cacheClient, unEnrichedTracks);
+
+        // Apply cache hits to set_tracks (fire-and-forget DB updates)
+        const updates = [];
+        for (const track of unEnrichedTracks) {
+          const key = generateLookupKey(track.artist_name, track.track_title);
+          const spotifyData = hits.get(key);
+          if (spotifyData && spotifyData.spotify_id) {
+            // Update the in-memory track for this response
+            track.spotify_data = spotifyData;
+            // Fire-and-forget DB update
+            updates.push(
+              cacheClient
+                .from('set_tracks')
+                .update({ spotify_data: spotifyData })
+                .eq('id', track.id)
+            );
+          }
+        }
+
+        // Don't await all — fire-and-forget so response isn't delayed
+        if (updates.length > 0) {
+          Promise.all(updates).catch(err => console.error('Cache apply error:', err));
+        }
+
+        // If there are still cache misses, the client should trigger enrichment
+        needsEnrichment = misses.length > 0;
+      } catch (cacheErr) {
+        console.error('Cache enrichment error:', cacheErr);
+        needsEnrichment = unEnrichedTracks.length > 0;
+      }
     }
 
     // Count gaps (ID tracks)
@@ -188,6 +236,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       set: transformedSet,
+      needsEnrichment,
     });
 
   } catch (error) {

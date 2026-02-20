@@ -19,6 +19,7 @@ import TrackdLogo from '@/components/TrackdLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useContributions } from '@/hooks/useSocial';
 
 const formatDate = (date: Date | string) => {
   return new Date(date).toLocaleDateString('en-US', {
@@ -43,10 +44,28 @@ export default function ProfileScreen() {
   const [contributionFilter, setContributionFilter] = useState<ContributionFilter>('all');
   const [genreModalVisible, setGenreModalVisible] = useState(false);
   const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
+  const { contributions: rawContributions, isLoading: contribLoading } = useContributions();
+
+  // Transform Supabase contributions to UserContribution format
+  const mappedContributions = useMemo(() => {
+    if (!rawContributions || rawContributions.length === 0) return [];
+    return rawContributions.map((c: any) => ({
+      id: c.id,
+      setId: c.set_id,
+      setName: c.set?.name || 'Unknown Set',
+      trackTitle: c.track_title || 'Unknown Track',
+      trackArtist: c.track_artist || 'Unknown Artist',
+      timestamp: c.timestamp_seconds || 0,
+      status: c.status,
+      addedAt: new Date(c.created_at),
+      points: c.points_awarded || 0,
+    }));
+  }, [rawContributions]);
 
   // Use authenticated profile data if available, otherwise mock data
   const user = useMemo(() => {
     if (isAuthenticated && profile) {
+      const pending = mappedContributions.filter((c: any) => c.status === 'pending').length;
       return {
         displayName: profile.display_name || profile.username || 'User',
         username: profile.username || 'user',
@@ -55,8 +74,8 @@ export default function ProfileScreen() {
         favoriteGenres: profile.favorite_genres || [],
         totalPoints: profile.points || 0,
         verifiedTracks: profile.contributions_count || 0,
-        pendingTracks: 0,
-        contributions: [],
+        pendingTracks: pending,
+        contributions: mappedContributions,
         joinedAt: profile.created_at,
         followersCount: profile.followers_count || 0,
         followingCount: profile.following_count || 0,
@@ -66,7 +85,7 @@ export default function ProfileScreen() {
       ...mockCurrentUser,
       avatarUrl: null,
     };
-  }, [isAuthenticated, profile]);
+  }, [isAuthenticated, profile, mappedContributions]);
 
   const filteredContributions = useMemo(() => {
     if (contributionFilter === 'all') return user.contributions || [];

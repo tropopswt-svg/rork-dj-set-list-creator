@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>trakd — Set Detail</title>
+  <meta name="description" content="Full tracklist with track IDs and Spotify links.">
+  <meta property="og:title" content="trakd — Set Detail">
+  <meta property="og:image" content="/icon.png">
+  <meta name="theme-color" content="#1A1A1A">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #1A1A1A;
+      --bg-surface: rgba(245, 240, 232, 0.04);
+      --bg-surface-hover: rgba(245, 240, 232, 0.08);
+      --border: rgba(245, 240, 232, 0.08);
+      --text: #F5F0E8;
+      --text-secondary: rgba(245, 240, 232, 0.6);
+      --text-muted: rgba(245, 240, 232, 0.35);
+      --accent: #C41E3A;
+      --accent-hover: #a8182f;
+      --accent-light: rgba(196, 30, 58, 0.15);
+      --radius: 12px;
+      --radius-lg: 16px;
+      --max-width: 1200px;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Nav */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(26, 26, 26, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-left { display: flex; align-items: center; gap: 32px; }
+    .nav-logo { display:flex;align-items:flex-end;position:relative;overflow:visible; }
+    .trakd-letter { display:flex;flex-direction:column;align-items:center;position:relative; }
+    .trakd-letter span { font-size:18px;font-weight:800;color:var(--accent);line-height:1;letter-spacing:-0.3px; }
+    .trakd-bars { display:flex;align-items:flex-end;justify-content:center;gap:1px;position:absolute;bottom:0;left:0;right:0;height:8px;pointer-events:none; }
+    .trakd-bar { width:1.5px;background:#fff;border-radius:1px;transform-origin:bottom;transform:scaleY(0); }
+    .trakd-scan { position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,0.6);opacity:0;pointer-events:none;z-index:2; }
+    .nav-links { display: flex; gap: 24px; }
+    .nav-links a {
+      font-size: 14px; font-weight: 500; color: var(--text-secondary); transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      font-size: 13px; font-weight: 600; padding: 8px 16px;
+      background: var(--accent); border-radius: 8px; transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--accent-hover); }
+
+    /* Main */
+    .main {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 20px 60px;
+    }
+
+    /* Set Header */
+    .set-header {
+      display: flex;
+      gap: 28px;
+      padding: 32px 0;
+      align-items: flex-start;
+    }
+    .set-cover {
+      width: 320px;
+      min-width: 320px;
+      aspect-ratio: 16 / 9;
+      border-radius: var(--radius-lg);
+      object-fit: cover;
+      background: var(--bg-surface);
+    }
+    .set-info { flex: 1; min-width: 0; }
+    .set-artist {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 4px;
+    }
+    .set-venue {
+      font-size: 16px;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    .set-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+    }
+    .set-meta span { display: flex; align-items: center; gap: 4px; }
+    .source-links { display: flex; flex-wrap: wrap; gap: 8px; }
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .source-link:hover { opacity: 0.85; }
+    .source-link.youtube { background: #FF0000; color: #fff; }
+    .source-link.soundcloud { background: #FF5500; color: #fff; }
+    .source-link.spotify { background: #1DB954; color: #fff; }
+    .source-link.tracklists { background: var(--bg-surface-hover); color: var(--text); border: 1px solid var(--border); }
+    .source-link.mixcloud { background: #5000ff; color: #fff; }
+
+    /* Tracklist */
+    .tracklist-section { margin-top: 8px; }
+    .tracklist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tracklist-title { font-size: 18px; font-weight: 700; }
+    .tracklist-counts {
+      font-size: 13px;
+      color: var(--text-secondary);
+      display: flex;
+      gap: 12px;
+    }
+
+    .track-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      transition: background 0.15s;
+    }
+    .track-row:nth-child(even) { background: rgba(245, 240, 232, 0.015); }
+    .track-row:hover { background: var(--bg-surface-hover); }
+
+    .track-num {
+      width: 28px;
+      text-align: right;
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .track-time {
+      width: 56px;
+      text-align: right;
+      font-size: 12px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+    .track-art {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      object-fit: cover;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+    .track-art-placeholder {
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: var(--bg-surface);
+    }
+    .track-info { flex: 1; min-width: 0; }
+    .track-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .track-title {
+      font-size: 14px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-artist-name {
+      font-size: 13px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .track-actions { flex-shrink: 0; }
+    .spotify-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 10px;
+      border-radius: 20px;
+      background: #1DB954;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    .spotify-btn:hover { opacity: 0.85; }
+
+    /* Loading */
+    .loading {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-secondary);
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-secondary);
+    }
+    .error-state h2 { font-size: 20px; margin-bottom: 8px; color: var(--text); }
+
+    @media (max-width: 768px) {
+      .set-header { flex-direction: column; gap: 16px; }
+      .set-cover { width: 100%; min-width: 0; }
+      .set-artist { font-size: 22px; }
+      .track-time { display: none; }
+      .track-art, .track-art-placeholder { width: 36px; height: 36px; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="nav-left">
+        <a href="/web" class="nav-logo" data-trakd-logo="nav"></a>
+        <div class="nav-links">
+          <a href="/web">Sets</a>
+          <a href="/web#artists">Artists</a>
+        </div>
+      </div>
+      <a href="/app" class="nav-cta">Get the App</a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div id="content">
+      <div class="loading" id="loadingState"><div class="spinner"></div>Loading set...</div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    const BASE = '/web';
+    const content = document.getElementById('content');
+
+    // Extract set ID from URL: /web/set/{id} or fallback ?id= for local dev
+    const pathParts = window.location.pathname.split('/');
+    const setId = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2] || new URLSearchParams(window.location.search).get('id');
+
+    if (!setId) {
+      showError('No set ID provided');
+      return;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function formatDate(d) {
+      if (!d) return '';
+      return new Date(d).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds) return '';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    function platformLabel(platform) {
+      const labels = {
+        youtube: 'YouTube',
+        soundcloud: 'SoundCloud',
+        spotify: 'Spotify',
+        '1001tracklists': '1001TL',
+        mixcloud: 'Mixcloud',
+        apple: 'Apple Music'
+      };
+      return labels[platform] || platform;
+    }
+
+    function platformClass(platform) {
+      if (platform === '1001tracklists') return 'tracklists';
+      return platform;
+    }
+
+    function showError(msg) {
+      content.innerHTML = `<div class="error-state"><h2>Not Found</h2><p>${escapeHtml(msg)}</p><p style="margin-top:16px"><a href="${BASE}" style="color:var(--accent)">Back to Browse</a></p></div>`;
+    }
+
+    async function loadSet() {
+      try {
+        const res = await fetch(`/api/sets/${setId}`);
+        const data = await res.json();
+
+        if (!data.success || !data.set) {
+          showError(data.error || 'Set not found');
+          return;
+        }
+
+        const set = data.set;
+
+        // Update page title
+        document.title = `${set.artist} — ${set.venue || set.name || 'Set'} | trakd`;
+
+        // Source links HTML
+        const sourceLinksHtml = (set.sourceLinks || []).map(link =>
+          `<a href="${escapeHtml(link.url)}" target="_blank" rel="noopener" class="source-link ${platformClass(link.platform)}">${platformLabel(link.platform)}</a>`
+        ).join('');
+
+        // Cover fallback
+        const coverHtml = set.coverUrl
+          ? `<img class="set-cover" src="${set.coverUrl}" alt="" onerror="this.style.display='none'">`
+          : '';
+
+        // Track rows
+        const tracksHtml = (set.tracks || []).map((track, i) => {
+          const artHtml = track.coverUrl
+            ? `<img class="track-art" src="${escapeHtml(track.coverUrl)}" alt="" loading="lazy" onerror="this.className='track-art-placeholder'">`
+            : '<div class="track-art-placeholder"></div>';
+          const spotifyHtml = (track.trackLinks || []).filter(l => l.platform === 'spotify').map(l =>
+            `<a href="${escapeHtml(l.url)}" target="_blank" rel="noopener" class="spotify-btn">Spotify</a>`
+          ).join('');
+
+          return `<div class="track-row">
+            <span class="track-num">${i + 1}</span>
+            <span class="track-time">${escapeHtml(track.timestampStr || '')}</span>
+            ${artHtml}
+            <div class="track-info">
+              <div class="track-title-row">
+                <span class="track-title">${escapeHtml(track.title)}</span>
+              </div>
+              <div class="track-artist-name">${escapeHtml(track.artist)}</div>
+            </div>
+            <div class="track-actions">${spotifyHtml}</div>
+          </div>`;
+        }).join('');
+
+        const trackCount = set.tracks ? set.tracks.length : (set.trackCount || 0);
+
+        content.innerHTML = `
+          <div class="set-header">
+            ${coverHtml}
+            <div class="set-info">
+              <div class="set-artist">${escapeHtml(set.artist)}</div>
+              <div class="set-venue">${escapeHtml(set.venue || set.name || '')}</div>
+              <div class="set-meta">
+                ${set.date ? `<span>${formatDate(set.date)}</span>` : ''}
+                ${set.totalDuration ? `<span>${formatDuration(set.totalDuration)}</span>` : ''}
+                <span>${trackCount} tracks</span>
+              </div>
+              <div class="source-links">${sourceLinksHtml}</div>
+            </div>
+          </div>
+          <div class="tracklist-section">
+            <div class="tracklist-header">
+              <div class="tracklist-title">Tracklist</div>
+              <div class="tracklist-counts">
+                <span>${trackCount} tracks</span>
+              </div>
+            </div>
+            <div class="tracklist">${tracksHtml}</div>
+          </div>
+        `;
+
+      } catch (e) {
+        console.error('Failed to load set:', e);
+        showError('Failed to load set. Please try again.');
+      }
+    }
+
+    loadSet();
+  })();
+  </script>
+  <script>
+  (function(){var L=['t','r','a','k','d'];function sr(s){var x=Math.sin(s*9999)*10000;return x-Math.floor(x);}document.querySelectorAll('[data-trakd-logo]').forEach(function(el){var isH=el.dataset.trakdLogo==='hero';if(isH)el.classList.add('hero-logo');var sc=document.createElement('div');sc.className='trakd-scan';el.appendChild(sc);L.forEach(function(ch,li){var ltr=document.createElement('div');ltr.className='trakd-letter';var bars=document.createElement('div');bars.className='trakd-bars';for(var i=0;i<5;i++){var b=document.createElement('div');b.className='trakd-bar';b.dataset.h=(0.3+sr(li*10+i)*0.7).toFixed(2);bars.appendChild(b);}var sp=document.createElement('span');sp.textContent=ch;ltr.appendChild(bars);ltr.appendChild(sp);el.appendChild(ltr);});function run(){var dur=2500,w=el.offsetWidth;sc.style.transition='none';sc.style.left='-2px';sc.style.opacity='0';requestAnimationFrame(function(){var st=performance.now();function f(now){var t=Math.min(1,(now-st)/dur);sc.style.left=(t*w)+'px';sc.style.opacity=t<0.02||t>0.98?'0':'1';var bars=el.querySelectorAll('.trakd-bar');L.forEach(function(_,li){var ls=li/5,le=(li+1)/5,lm=(ls+le)/2,fo=Math.min(1,le+0.08),s=0;if(t<ls-0.05)s=0;else if(t<ls)s=0.2*((t-(ls-0.05))/0.05);else if(t<lm)s=0.2+0.8*((t-ls)/(lm-ls));else if(t<fo-0.01)s=1-0.4*((t-lm)/(fo-0.01-lm));else if(t<fo)s=0.6*(1-(t-(fo-0.01))/0.01);else s=0;for(var i=0;i<5;i++){var bar=bars[li*5+i];if(bar)bar.style.transform='scaleY('+s*parseFloat(bar.dataset.h)+')';}});if(t<1)requestAnimationFrame(f);}requestAnimationFrame(f);});}run();setInterval(run,15000);});})();
+  </script>
+</body>
+</html>

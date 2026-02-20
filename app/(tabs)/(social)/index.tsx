@@ -8,6 +8,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackdLogo from '@/components/TrackdLogo';
 import { useAuth } from '@/contexts/AuthContext';
+import { getCoverImageUrl } from '@/utils/coverImage';
 import { useSavedSets, useLikedSets, useContributions } from '@/hooks/useSocial';
 
 function formatTimeAgo(dateString: string) {
@@ -68,7 +69,7 @@ function SavedSetCard({ savedSet, onPress }: { savedSet: any; onPress: () => voi
   return (
     <Pressable style={styles.savedSetCard} onPress={onPress}>
       <Image
-        source={{ uri: set.cover_url || undefined }}
+        source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
         style={styles.savedSetImage}
         contentFit="cover"
       />

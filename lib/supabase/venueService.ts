@@ -1,161 +1,6 @@
 import { supabase, isSupabaseConfigured } from './client';
 import { normalizeVenueName, getVenueAliases } from '../venueNormalization';
-
-// ============================================
-// Venue Images - Curated venue/club photos
-// ============================================
-
-// Keywords to match venues to appropriate images (using reliable Unsplash static URLs)
-const VENUE_IMAGE_KEYWORDS: Array<{ keywords: string[]; image: string }> = [
-  // Ibiza venues - beach/pool club vibes
-  {
-    keywords: ['ushuaia', 'ushuaïa', 'hi ibiza', 'hï ibiza', 'ocean beach', 'o beach'],
-    image: 'https://images.unsplash.com/photo-1528495612343-9ca9f4a4de28?w=400&q=80' // Pool party
-  },
-  {
-    keywords: ['pacha', 'amnesia', 'privilege', 'eden', 'ibiza'],
-    image: 'https://images.unsplash.com/photo-1574391884720-bbc3740c59d1?w=400&q=80' // Club lights
-  },
-  {
-    keywords: ['dc-10', 'dc10', 'circoloco'],
-    image: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?w=400&q=80' // Underground
-  },
-
-  // Berlin - industrial/warehouse
-  {
-    keywords: ['berghain', 'tresor', 'sisyphos', 'about blank', 'rso'],
-    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=400&q=80' // Dark club
-  },
-  {
-    keywords: ['watergate', 'kater', 'salon'],
-    image: 'https://images.unsplash.com/photo-1545128485-c400e7702796?w=400&q=80' // Club interior
-  },
-
-  // UK venues
-  {
-    keywords: ['fabric', 'ministry of sound', 'mos', 'printworks', 'warehouse project', 'e1', 'drumsheds', 'london'],
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400&q=80' // Club/warehouse
-  },
-
-  // Streaming/Radio
-  {
-    keywords: ['boiler room', 'hör', 'hor berlin', 'hor.berlin', 'rinse', 'nts', 'bbc radio', 'essential mix', 'lot radio'],
-    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80' // DJ decks
-  },
-  {
-    keywords: ['cercle'],
-    image: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400&q=80' // Outdoor scenic
-  },
-
-  // Festivals - outdoor/stage
-  {
-    keywords: ['tomorrowland', 'ultra', 'edc', 'electric daisy', 'creamfields', 'mysteryland'],
-    image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&q=80' // Festival main stage
-  },
-  {
-    keywords: ['coachella', 'burning man', 'lightning in a bottle'],
-    image: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?w=400&q=80' // Festival crowd
-  },
-  {
-    keywords: ['awakenings', 'dekmantel', 'ade', 'amsterdam dance', 'sonar', 'movement', 'time warp', 'kappa', 'primavera'],
-    image: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&q=80' // Festival lights
-  },
-
-  // US venues
-  {
-    keywords: ['space miami', 'club space', 'liv', 'e11even', 'wynwood', 'miami'],
-    image: 'https://images.unsplash.com/photo-1571266028243-d220c6a88b5a?w=400&q=80' // Miami club
-  },
-  {
-    keywords: ['output', 'avant gardner', 'knockdown', 'brooklyn mirage', 'good room', 'elsewhere', 'brooklyn', 'nyc'],
-    image: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80' // NYC venue
-  },
-  {
-    keywords: ['exchange la', 'sound nightclub', 'academy', 'los angeles'],
-    image: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80' // LA club
-  },
-
-  // Amsterdam
-  {
-    keywords: ['de school', 'shelter amsterdam', 'paradiso', 'melkweg', 'marktkantine', 'amsterdam'],
-    image: 'https://images.unsplash.com/photo-1504704911898-68304a7d2571?w=400&q=80' // Club venue
-  },
-
-  // More specific venues/brands
-  {
-    keywords: ['defected', 'glitterbox'],
-    image: 'https://images.unsplash.com/photo-1528495612343-9ca9f4a4de28?w=400&q=80'
-  },
-  {
-    keywords: ['drumcode', 'afterlife', 'resistance', 'techno'],
-    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=400&q=80'
-  },
-  {
-    keywords: ['anjuna', 'above & beyond', 'a&b', 'trance'],
-    image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&q=80'
-  },
-
-  // Generic fallbacks based on common words
-  {
-    keywords: ['club', 'nightclub', 'lounge', 'disco'],
-    image: 'https://images.unsplash.com/photo-1574391884720-bbc3740c59d1?w=400&q=80'
-  },
-  {
-    keywords: ['festival', 'fest', 'open air', 'outdoor'],
-    image: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=400&q=80'
-  },
-  {
-    keywords: ['warehouse', 'factory', 'hangar', 'depot', 'industrial'],
-    image: 'https://images.unsplash.com/photo-1504704911898-68304a7d2571?w=400&q=80'
-  },
-  {
-    keywords: ['beach', 'pool', 'rooftop', 'terrace', 'garden', 'sunset'],
-    image: 'https://images.unsplash.com/photo-1528495612343-9ca9f4a4de28?w=400&q=80'
-  },
-  {
-    keywords: ['radio', 'studio', 'live', 'stream', 'podcast'],
-    image: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80'
-  },
-  {
-    keywords: ['stage', 'main', 'arena', 'tent', 'hall'],
-    image: 'https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400&q=80'
-  },
-];
-
-// Default venue images by first letter (for variety) - reliable URLs
-const DEFAULT_VENUE_IMAGES = [
-  'https://images.unsplash.com/photo-1571266028243-d220c6a88b5a?w=400&q=80',
-  'https://images.unsplash.com/photo-1574391884720-bbc3740c59d1?w=400&q=80',
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
-  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&q=80',
-  'https://images.unsplash.com/photo-1504704911898-68304a7d2571?w=400&q=80',
-];
-
-/**
- * Get image URL for a venue using keyword matching
- * Always returns an image URL
- */
-function getVenueImage(venueName: string): string {
-  if (!venueName) {
-    return DEFAULT_VENUE_IMAGES[0];
-  }
-
-  const lowerName = venueName.toLowerCase();
-
-  // Find first matching keyword group
-  for (const { keywords, image } of VENUE_IMAGE_KEYWORDS) {
-    for (const keyword of keywords) {
-      if (lowerName.includes(keyword.toLowerCase())) {
-        return image;
-      }
-    }
-  }
-
-  // Return a default image based on first letter for variety
-  const charCode = venueName.charCodeAt(0) || 0;
-  const index = charCode % DEFAULT_VENUE_IMAGES.length;
-  return DEFAULT_VENUE_IMAGES[index];
-}
+import { getVenueImage } from '@/utils/coverImage';
 
 // ============================================
 // Venue Types
@@ -275,6 +120,27 @@ export async function getPopularVenues(limit: number = 10): Promise<VenueInfo[]>
     return data;
   } catch (err) {
     if (__DEV__) console.error('[VenueService] Error getting popular venues:', err);
+    return [];
+  }
+}
+
+/**
+ * Get the top N venues by set count, sorted A-Z by name.
+ * Used as the default view before the user searches or changes sort.
+ */
+export async function getTopVenues(limit: number = 100): Promise<VenueInfo[]> {
+  try {
+    // Fetch all venues sorted by sets count
+    const { data } = await browseVenues({
+      limit: limit,
+      sortBy: 'sets_count',
+      sortOrder: 'desc',
+    });
+    // Sort the top venues A-Z by name
+    const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
+    return sorted;
+  } catch (err) {
+    if (__DEV__) console.error('[VenueService] Error getting top venues:', err);
     return [];
   }
 }

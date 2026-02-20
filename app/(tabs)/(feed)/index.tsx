@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn, MapPin, Headphones, Archive, User } from 'lucide-react-native';
+import { Bell, UserPlus, Play, ChevronRight, Music, Heart, MessageCircle, Share2, LogIn, MapPin, Headphones, Archive } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
@@ -15,88 +15,7 @@ import { useFollowing, useNotifications, useLikeSet, useFollowArtist } from '@/h
 // Logo removed from feed header
 import { getPopularVenues, type VenueInfo } from '@/lib/supabase/venueService';
 import { getPopularArtists, getArtistSets, type DbArtist } from '@/lib/supabase/artistService';
-
-// Spinning vinyl record component
-function SpinningVinyl({ size = 40 }: { size?: number }) {
-  const spinValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const spin = Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-    spin.start();
-    return () => spin.stop();
-  }, []);
-
-  const rotate = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const grooveCount = 3;
-  const grooves = [];
-  for (let i = 0; i < grooveCount; i++) {
-    const grooveSize = size * (0.85 - i * 0.15);
-    grooves.push(
-      <View
-        key={i}
-        style={{
-          position: 'absolute',
-          width: grooveSize,
-          height: grooveSize,
-          borderRadius: grooveSize / 2,
-          borderWidth: 1,
-          borderColor: 'rgba(0,0,0,0.3)',
-        }}
-      />
-    );
-  }
-
-  return (
-    <Animated.View
-      style={[
-        styles.vinylContainer,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          transform: [{ rotate }],
-        },
-      ]}
-    >
-      {/* Vinyl grooves */}
-      {grooves}
-      {/* Center label */}
-      <View
-        style={[
-          styles.vinylLabel,
-          {
-            width: size * 0.35,
-            height: size * 0.35,
-            borderRadius: (size * 0.35) / 2,
-          },
-        ]}
-      >
-        {/* Center hole */}
-        <View
-          style={[
-            styles.vinylHole,
-            {
-              width: size * 0.08,
-              height: size * 0.08,
-              borderRadius: (size * 0.08) / 2,
-            },
-          ]}
-        />
-      </View>
-    </Animated.View>
-  );
-}
+import ArtistAvatar from '@/components/ArtistAvatar';
 
 // Auto-scrolling horizontal list component
 function AutoScrollList({ children, speed = 30 }: { children: React.ReactNode; speed?: number }) {
@@ -230,15 +149,12 @@ function DiscoverArtistCard({ artist }: { artist: DbArtist }) {
   return (
     <Pressable style={styles.discoverCard} onPress={handlePress}>
       <View style={styles.discoverImageWrapper}>
-        {artist.image_url ? (
-          <Image
-            source={{ uri: artist.image_url }}
-            style={styles.discoverImage}
-            contentFit="cover"
-          />
-        ) : (
-          <SpinningVinyl size={40} />
-        )}
+        <ArtistAvatar
+          imageUrl={artist.image_url}
+          name={artist.name}
+          size={40}
+          artistId={artist.id}
+        />
         {b2bInfo.isB2B && (
           <View style={styles.b2bBadge}>
             <Text style={styles.b2bBadgeText}>B{b2bInfo.count}B</Text>
@@ -324,17 +240,13 @@ function FeedCard({ item, onPress }: { item: any; onPress: () => void }) {
       <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.55)' }]} />
       <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} style={styles.feedCardInner}>
         <View style={styles.feedHeader}>
-          {item.artist.image ? (
-            <Image
-              source={{ uri: item.artist.image }}
-              style={styles.feedArtistImage}
-              contentFit="cover"
+          <View style={{ marginRight: 10 }}>
+            <ArtistAvatar
+              imageUrl={item.artist.image}
+              name={item.artist.name}
+              size={40}
             />
-          ) : (
-            <View style={[styles.feedArtistImage, styles.feedArtistPlaceholder]}>
-              <User size={18} color="rgba(0,0,0,0.3)" />
-            </View>
-          )}
+          </View>
           <View style={styles.feedHeaderText}>
             <Text style={styles.feedArtistName}>{item.artist.name}</Text>
             <Text style={styles.feedAction}>played a new set</Text>
@@ -1058,21 +970,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderRadius: 8,
   },
-  vinylContainer: {
-    backgroundColor: '#2a2a2a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#444',
-  },
-  vinylLabel: {
-    backgroundColor: '#DC2626',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vinylHole: {
-    backgroundColor: '#1a1a1a',
-  },
   venueImageStyle: {
     borderRadius: 8,
   },
@@ -1168,17 +1065,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  feedArtistImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  feedArtistPlaceholder: {
-    backgroundColor: 'rgba(0,0,0,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   feedCoverPlaceholder: {
     backgroundColor: 'rgba(0,0,0,0.06)',

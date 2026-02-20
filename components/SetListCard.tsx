@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
+import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 
 interface SetListCardProps {
   setList: SetList;
@@ -13,36 +14,29 @@ interface SetListCardProps {
   large?: boolean;
 }
 
-const FALLBACK_IMAGES = [
-  'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
-];
-
 export default function SetListCard({ setList, onPress, large }: SetListCardProps) {
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
 
-  const getFallbackImage = useCallback(() => {
-    const index = parseInt(setList.id) % FALLBACK_IMAGES.length;
-    return FALLBACK_IMAGES[index] || FALLBACK_IMAGES[0];
-  }, [setList.id]);
+  const getSetFallbackImage = useCallback(() => {
+    if (setList.venue) return getVenueImage(setList.venue);
+    return getFallbackImage(setList.id);
+  }, [setList.id, setList.venue]);
 
   const getCoverImage = useCallback(() => {
     if (imageError && triedHqFallback) {
-      return getFallbackImage();
+      return getSetFallbackImage();
     }
-    
+
     if (setList.coverUrl) {
       if (imageError && setList.coverUrl.includes('maxresdefault')) {
         return setList.coverUrl.replace('maxresdefault', 'hqdefault');
       }
       return setList.coverUrl;
     }
-    
-    return getFallbackImage();
-  }, [setList.coverUrl, imageError, triedHqFallback, getFallbackImage]);
+
+    return getSetFallbackImage();
+  }, [setList.coverUrl, imageError, triedHqFallback, getSetFallbackImage]);
 
   const handleImageError = useCallback(() => {
     console.log(`[SetListCard] Image error for set: ${setList.name}`);

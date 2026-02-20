@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,8 +10,6 @@ import {
   RefreshControl,
   Modal,
   ScrollView,
-  Animated,
-  Easing,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
@@ -36,88 +34,11 @@ import {
   browseArtists,
   getArtistGenres,
   getPopularArtists,
+  getTopArtists,
   type ArtistSortOption,
 } from '@/lib/supabase/artistService';
 import type { DbArtist } from '@/lib/supabase/types';
-
-// Spinning vinyl record component
-function SpinningVinyl({ size = 56 }: { size?: number }) {
-  const spinValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const spin = Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 3000,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-    spin.start();
-    return () => spin.stop();
-  }, []);
-
-  const rotate = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const grooveCount = 3;
-  const grooves = [];
-  for (let i = 0; i < grooveCount; i++) {
-    const grooveSize = size * (0.85 - i * 0.15);
-    grooves.push(
-      <View
-        key={i}
-        style={{
-          position: 'absolute',
-          width: grooveSize,
-          height: grooveSize,
-          borderRadius: grooveSize / 2,
-          borderWidth: 1,
-          borderColor: 'rgba(0,0,0,0.3)',
-        }}
-      />
-    );
-  }
-
-  return (
-    <Animated.View
-      style={[
-        styles.vinylContainer,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          transform: [{ rotate }],
-        },
-      ]}
-    >
-      {grooves}
-      <View
-        style={[
-          styles.vinylLabel,
-          {
-            width: size * 0.35,
-            height: size * 0.35,
-            borderRadius: (size * 0.35) / 2,
-          },
-        ]}
-      >
-        <View
-          style={[
-            styles.vinylHole,
-            {
-              width: size * 0.08,
-              height: size * 0.08,
-              borderRadius: (size * 0.08) / 2,
-            },
-          ]}
-        />
-      </View>
-    </Animated.View>
-  );
-}
+import ArtistAvatar from '@/components/ArtistAvatar';
 
 // Artist card component
 function ArtistCard({ artist, onPress }: { artist: DbArtist; onPress: () => void }) {
@@ -131,15 +52,12 @@ function ArtistCard({ artist, onPress }: { artist: DbArtist; onPress: () => void
 
   return (
     <Pressable style={styles.artistCard} onPress={onPress}>
-      {artist.image_url ? (
-        <Image
-          source={{ uri: artist.image_url }}
-          style={styles.artistImage}
-          contentFit="cover"
-        />
-      ) : (
-        <SpinningVinyl size={56} />
-      )}
+      <ArtistAvatar
+        imageUrl={artist.image_url}
+        name={artist.name}
+        size={56}
+        artistId={artist.id}
+      />
 
       <View style={styles.artistInfo}>
         <View style={styles.artistNameRow}>
@@ -242,6 +160,9 @@ export default function ArtistsScreen() {
     setGenres(genreList);
   };
 
+  // Whether we're in the default "top 100" view (no search, no filter, default sort)
+  const isDefaultView = searchQuery.length < 2 && !selectedGenre && sortOption === SORT_OPTIONS[0];
+
   // Load artists
   const loadArtists = useCallback(async (refresh = false) => {
     if (refresh) {
@@ -251,6 +172,19 @@ export default function ArtistsScreen() {
       setIsLoading(true);
     } else {
       setIsLoadingMore(true);
+    }
+
+    // Default view: show top 100 most popular artists, sorted A-Z
+    if (isDefaultView) {
+      const top = await getTopArtists(100);
+      setArtists(top);
+      setTotalCount(top.length);
+      setHasMore(false); // no pagination needed — it's a curated list
+      setOffset(top.length);
+      setIsLoading(false);
+      setIsLoadingMore(false);
+      setIsRefreshing(false);
+      return;
     }
 
     const currentOffset = refresh ? 0 : offset;
@@ -276,7 +210,7 @@ export default function ArtistsScreen() {
     setIsLoading(false);
     setIsLoadingMore(false);
     setIsRefreshing(false);
-  }, [searchQuery, selectedGenre, sortOption, offset]);
+  }, [searchQuery, selectedGenre, sortOption, offset, isDefaultView]);
 
   // Initial load and reload on filter changes
   useEffect(() => {
@@ -346,9 +280,10 @@ export default function ArtistsScreen() {
       {/* Results count */}
       <View style={styles.resultsHeader}>
         <Text style={styles.resultsCount}>
-          {totalCount} artist{totalCount !== 1 ? 's' : ''}
-          {searchQuery && ` for "${searchQuery}"`}
-          {selectedGenre && ` in ${selectedGenre}`}
+          {isDefaultView
+            ? 'Top 100 Artists'
+            : `${totalCount} artist${totalCount !== 1 ? 's' : ''}${searchQuery ? ` for "${searchQuery}"` : ''}${selectedGenre ? ` in ${selectedGenre}` : ''}`
+          }
         </Text>
         {hasActiveFilters && (
           <Pressable onPress={clearFilters}>
@@ -828,21 +763,6 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: Colors.dark.surfaceLight,
-  },
-  vinylContainer: {
-    backgroundColor: '#1a1a1a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#333',
-  },
-  vinylLabel: {
-    backgroundColor: '#DC2626',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  vinylHole: {
-    backgroundColor: '#1a1a1a',
   },
   artistInfo: {
     flex: 1,

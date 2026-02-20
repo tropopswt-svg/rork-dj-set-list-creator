@@ -55,7 +55,7 @@ export default async function handler(req, res) {
 
     let query = supabase
       .from('sets')
-      .select('*', { count: 'exact' });
+      .select('*, artists:dj_id(image_url)', { count: 'exact' });
 
     // Filter by DJ
     if (dj) {
@@ -94,6 +94,7 @@ export default async function handler(req, res) {
         id: set.id,
         name: set.title,
         artist: set.dj_name || 'Unknown Artist',
+        artistImageUrl: set.artists?.image_url || null,
         venue: set.venue || null,
         location: set.location || null,
         date: set.event_date || set.created_at,

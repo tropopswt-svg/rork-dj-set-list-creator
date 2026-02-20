@@ -1,12 +1,25 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "cleanUrls": true,
   "buildCommand": "echo 'Skipping build for serverless functions'",
   "functions": {
     "api/**/*.{js,ts}": {
       "maxDuration": 60
     }
   },
-  "rewrites": [],
+  "crons": [
+    {
+      "path": "/api/spotify-drip",
+      "schedule": "*/5 * * * *"
+    }
+  ],
+  "rewrites": [
+    { "source": "/web", "destination": "/web/index.html" },
+    { "source": "/web/set/:id", "destination": "/web/set.html" },
+    { "source": "/web/artist/:slug", "destination": "/web/artist.html" },
+    { "source": "/privacy", "destination": "/privacy.html" },
+    { "source": "/app", "destination": "/app.html" }
+  ],
   "headers": [
     {
       "source": "/api/(.*)",

@@ -354,24 +354,59 @@ export async function getArtists(page: number = 0, limit: number = 50): Promise<
 }
 
 /**
- * Search artists by name
+ * Search artists by name — tiered: exact match first, then starts-with, then contains.
+ * Filters out B2B/collaboration/featuring entries for canonical results.
  */
 export async function searchArtists(query: string, limit: number = 20): Promise<DbArtist[]> {
   if (!isSupabaseConfigured()) return [];
-  
-  const { data, error } = await supabase
+
+  const seen = new Set<string>();
+  const results: DbArtist[] = [];
+
+  const addUnique = (artists: DbArtist[]) => {
+    for (const artist of artists) {
+      if (!seen.has(artist.id)) {
+        seen.add(artist.id);
+        results.push(artist);
+      }
+    }
+  };
+
+  // Tier 1: Exact name match (case-insensitive, no wildcards)
+  const { data: exact } = await supabase
     .from('artists')
     .select('*')
-    .ilike('name', `%${query}%`)
+    .ilike('name', query)
     .order('tracks_count', { ascending: false })
     .limit(limit);
-  
-  if (error) {
-    if (__DEV__) console.error('[ArtistService] Error searching artists:', error);
-    return [];
+
+  if (exact) addUnique(filterOutB2B(exact as DbArtist[]));
+
+  // Tier 2: Starts-with match
+  if (results.length < limit) {
+    const { data: startsWith } = await supabase
+      .from('artists')
+      .select('*')
+      .ilike('name', `${query}%`)
+      .order('tracks_count', { ascending: false })
+      .limit(limit);
+
+    if (startsWith) addUnique(filterOutB2B(startsWith as DbArtist[]));
   }
-  
-  return data as DbArtist[];
+
+  // Tier 3: Contains match (substring)
+  if (results.length < limit) {
+    const { data: contains } = await supabase
+      .from('artists')
+      .select('*')
+      .ilike('name', `%${query}%`)
+      .order('tracks_count', { ascending: false })
+      .limit(limit * 2); // fetch extra to account for filtering
+
+    if (contains) addUnique(filterOutB2B(contains as DbArtist[]));
+  }
+
+  return results.slice(0, limit);
 }
 
 /**
@@ -384,7 +419,7 @@ export async function getArtistTracks(artistId: string, limit: number = 50): Pro
     .from('tracks')
     .select('*')
     .eq('artist_id', artistId)
-    .order('times_played', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(limit);
   
   if (error) {
@@ -410,7 +445,7 @@ export async function getArtistSets(artistId: string, limit: number = 50): Promi
     .from('sets')
     .select('*')
     .ilike('dj_name', artist.name)
-    .order('created_at', { ascending: false })
+    .order('event_date', { ascending: false, nullsFirst: false })
     .limit(limit);
 
   if (error) {
@@ -437,9 +472,9 @@ interface BrowseArtistsOptions {
 }
 
 /**
- * Check if an artist name is a B2B/collaboration (not a solo artist)
+ * Check if an artist name is a B2B/collaboration/featuring (not a solo canonical artist)
  */
-function isB2BArtist(name: string): boolean {
+function isCollabOrFeaturing(name: string): boolean {
   // Check for explicit b2b/b3b patterns
   if (name.toLowerCase().match(/\bb\d+b\b/)) {
     return true;
@@ -460,14 +495,19 @@ function isB2BArtist(name: string): boolean {
     return true;
   }
 
+  // Check for featuring patterns: "ft", "ft.", "feat", "feat.", "featuring"
+  if (name.match(/\s+(?:ft\.?|feat\.?|featuring)\s+/i)) {
+    return true;
+  }
+
   return false;
 }
 
 /**
- * Filter out B2B artists from a list
+ * Filter out B2B/collaboration/featuring artists from a list
  */
 function filterOutB2B(artists: DbArtist[]): DbArtist[] {
-  return artists.filter(artist => !isB2BArtist(artist.name));
+  return artists.filter(artist => !isCollabOrFeaturing(artist.name));
 }
 
 /**
@@ -516,8 +556,25 @@ export async function browseArtists(options: BrowseArtistsOptions = {}): Promise
   // Filter out B2B collaborations
   const soloArtists = filterOutB2B(data as DbArtist[]);
 
+  // When searching, sort exact/starts-with matches to the top
+  let sortedArtists = soloArtists;
+  if (search && search.length > 0) {
+    const searchLower = search.toLowerCase();
+    sortedArtists = [...soloArtists].sort((a, b) => {
+      const aLower = a.name.toLowerCase();
+      const bLower = b.name.toLowerCase();
+      const aExact = aLower === searchLower;
+      const bExact = bLower === searchLower;
+      if (aExact !== bExact) return aExact ? -1 : 1;
+      const aStarts = aLower.startsWith(searchLower);
+      const bStarts = bLower.startsWith(searchLower);
+      if (aStarts !== bStarts) return aStarts ? -1 : 1;
+      return 0; // preserve existing sort order otherwise
+    });
+  }
+
   // Apply pagination on filtered results
-  const paginatedArtists = soloArtists.slice(offset, offset + limit);
+  const paginatedArtists = sortedArtists.slice(offset, offset + limit);
 
   return { data: paginatedArtists, count: soloArtists.length };
 }
@@ -542,6 +599,31 @@ export async function getPopularArtists(limit: number = 20): Promise<DbArtist[]>
 
   // Filter out B2B and return requested limit
   return filterOutB2B(data as DbArtist[]).slice(0, limit);
+}
+
+/**
+ * Get the top N artists by popularity (tracks + sets + followers), sorted A-Z by name.
+ * Used as the default view before the user searches or filters.
+ */
+export async function getTopArtists(limit: number = 100): Promise<DbArtist[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  // Fetch a larger pool sorted by tracks_count to get the most active artists
+  const { data, error } = await supabase
+    .from('artists')
+    .select('*')
+    .order('tracks_count', { ascending: false })
+    .limit(limit * 3);
+
+  if (error) {
+    if (__DEV__) console.error('[ArtistService] Error fetching top artists:', error);
+    return [];
+  }
+
+  // Filter out B2B collaborations, take the top N, then sort A-Z
+  const top = filterOutB2B(data as DbArtist[]).slice(0, limit);
+  top.sort((a, b) => a.name.localeCompare(b.name));
+  return top;
 }
 
 /**

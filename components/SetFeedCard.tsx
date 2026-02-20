@@ -6,6 +6,7 @@ import { Play, Music, Youtube, Music2, AlertCircle, Calendar, MapPin, Ticket, St
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
+import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 
 interface SetFeedCardProps {
   setList: SetList;
@@ -18,15 +19,6 @@ interface SetFeedCardProps {
   fillProgress?: Animated.AnimatedInterpolation<number>; // 0-1 for liquid fill effect on chips
   fillDirection?: Animated.AnimatedInterpolation<number>; // 1 = fill up, -1 = drain down
 }
-
-const coverImages = [
-  'https://images.unsplash.com/photo-1571266028243-e4733b0f0bb0?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1508854710579-5cecc3a9ff17?w=400&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1598387993441-a364f854c3e1?w=400&h=400&fit=crop',
-];
 
 // Festival/Event to actual geographic location mapping (for deduplication)
 // When venue IS a festival, we show this as the location instead of repeating the festival name
@@ -983,32 +975,26 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
 
-  const getFallbackImage = useCallback(() => {
-    // Hash the ID string to get a stable index (IDs may be UUIDs, not numbers)
-    let hash = 0;
-    const idStr = setList.id || '';
-    for (let i = 0; i < idStr.length; i++) {
-      hash = ((hash << 5) - hash) + idStr.charCodeAt(i);
-      hash |= 0;
-    }
-    const index = Math.abs(hash) % coverImages.length;
-    return coverImages[index] || coverImages[0];
-  }, [setList.id]);
+  const getSetFallbackImage = useCallback(() => {
+    if (setList.artistImageUrl) return setList.artistImageUrl;
+    if (venue) return getVenueImage(venue);
+    return getFallbackImage(setList.id);
+  }, [setList.id, setList.artistImageUrl, venue]);
 
   const getCoverImage = useCallback(() => {
     if (imageError && triedHqFallback) {
-      return getFallbackImage();
+      return getSetFallbackImage();
     }
-    
+
     if (setList.coverUrl) {
       if (imageError && setList.coverUrl.includes('maxresdefault')) {
         return setList.coverUrl.replace('maxresdefault', 'hqdefault');
       }
       return setList.coverUrl;
     }
-    
-    return getFallbackImage();
-  }, [setList.coverUrl, imageError, triedHqFallback, getFallbackImage]);
+
+    return getSetFallbackImage();
+  }, [setList.coverUrl, imageError, triedHqFallback, getSetFallbackImage]);
 
   const handleImageError = useCallback(() => {
     console.log(`[SetFeedCard] Image error for set: ${setList.name}`);

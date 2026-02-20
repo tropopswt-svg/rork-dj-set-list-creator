@@ -68,6 +68,7 @@ export interface SetList {
   date: Date;
   tracks: Track[];
   coverUrl?: string;
+  artistImageUrl?: string;
   sourceLinks: SourceLink[];
   totalDuration?: number;
   aiProcessed?: boolean;

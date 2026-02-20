@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>trakd — Browse Sets & Artists</title>
+  <meta name="description" content="Browse DJ sets, tracklists, and artists. Discover every track ID from your favorite sets.">
+  <meta property="og:title" content="trakd — Browse Sets & Artists">
+  <meta property="og:description" content="Browse DJ sets, tracklists, and artists. Discover every track ID.">
+  <meta property="og:image" content="/icon.png">
+  <meta name="theme-color" content="#1A1A1A">
+  <link rel="icon" href="/icon.png" type="image/png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #1A1A1A;
+      --bg-surface: rgba(245, 240, 232, 0.04);
+      --bg-surface-hover: rgba(245, 240, 232, 0.08);
+      --border: rgba(245, 240, 232, 0.08);
+      --text: #F5F0E8;
+      --text-secondary: rgba(245, 240, 232, 0.6);
+      --text-muted: rgba(245, 240, 232, 0.35);
+      --accent: #C41E3A;
+      --accent-hover: #a8182f;
+      --accent-light: rgba(196, 30, 58, 0.15);
+      --radius: 12px;
+      --radius-lg: 16px;
+      --max-width: 1200px;
+    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+
+    /* Nav */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(26, 26, 26, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 0 20px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-left { display: flex; align-items: center; gap: 32px; }
+    .nav-logo {
+      display: flex;
+      align-items: flex-end;
+      gap: 0;
+      position: relative;
+      overflow: visible;
+    }
+    .trakd-letter {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+    .trakd-letter span {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+      letter-spacing: -0.3px;
+    }
+    .trakd-bars {
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      gap: 1px;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 8px;
+      pointer-events: none;
+    }
+    .trakd-bar {
+      width: 1.5px;
+      background: #fff;
+      border-radius: 1px;
+      transform-origin: bottom;
+      transform: scaleY(0);
+    }
+    .trakd-scan {
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      width: 2px;
+      background: #fff;
+      box-shadow: 0 0 6px rgba(255,255,255,0.6);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 2;
+    }
+    /* Hero logo (larger) */
+    .hero-logo .trakd-letter span { font-size: 48px; letter-spacing: -0.5px; }
+    .hero-logo .trakd-bars { height: 22px; gap: 1.5px; }
+    .hero-logo .trakd-bar { width: 3px; }
+    .hero-logo .trakd-scan { width: 3px; top: -4px; bottom: -4px; }
+    .nav-links { display: flex; gap: 24px; }
+    .nav-links a {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      transition: color 0.2s;
+    }
+    .nav-links a:hover, .nav-links a.active { color: var(--text); }
+    .nav-cta {
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      background: var(--accent);
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--accent-hover); }
+
+    /* Main */
+    .main {
+      max-width: var(--max-width);
+      margin: 0 auto;
+      padding: 32px 20px 60px;
+    }
+    .page-header { margin-bottom: 28px; }
+    .page-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      margin-bottom: 4px;
+    }
+    .page-subtitle {
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      background: var(--bg-surface);
+      border-radius: 10px;
+      padding: 4px;
+      width: fit-content;
+    }
+    .tab-btn {
+      padding: 8px 20px;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: var(--accent);
+      color: var(--text);
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+    .search-input {
+      flex: 1;
+      min-width: 200px;
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .search-input::placeholder { color: var(--text-muted); }
+    .search-input:focus { border-color: var(--accent); }
+    .sort-select {
+      padding: 10px 16px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      outline: none;
+      cursor: pointer;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    /* Set Card */
+    .set-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: background 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+    .set-card:hover {
+      background: var(--bg-surface-hover);
+      border-color: rgba(245, 240, 232, 0.15);
+    }
+    .set-card-cover {
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      background: rgba(245, 240, 232, 0.02);
+      display: block;
+    }
+    .set-card-body { padding: 14px 16px; }
+    .set-card-artist {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .set-card-title {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .set-card-meta {
+      display: flex;
+      gap: 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .set-card-meta span { display: flex; align-items: center; gap: 4px; }
+
+    /* Artist Card */
+    .artist-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px 20px;
+      text-align: center;
+      transition: background 0.2s, border-color 0.2s;
+      cursor: pointer;
+    }
+    .artist-card:hover {
+      background: var(--bg-surface-hover);
+      border-color: rgba(245, 240, 232, 0.15);
+    }
+    .artist-avatar {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      object-fit: cover;
+      margin: 0 auto 12px;
+      display: block;
+      background: var(--bg-surface-hover);
+    }
+    .artist-avatar-placeholder {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      margin: 0 auto 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent-light);
+      color: var(--accent);
+      font-size: 36px;
+      font-weight: 800;
+    }
+    .artist-card-name {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .artist-card-genres {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 10px;
+    }
+    .artist-card-stats {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Load More */
+    .load-more-wrap { text-align: center; margin-top: 8px; }
+    .load-more-btn {
+      padding: 12px 32px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .load-more-btn:hover { background: var(--bg-surface-hover); }
+    .load-more-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* States */
+    .loading, .empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-secondary);
+      font-size: 15px;
+    }
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 640px) {
+      .grid { grid-template-columns: 1fr; }
+      .page-title { font-size: 22px; }
+      .controls { flex-direction: column; }
+      .sort-select { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-inner">
+      <div class="nav-left">
+        <a href="/web" class="nav-logo" data-trakd-logo="nav"></a>
+        <div class="nav-links">
+          <a href="/web" class="active" id="navSets">Sets</a>
+          <a href="/web" id="navArtists">Artists</a>
+        </div>
+      </div>
+      <a href="/app" class="nav-cta">Get the App</a>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="page-header">
+      <h1 class="page-title">Browse</h1>
+      <p class="page-subtitle" id="subtitle">Explore DJ sets and tracklists</p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="sets">Sets</button>
+      <button class="tab-btn" data-tab="artists">Artists</button>
+    </div>
+
+    <!-- Sets Tab -->
+    <div id="setsTab">
+      <div class="controls">
+        <input type="text" class="search-input" id="setsSearch" placeholder="Search sets by title, artist, venue...">
+        <select class="sort-select" id="setsSort">
+          <option value="recent">Recent</option>
+          <option value="popular">Popular</option>
+        </select>
+      </div>
+      <div id="setsGrid" class="grid"></div>
+      <div id="setsLoading" class="loading"><div class="spinner"></div>Loading sets...</div>
+      <div id="setsEmpty" class="empty" style="display:none">No sets found.</div>
+      <div class="load-more-wrap" id="setsLoadMoreWrap" style="display:none">
+        <button class="load-more-btn" id="setsLoadMore">Load More</button>
+      </div>
+    </div>
+
+    <!-- Artists Tab -->
+    <div id="artistsTab" style="display:none">
+      <div class="controls">
+        <input type="text" class="search-input" id="artistsSearch" placeholder="Search artists by name...">
+        <select class="sort-select" id="artistsSort">
+          <option value="name">A-Z</option>
+          <option value="sets_count">Most Sets</option>
+          <option value="tracks_count">Most Tracks</option>
+        </select>
+      </div>
+      <div id="artistsGrid" class="grid"></div>
+      <div id="artistsLoading" class="loading" style="display:none"><div class="spinner"></div>Loading artists...</div>
+      <div id="artistsEmpty" class="empty" style="display:none">No artists found.</div>
+      <div class="load-more-wrap" id="artistsLoadMoreWrap" style="display:none">
+        <button class="load-more-btn" id="artistsLoadMore">Load More</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    const BASE = '/web';
+    const LIMIT = 20;
+
+    // State
+    let setsData = { items: [], total: 0, offset: 0, search: '', sort: 'recent', loading: false };
+    let artistsData = { items: [], total: 0, offset: 0, search: '', sort: 'name', loading: false };
+    let activeTab = 'sets';
+
+    // Elements
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const setsTab = document.getElementById('setsTab');
+    const artistsTab = document.getElementById('artistsTab');
+    const navSets = document.getElementById('navSets');
+    const navArtists = document.getElementById('navArtists');
+    const subtitle = document.getElementById('subtitle');
+
+    // Tab switching
+    function switchTab(tab) {
+      activeTab = tab;
+      tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+      setsTab.style.display = tab === 'sets' ? '' : 'none';
+      artistsTab.style.display = tab === 'artists' ? '' : 'none';
+      navSets.classList.toggle('active', tab === 'sets');
+      navArtists.classList.toggle('active', tab === 'artists');
+      subtitle.textContent = tab === 'sets' ? 'Explore DJ sets and tracklists' : 'Discover artists and DJs';
+
+      if (tab === 'artists' && artistsData.items.length === 0 && !artistsData.loading) {
+        fetchArtists(true);
+      }
+    }
+
+    tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+    navArtists.addEventListener('click', (e) => { e.preventDefault(); switchTab('artists'); });
+    navSets.addEventListener('click', (e) => { e.preventDefault(); switchTab('sets'); });
+
+    // Check URL hash for tab
+    if (window.location.hash === '#artists') switchTab('artists');
+
+    // --- SETS ---
+    const setsGrid = document.getElementById('setsGrid');
+    const setsLoading = document.getElementById('setsLoading');
+    const setsEmpty = document.getElementById('setsEmpty');
+    const setsLoadMoreWrap = document.getElementById('setsLoadMoreWrap');
+    const setsLoadMore = document.getElementById('setsLoadMore');
+    const setsSearch = document.getElementById('setsSearch');
+    const setsSort = document.getElementById('setsSort');
+
+    function formatDate(d) {
+      if (!d) return '';
+      const date = new Date(d);
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function formatDuration(seconds) {
+      if (!seconds) return '';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    function renderSetCard(set) {
+      const card = document.createElement('a');
+      card.href = `${BASE}/set/${set.id}`;
+      card.className = 'set-card';
+      const venue = set.venue ? `${set.venue}` : (set.name || '');
+      card.innerHTML = `
+        ${set.coverUrl ? `<img class="set-card-cover" src="${set.coverUrl}" alt="" loading="lazy" onerror="this.style.display='none'">` : '<div class="set-card-cover"></div>'}
+        <div class="set-card-body">
+          <div class="set-card-artist">${escapeHtml(set.artist)}</div>
+          <div class="set-card-title">${escapeHtml(venue)}</div>
+          <div class="set-card-meta">
+            ${set.date ? `<span>${formatDate(set.date)}</span>` : ''}
+            ${set.trackCount ? `<span>${set.trackCount} tracks</span>` : ''}
+            ${set.totalDuration ? `<span>${formatDuration(set.totalDuration)}</span>` : ''}
+          </div>
+        </div>
+      `;
+      return card;
+    }
+
+    async function fetchSets(reset) {
+      if (setsData.loading) return;
+      setsData.loading = true;
+
+      if (reset) {
+        setsData.offset = 0;
+        setsData.items = [];
+        setsGrid.innerHTML = '';
+      }
+
+      setsLoading.style.display = reset ? '' : 'none';
+      setsEmpty.style.display = 'none';
+      setsLoadMoreWrap.style.display = 'none';
+      if (!reset) setsLoadMore.disabled = true;
+
+      try {
+        const params = new URLSearchParams({
+          limit: LIMIT,
+          offset: setsData.offset,
+          sort: setsData.sort,
+        });
+        if (setsData.search) params.set('search', setsData.search);
+
+        const res = await fetch(`/api/sets?${params}`);
+        const data = await res.json();
+
+        if (data.success) {
+          setsData.total = data.total;
+          setsData.items = setsData.items.concat(data.sets);
+          data.sets.forEach(s => setsGrid.appendChild(renderSetCard(s)));
+          setsData.offset += data.sets.length;
+        }
+      } catch (e) {
+        console.error('Failed to fetch sets:', e);
+      }
+
+      setsData.loading = false;
+      setsLoading.style.display = 'none';
+      setsEmpty.style.display = setsData.items.length === 0 ? '' : 'none';
+      setsLoadMoreWrap.style.display = setsData.offset < setsData.total ? '' : 'none';
+      setsLoadMore.disabled = false;
+    }
+
+    setsLoadMore.addEventListener('click', () => fetchSets(false));
+    setsSort.addEventListener('change', () => { setsData.sort = setsSort.value; fetchSets(true); });
+
+    let setsSearchTimer;
+    setsSearch.addEventListener('input', () => {
+      clearTimeout(setsSearchTimer);
+      setsSearchTimer = setTimeout(() => {
+        setsData.search = setsSearch.value.trim();
+        fetchSets(true);
+      }, 350);
+    });
+
+    // --- ARTISTS ---
+    const artistsGrid = document.getElementById('artistsGrid');
+    const artistsLoading = document.getElementById('artistsLoading');
+    const artistsEmpty = document.getElementById('artistsEmpty');
+    const artistsLoadMoreWrap = document.getElementById('artistsLoadMoreWrap');
+    const artistsLoadMore = document.getElementById('artistsLoadMore');
+    const artistsSearch = document.getElementById('artistsSearch');
+    const artistsSort = document.getElementById('artistsSort');
+
+    function renderArtistCard(artist) {
+      const card = document.createElement('a');
+      card.href = `${BASE}/artist/${artist.slug}`;
+      card.className = 'artist-card';
+      const initial = (artist.name || '?')[0].toUpperCase();
+      card.innerHTML = `
+        ${artist.image_url
+          ? `<img class="artist-avatar" src="${artist.image_url}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\\'artist-avatar-placeholder\\'>${initial}</div>'">`
+          : `<div class="artist-avatar-placeholder">${initial}</div>`}
+        <div class="artist-card-name">${escapeHtml(artist.name)}</div>
+        <div class="artist-card-stats">
+          <span>${artist.sets_count || 0} sets</span>
+          <span>${artist.tracks_count || 0} tracks</span>
+        </div>
+      `;
+      return card;
+    }
+
+    async function fetchArtists(reset) {
+      if (artistsData.loading) return;
+      artistsData.loading = true;
+
+      if (reset) {
+        artistsData.offset = 0;
+        artistsData.items = [];
+        artistsGrid.innerHTML = '';
+      }
+
+      artistsLoading.style.display = reset ? '' : 'none';
+      artistsEmpty.style.display = 'none';
+      artistsLoadMoreWrap.style.display = 'none';
+      if (!reset) artistsLoadMore.disabled = true;
+
+      try {
+        const params = new URLSearchParams({
+          limit: LIMIT,
+          offset: artistsData.offset,
+          sort: artistsData.sort,
+        });
+        if (artistsData.search) params.set('search', artistsData.search);
+
+        const res = await fetch(`/api/artists?${params}`);
+        const data = await res.json();
+
+        if (data.success) {
+          artistsData.total = data.total;
+          artistsData.items = artistsData.items.concat(data.artists);
+          data.artists.forEach(a => artistsGrid.appendChild(renderArtistCard(a)));
+          artistsData.offset += data.artists.length;
+        }
+      } catch (e) {
+        console.error('Failed to fetch artists:', e);
+      }
+
+      artistsData.loading = false;
+      artistsLoading.style.display = 'none';
+      artistsEmpty.style.display = artistsData.items.length === 0 ? '' : 'none';
+      artistsLoadMoreWrap.style.display = artistsData.offset < artistsData.total ? '' : 'none';
+      artistsLoadMore.disabled = false;
+    }
+
+    artistsLoadMore.addEventListener('click', () => fetchArtists(false));
+    artistsSort.addEventListener('change', () => { artistsData.sort = artistsSort.value; fetchArtists(true); });
+
+    let artistsSearchTimer;
+    artistsSearch.addEventListener('input', () => {
+      clearTimeout(artistsSearchTimer);
+      artistsSearchTimer = setTimeout(() => {
+        artistsData.search = artistsSearch.value.trim();
+        fetchArtists(true);
+      }, 350);
+    });
+
+    // Utility
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Init
+    fetchSets(true);
+  })();
+  </script>
+  <script>
+  // Animated trakd logo
+  (function(){
+    const LETTERS = ['t','r','a','k','d'];
+    const WIDTHS = {t:0.38,r:0.38,a:0.52,k:0.55,d:0.56};
+    function seededRandom(seed){const x=Math.sin(seed*9999)*10000;return x-Math.floor(x);}
+    document.querySelectorAll('[data-trakd-logo]').forEach(el=>{
+      const isHero = el.dataset.trakdLogo === 'hero';
+      if(isHero) el.classList.add('hero-logo');
+      const scan = document.createElement('div');
+      scan.className = 'trakd-scan';
+      el.appendChild(scan);
+      LETTERS.forEach((ch,li)=>{
+        const ltr = document.createElement('div');
+        ltr.className = 'trakd-letter';
+        const bars = document.createElement('div');
+        bars.className = 'trakd-bars';
+        const barEls = [];
+        for(let i=0;i<5;i++){
+          const b = document.createElement('div');
+          b.className = 'trakd-bar';
+          b.dataset.h = (0.3+seededRandom(li*10+i)*0.7).toFixed(2);
+          bars.appendChild(b);
+          barEls.push(b);
+        }
+        const span = document.createElement('span');
+        span.textContent = ch;
+        ltr.appendChild(bars);
+        ltr.appendChild(span);
+        el.appendChild(ltr);
+      });
+      function runScan(){
+        const dur = 2500;
+        const w = el.offsetWidth;
+        scan.style.transition = 'none';
+        scan.style.left = '-2px';
+        scan.style.opacity = '0';
+        requestAnimationFrame(()=>{
+          const start = performance.now();
+          function frame(now){
+            const t = Math.min(1,(now-start)/dur);
+            scan.style.left = (t*w)+'px';
+            scan.style.opacity = t<0.02||t>0.98?'0':'1';
+            const allBars = el.querySelectorAll('.trakd-bar');
+            LETTERS.forEach((_,li)=>{
+              const ls=li/5, le=(li+1)/5, lm=(ls+le)/2, fo=Math.min(1,le+0.08);
+              let s=0;
+              if(t<ls-0.05)s=0;
+              else if(t<ls)s=0.2*((t-(ls-0.05))/0.05);
+              else if(t<lm)s=0.2+0.8*((t-ls)/(lm-ls));
+              else if(t<fo-0.01)s=1-0.4*((t-lm)/(fo-0.01-lm));
+              else if(t<fo)s=0.6*(1-(t-(fo-0.01))/0.01);
+              else s=0;
+              for(let i=0;i<5;i++){
+                const bar=allBars[li*5+i];
+                if(bar){
+                  const h=parseFloat(bar.dataset.h);
+                  bar.style.transform='scaleY('+s*h+')';
+                  bar.style.height='100%';
+                }
+              }
+            });
+            if(t<1)requestAnimationFrame(frame);
+          }
+          requestAnimationFrame(frame);
+        });
+      }
+      runScan();
+      setInterval(runScan,15000);
+    });
+  })();
+  </script>
+</body>
+</html>

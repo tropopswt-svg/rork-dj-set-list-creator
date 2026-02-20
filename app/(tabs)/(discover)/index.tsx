@@ -516,6 +516,7 @@ export default function DiscoverScreen() {
           date: new Date(set.date),
           totalDuration: set.totalDuration || 0,
           coverUrl: set.coverUrl || null,
+          artistImageUrl: set.artistImageUrl || null,
           plays: set.trackCount * 10, // Estimate plays from track count
           tracks: [],
           sourceLinks: set.sourceLinks || [],

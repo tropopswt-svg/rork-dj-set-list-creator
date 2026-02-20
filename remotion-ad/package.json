@@ -10,6 +10,12 @@
     "build:trackid": "remotion render TrackIdAd out/trackid-ad.mp4",
     "build:trackid-landscape": "remotion render TrackIdAd-Landscape out/trackid-ad-landscape.mp4",
     "build:trackid-gif": "remotion render TrackIdAd out/trackid-ad.gif --image-format=png",
+    "build:tiktok": "remotion render TikTokAd out/tiktok-ad.mp4",
+    "build:tiktok2": "remotion render TikTokCampaign2 out/tiktok-campaign2.mp4",
+    "build:tiktok3": "remotion render TikTokCampaign3 out/tiktok-campaign3.mp4",
+    "build:tiktok4": "remotion render TikTokCampaign4 out/tiktok-campaign4.mp4",
+    "build:tiktok5": "remotion render TikTokCampaign5 out/tiktok-campaign5.mp4",
+    "build:tiktok6": "remotion render TikTokCampaign6 out/tiktok-campaign6.mp4",
     "upgrade": "remotion upgrade"
   },
   "keywords": [

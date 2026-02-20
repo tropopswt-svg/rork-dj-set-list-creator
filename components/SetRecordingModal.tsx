@@ -33,8 +33,8 @@ interface SetRecordingModalProps {
   visible: boolean;
   onClose: () => void;
   onRecordingStart: () => void;
-  onRecordingEnd: (tracks: IdentifiedTrack[]) => void;
-  onSaveAsSet?: (tracks: IdentifiedTrack[], name: string) => void;
+  onRecordingEnd: (tracks: IdentifiedTrack[], sessionId: string | null) => void;
+  onSaveAsSet?: (tracks: IdentifiedTrack[], name: string, djName: string, venue: string) => void;
   isRecordingActive: boolean;
 }
 
@@ -137,6 +137,8 @@ export default function SetRecordingModal({
 }: SetRecordingModalProps) {
   const [modalState, setModalState] = useState<ModalState>('start');
   const [setName, setSetName] = useState('');
+  const [djName, setDjName] = useState('');
+  const [venue, setVenue] = useState('');
   const [tracks, setTracks] = useState<IdentifiedTrack[]>([]);
   const [elapsed, setElapsed] = useState(0);
   const [startTime, setStartTime] = useState<Date | null>(null);
@@ -158,6 +160,8 @@ export default function SetRecordingModal({
         setFinishedDuration(0);
         const defaultName = `Live Set - ${new Date().toLocaleDateString()}`;
         setSetName(defaultName);
+        setDjName('');
+        setVenue('');
       }
     }
   }, [visible, isRecordingActive]);
@@ -226,18 +230,21 @@ export default function SetRecordingModal({
     setTracks([]);
 
     try {
-      await startSetRecording({
-        onTrackIdentified: (track) => {
-          setTracks(getIdentifiedTracks());
+      await startSetRecording(
+        {
+          onTrackIdentified: (track) => {
+            setTracks(getIdentifiedTracks());
+          },
+          onStatusChange: () => {},
         },
-        onStatusChange: () => {},
-      });
+        { title: setName }
+      );
       onRecordingStart();
     } catch (e) {
       console.error('[SetRecordingModal] Failed to start:', e);
       setModalState('start');
     }
-  }, [onRecordingStart]);
+  }, [onRecordingStart, setName]);
 
   const handleStopRecording = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -245,16 +252,16 @@ export default function SetRecordingModal({
     setFinishedDuration(result.duration);
     setTracks(result.tracks);
     setModalState('finished');
-    onRecordingEnd(result.tracks);
+    onRecordingEnd(result.tracks, result.sessionId);
   }, [onRecordingEnd]);
 
   const handleSaveAsSet = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (onSaveAsSet) {
-      onSaveAsSet(tracks, setName);
+      onSaveAsSet(tracks, setName, djName, venue);
     }
     onClose();
-  }, [tracks, setName, onSaveAsSet, onClose]);
+  }, [tracks, setName, djName, venue, onSaveAsSet, onClose]);
 
   const handleClose = useCallback(() => {
     if (modalState === 'active') {
@@ -396,6 +403,36 @@ export default function SetRecordingModal({
               )}
             </View>
           ))}
+        </View>
+      )}
+
+      {onSaveAsSet && tracks.length > 0 && (
+        <View style={styles.saveSection}>
+          <Text style={styles.saveSectionTitle}>Save to your library</Text>
+          <TextInput
+            style={styles.saveInput}
+            value={setName}
+            onChangeText={setSetName}
+            placeholder="Set name"
+            placeholderTextColor={Colors.dark.textMuted}
+            selectionColor={Colors.dark.primary}
+          />
+          <TextInput
+            style={styles.saveInput}
+            value={djName}
+            onChangeText={setDjName}
+            placeholder="DJ name"
+            placeholderTextColor={Colors.dark.textMuted}
+            selectionColor={Colors.dark.primary}
+          />
+          <TextInput
+            style={styles.saveInput}
+            value={venue}
+            onChangeText={setVenue}
+            placeholder="Venue / event (optional)"
+            placeholderTextColor={Colors.dark.textMuted}
+            selectionColor={Colors.dark.primary}
+          />
         </View>
       )}
 
@@ -712,6 +749,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     padding: 6,
+  },
+  saveSection: {
+    marginBottom: 24,
+  },
+  saveSectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.dark.text,
+    marginBottom: 12,
+  },
+  saveInput: {
+    backgroundColor: Colors.dark.surface,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: Colors.dark.text,
+    borderWidth: 1,
+    borderColor: Colors.dark.border,
+    marginBottom: 8,
   },
   finishedActions: {
     gap: 12,
