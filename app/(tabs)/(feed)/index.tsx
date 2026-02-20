@@ -6,7 +6,7 @@ import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music, Heart, MessageCircle, Share2, MapPin, Headphones, Clock, Send, Reply, Trash2, X, Volume2, VolumeX } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -924,6 +924,21 @@ export default function FeedScreen() {
     });
     return () => { stopAudio(); };
   }, []);
+
+  // Stop audio when leaving feed tab, resume when coming back
+  useFocusEffect(
+    useCallback(() => {
+      // Screen focused — resume audio for visible card
+      if (visibleSetIdRef.current) {
+        const cached = tracksCacheRef.current.get(visibleSetIdRef.current);
+        if (cached) playPreviewForSet(visibleSetIdRef.current, cached);
+      }
+      return () => {
+        // Screen blurred — stop audio
+        stopAudio();
+      };
+    }, [stopAudio, playPreviewForSet])
+  );
 
   // Sync muted state
   useEffect(() => {
