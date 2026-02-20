@@ -9,7 +9,7 @@ import {
   Platform,
   Animated,
 } from 'react-native';
-import Svg, { Path, Circle } from 'react-native-svg';
+import Svg, { Path, Circle, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import { MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
 import { WORLD_MAP_PATH } from '@/constants/worldMap';
@@ -41,6 +41,33 @@ function toSvgCoords(lat: number, lng: number): { x: number; y: number } {
     y: (90 - lat) / 180 * 500,
   };
 }
+
+// Major cities/capitals for map labels
+const MAP_LABELS = [
+  { name: 'London', lat: 51.51, lng: -0.13 },
+  { name: 'Berlin', lat: 52.52, lng: 13.41 },
+  { name: 'Paris', lat: 48.86, lng: 2.35 },
+  { name: 'Amsterdam', lat: 52.37, lng: 4.90 },
+  { name: 'Ibiza', lat: 38.91, lng: 1.43 },
+  { name: 'New York', lat: 40.71, lng: -74.01 },
+  { name: 'Los Angeles', lat: 34.05, lng: -118.24 },
+  { name: 'Tokyo', lat: 35.68, lng: 139.69 },
+  { name: 'Sydney', lat: -33.87, lng: 151.21 },
+  { name: 'São Paulo', lat: -23.55, lng: -46.63 },
+  { name: 'Dubai', lat: 25.20, lng: 55.27 },
+  { name: 'Mumbai', lat: 19.08, lng: 72.88 },
+  { name: 'Lagos', lat: 6.52, lng: 3.38 },
+  { name: 'Miami', lat: 25.76, lng: -80.19 },
+  { name: 'Barcelona', lat: 41.39, lng: 2.17 },
+  { name: 'Moscow', lat: 55.76, lng: 37.62 },
+  { name: 'Detroit', lat: 42.33, lng: -83.05 },
+  { name: 'Manchester', lat: 53.48, lng: -2.24 },
+  { name: 'Mexico City', lat: 19.43, lng: -99.13 },
+  { name: 'Seoul', lat: 37.57, lng: 126.98 },
+  { name: 'Bangkok', lat: 13.76, lng: 100.50 },
+  { name: 'Cape Town', lat: -33.93, lng: 18.42 },
+  { name: 'Buenos Aires', lat: -34.60, lng: -58.38 },
+];
 
 // Pulsing red dot marker for native map pins
 function PulsingPin() {
@@ -172,7 +199,7 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
-  // SVG world map fallback — grey continents, dark water, red pulsing pins
+  // SVG world map — grey continents, labels, red pulsing pins
   const renderSvgMap = () => (
     <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
       <Svg
@@ -180,13 +207,49 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
         style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
         preserveAspectRatio="xMidYMid slice"
       >
-        {/* Grey continent outlines */}
-        <Path d={WORLD_MAP_PATH} fill="#333338" stroke="#444448" strokeWidth={0.5} />
+        <Defs>
+          {/* Subtle top-down gradient on continents for 3D depth */}
+          <SvgGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0" stopColor="#58585f" stopOpacity="1" />
+            <Stop offset="1" stopColor="#3e3e44" stopOpacity="1" />
+          </SvgGradient>
+          {/* Vignette overlay */}
+          <SvgGradient id="vignette" x1="0.5" y1="0" x2="0.5" y2="1">
+            <Stop offset="0" stopColor="#000" stopOpacity="0" />
+            <Stop offset="0.7" stopColor="#000" stopOpacity="0" />
+            <Stop offset="1" stopColor="#000" stopOpacity="0.3" />
+          </SvgGradient>
+        </Defs>
+
+        {/* Continent shapes with gradient fill + highlight stroke */}
+        <Path d={WORLD_MAP_PATH} fill="url(#landGrad)" stroke="#6a6a70" strokeWidth={0.4} />
+
+        {/* City labels */}
+        {MAP_LABELS.map((label, idx) => {
+          const { x, y } = toSvgCoords(label.lat, label.lng);
+          return (
+            <SvgText
+              key={idx}
+              x={x}
+              y={y - 5}
+              fill="rgba(255,255,255,0.25)"
+              fontSize={7}
+              fontWeight="500"
+              textAnchor="middle"
+            >
+              {label.name}
+            </SvgText>
+          );
+        })}
+
         {/* Pulsing venue pins */}
         {venues.map((venue, idx) => {
           const { x, y } = toSvgCoords(venue.lat, venue.lng);
           return <PulsingSvgPin key={idx} x={x} y={y} />;
         })}
+
+        {/* Vignette for depth */}
+        <Rect x="0" y="0" width="1000" height="500" fill="url(#vignette)" />
       </Svg>
     </View>
   );
@@ -362,7 +425,7 @@ const styles = StyleSheet.create({
   },
   // Fallback styles
   fallbackMap: {
-    backgroundColor: '#1a1a1e',
+    backgroundColor: '#282830',
     borderRadius: 12,
     height: 220,
     marginTop: 8,
@@ -374,6 +437,6 @@ const styles = StyleSheet.create({
   },
   bgFallback: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#1a1a1e',
+    backgroundColor: '#282830',
   },
 });
