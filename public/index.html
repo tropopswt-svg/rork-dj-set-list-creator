@@ -479,7 +479,7 @@
 
     <!-- Waitlist Counter -->
     <section class="counter-section" id="counterSection">
-      <div class="count" id="waitlistCount">1,001</div>
+      <div class="count" id="waitlistCount">223</div>
       <div class="label">people on the waitlist</div>
     </section>
 
@@ -509,7 +509,7 @@
       const counterSection = document.getElementById('counterSection');
       const waitlistCount = document.getElementById('waitlistCount');
 
-      const BASE_COUNT = 1001;
+      const BASE_COUNT = 223;
       fetch('/api/waitlist')
         .then(r => r.json())
         .then(data => {
