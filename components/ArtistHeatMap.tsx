@@ -196,53 +196,17 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     };
   }, [venues]);
 
-  // Calculate SVG viewBox zoomed into venue cluster
-  const svgViewBox = useMemo(() => {
-    if (venues.length === 0) return '0 0 1000 500';
-
-    const coords = venues.map(v => toSvgCoords(v.lat, v.lng));
-    const xs = coords.map(c => c.x);
-    const ys = coords.map(c => c.y);
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    // Add generous padding around the cluster
-    const spanX = Math.max(maxX - minX, 60);
-    const spanY = Math.max(maxY - minY, 40);
-    const padding = Math.max(spanX, spanY) * 0.8;
-
-    const cx = (minX + maxX) / 2;
-    const cy = (minY + maxY) / 2;
-
-    // Ensure 2:1 aspect ratio for the viewBox
-    let vw = spanX + padding * 2;
-    let vh = spanY + padding * 2;
-    if (vw / vh < 2) vw = vh * 2;
-    else vh = vw / 2;
-
-    // Clamp to world bounds
-    const vx = Math.max(0, Math.min(cx - vw / 2, 1000 - vw));
-    const vy = Math.max(0, Math.min(cy - vh / 2, 500 - vh));
-
-    return `${vx} ${vy} ${Math.min(vw, 1000)} ${Math.min(vh, 500)}`;
-  }, [venues]);
-
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
   // SVG world map — grey continents, labels, red pulsing pins
-  const renderSvgMap = () => {
-    const vb = backgroundMode && venues.length > 0 ? svgViewBox : '0 0 1000 500';
-
-    return (
-      <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
-        <Svg
-          viewBox={vb}
-          style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
-          preserveAspectRatio="xMidYMid slice"
-        >
+  const renderSvgMap = () => (
+    <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
+      <Svg
+        viewBox="0 0 1000 500"
+        style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
+        preserveAspectRatio="xMidYMid slice"
+      >
           <Defs>
             <SvgGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor="#70707a" stopOpacity="1" />
@@ -286,8 +250,7 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
           <Rect x="0" y="0" width="1000" height="500" fill="url(#vignette)" />
         </Svg>
       </View>
-    );
-  };
+  );
 
   const renderNativeMap = () => {
     if (!MapView || !region) return renderSvgMap();
