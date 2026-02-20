@@ -61,6 +61,10 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
         ? `artistId=${artistId}`
         : `artistSlug=${artistSlug}`;
       const response = await fetch(`${API_BASE_URL}/api/artists/venues?${params}`);
+      if (!response.ok) {
+        if (__DEV__) console.warn('[ArtistHeatMap] API returned', response.status);
+        return;
+      }
       const data = await response.json();
       if (data.success) {
         setVenues(data.venues || []);

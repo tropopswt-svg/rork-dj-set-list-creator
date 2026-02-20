@@ -4,10 +4,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 function getSupabase() {
-  return createClient(supabaseUrl, supabaseServiceKey);
+  if (!supabaseUrl || !supabaseKey) return null;
+  return createClient(supabaseUrl, supabaseKey);
 }
 
 export default async function handler(req, res) {
@@ -22,6 +23,9 @@ export default async function handler(req, res) {
   }
 
   const supabase = getSupabase();
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Database not configured' });
+  }
 
   try {
     // Get artist if using slug
