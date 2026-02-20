@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     // Check if set exists
     const { data: set, error: setError } = await supabase
       .from('sets')
-      .select('id, youtube_url, soundcloud_url, mixcloud_url')
+      .select('id, youtube_url, soundcloud_url, mixcloud_url, cover_url')
       .eq('id', setId)
       .single();
 
@@ -58,6 +58,14 @@ export default async function handler(req, res) {
     }
 
     const update = { [urlField]: url };
+
+    // Generate cover image from YouTube thumbnail if set doesn't have one
+    if (!set.cover_url && platform === 'youtube') {
+      const videoIdMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+      if (videoIdMatch) {
+        update.cover_url = `https://img.youtube.com/vi/${videoIdMatch[1]}/maxresdefault.jpg`;
+      }
+    }
 
     const { error: updateError } = await supabase
       .from('sets')
