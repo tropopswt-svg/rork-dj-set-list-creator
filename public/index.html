@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>TRAKD — Find Every ID</title>
+  <title>trakd — Find Every ID</title>
   <meta name="description" content="Discover DJ sets, ID every track, and sync to Spotify. Join the waitlist for early access.">
-  <meta property="og:title" content="TRAKD — Find Every ID">
+  <meta property="og:title" content="trakd — Find Every ID">
   <meta property="og:description" content="Discover DJ sets, ID every track, and sync to Spotify. Join the waitlist.">
   <meta property="og:image" content="/icon.png">
   <meta name="theme-color" content="#1A1A1A">
@@ -102,29 +102,30 @@
       width: 100%;
       padding: 14px 16px;
       border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      background: transparent;
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      backdrop-filter: blur(24px) saturate(1.2);
+      -webkit-backdrop-filter: blur(24px) saturate(1.2);
       color: #F5F0E8;
       font-size: 16px;
       font-family: 'Inter', sans-serif;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
       -webkit-appearance: none;
       appearance: none;
-      box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 3px rgba(0, 0, 0, 0.2);
     }
 
     .signup-form input[type="text"]::placeholder,
     .signup-form input[type="email"]::placeholder {
-      color: rgba(245, 240, 232, 0.25);
+      color: rgba(245, 240, 232, 0.3);
     }
 
     .signup-form input[type="text"]:focus,
     .signup-form input[type="email"]:focus {
-      border-color: rgba(196, 30, 58, 0.25);
-      box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.06), 0 0 12px rgba(196, 30, 58, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.09);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 16px rgba(196, 30, 58, 0.12);
     }
 
     .signup-form button {
@@ -435,8 +436,8 @@
     </div>
 
     <div class="hero-content">
-      <h1>TRAKD</h1>
-      <p class="map-label">Sets TRAKD Worldwide</p>
+      <h1>trakd</h1>
+      <p class="map-label">Sets trakd Worldwide</p>
       <p class="tagline">1001 Tracklists, but updated.</p>
 
       <form class="signup-form" id="waitlistForm">
@@ -450,7 +451,7 @@
       <div class="success-state" id="successState">
         <div class="checkmark">&#10003;</div>
         <h3>You're in!</h3>
-        <p>We'll let you know when TRAKD launches.</p>
+        <p>We'll let you know when trakd launches.</p>
       </div>
     </div>
   </section>
