@@ -22,7 +22,7 @@ import { searchTracks, isSupabaseConfigured } from '@/lib/supabase';
 import type { DbTrack, DbArtist } from '@/lib/supabase/types';
 
 // API base URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
 interface AddTrackModalProps {
   visible: boolean;

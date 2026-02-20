@@ -13,14 +13,13 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
-  Music,
-  Disc3,
   Play,
   ExternalLink,
   CheckCircle,
   MapPin,
   Headphones,
 } from 'lucide-react-native';
+import TrackdLogo from '@/components/TrackdLogo';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getArtistBySlug, getArtistTracks, getArtistSets } from '@/lib/supabase';
@@ -119,14 +118,15 @@ export default function ArtistProfileScreen() {
             <ArtistHeatMap artistSlug={slug} backgroundMode />
           </View>
 
-          {/* Gradient overlay for readability */}
+          {/* Gradient overlay for readability — passes touches through to map */}
           <LinearGradient
-            colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.8)']}
+            colors={['rgba(0,0,0,0.1)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.7)']}
             style={StyleSheet.absoluteFill}
+            pointerEvents="none"
           />
 
-          {/* Artist info overlaid */}
-          <View style={styles.header}>
+          {/* Artist info overlaid — box-none lets empty areas pass touches to map */}
+          <View style={styles.header} pointerEvents="box-none">
             <Pressable
               style={styles.backButtonHeader}
               onPress={() => router.back()}
@@ -162,17 +162,6 @@ export default function ArtistProfileScreen() {
               <View style={styles.countryRow}>
                 <MapPin size={14} color="rgba(255,255,255,0.6)" />
                 <Text style={styles.countryText}>{artist.country}</Text>
-              </View>
-            )}
-
-            {/* Genres */}
-            {artist.genres && artist.genres.length > 0 && (
-              <View style={styles.genresContainer}>
-                {artist.genres.map((genre, index) => (
-                  <View key={index} style={styles.genreTag}>
-                    <Text style={styles.genreText}>{genre}</Text>
-                  </View>
-                ))}
               </View>
             )}
 
@@ -218,7 +207,6 @@ export default function ArtistProfileScreen() {
               setActiveTab('sets');
             }}
           >
-            <Disc3 size={20} color={activeTab === 'sets' ? '#fff' : '#DC2626'} />
             <Text style={[styles.setsTabText, activeTab === 'sets' && styles.setsTabTextActive]}>
               Sets ({sets.length})
             </Text>
@@ -230,7 +218,6 @@ export default function ArtistProfileScreen() {
               setActiveTab('tracks');
             }}
           >
-            <Music size={14} color={activeTab === 'tracks' ? Colors.dark.primary : Colors.dark.textMuted} />
             <Text style={[styles.tracksToggleText, activeTab === 'tracks' && styles.tracksToggleTextActive]}>
               Tracks
             </Text>
@@ -243,7 +230,7 @@ export default function ArtistProfileScreen() {
             <>
               {tracks.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Music size={32} color={Colors.dark.textMuted} />
+                  <TrackdLogo size="small" />
                   <Text style={styles.emptyText}>No tracks in database yet</Text>
                 </View>
               ) : (
@@ -285,7 +272,7 @@ export default function ArtistProfileScreen() {
             <>
               {sets.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <Disc3 size={32} color={Colors.dark.textMuted} />
+                  <TrackdLogo size="small" />
                   <Text style={styles.emptyText}>No sets linked yet</Text>
                   <Text style={styles.emptySubtext}>
                     Sets will appear here when imported
@@ -324,8 +311,7 @@ export default function ArtistProfileScreen() {
                       </View>
                     )}
                     <View style={styles.setStats}>
-                      <Music size={12} color={Colors.dark.textMuted} />
-                      <Text style={styles.setTracksCount}>{set.track_count || 0}</Text>
+                      <Text style={styles.setTracksCount}>{set.track_count || 0} tracks</Text>
                     </View>
                   </Pressable>
                 ))
@@ -454,24 +440,6 @@ const styles = StyleSheet.create({
   countryText: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
-  },
-  genresContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-    marginBottom: 20,
-  },
-  genreTag: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 16,
-  },
-  genreText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
   },
   statsRow: {
     flexDirection: 'row',

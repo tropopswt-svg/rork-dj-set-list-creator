@@ -9,108 +9,13 @@ import {
   Platform,
   Animated,
 } from 'react-native';
-import Svg, { Path, Circle, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
+import { WebView } from 'react-native-webview';
 import { MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
-import { WORLD_MAP_PATH } from '@/constants/worldMap';
-
-// Only import react-native-maps on native platforms
-let MapView: any = null;
-let Marker: any = null;
-let Callout: any = null;
-
-if (Platform.OS !== 'web') {
-  try {
-    const Maps = require('react-native-maps');
-    MapView = Maps.default || Maps.MapView || null;
-    Marker = Maps.Marker || null;
-    Callout = Maps.Callout || null;
-  } catch (e) {
-    // react-native-maps not available
-  }
-}
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 const { width: screenWidth } = Dimensions.get('window');
 const CIRCOLOCO_RED = '#C41E3A';
-
-// Convert lat/lng to SVG coordinates (equirectangular, viewBox 0 0 1000 500)
-function toSvgCoords(lat: number, lng: number): { x: number; y: number } {
-  return {
-    x: (lng + 180) / 360 * 1000,
-    y: (90 - lat) / 180 * 500,
-  };
-}
-
-// Major cities/capitals for map labels
-const MAP_LABELS = [
-  { name: 'London', lat: 51.51, lng: -0.13 },
-  { name: 'Berlin', lat: 52.52, lng: 13.41 },
-  { name: 'Paris', lat: 48.86, lng: 2.35 },
-  { name: 'Amsterdam', lat: 52.37, lng: 4.90 },
-  { name: 'Ibiza', lat: 38.91, lng: 1.43 },
-  { name: 'New York', lat: 40.71, lng: -74.01 },
-  { name: 'Los Angeles', lat: 34.05, lng: -118.24 },
-  { name: 'Tokyo', lat: 35.68, lng: 139.69 },
-  { name: 'Sydney', lat: -33.87, lng: 151.21 },
-  { name: 'São Paulo', lat: -23.55, lng: -46.63 },
-  { name: 'Dubai', lat: 25.20, lng: 55.27 },
-  { name: 'Mumbai', lat: 19.08, lng: 72.88 },
-  { name: 'Lagos', lat: 6.52, lng: 3.38 },
-  { name: 'Miami', lat: 25.76, lng: -80.19 },
-  { name: 'Barcelona', lat: 41.39, lng: 2.17 },
-  { name: 'Moscow', lat: 55.76, lng: 37.62 },
-  { name: 'Detroit', lat: 42.33, lng: -83.05 },
-  { name: 'Manchester', lat: 53.48, lng: -2.24 },
-  { name: 'Mexico City', lat: 19.43, lng: -99.13 },
-  { name: 'Seoul', lat: 37.57, lng: 126.98 },
-  { name: 'Bangkok', lat: 13.76, lng: 100.50 },
-  { name: 'Cape Town', lat: -33.93, lng: 18.42 },
-  { name: 'Buenos Aires', lat: -34.60, lng: -58.38 },
-];
-
-// Pulsing red dot marker for native map pins
-function PulsingPin() {
-  const pulse = useRef(new Animated.Value(1)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1.8, duration: 1200, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [pulse]);
-
-  return (
-    <View style={pinStyles.container}>
-      <Animated.View
-        style={[
-          pinStyles.pulseRing,
-          { transform: [{ scale: pulse }], opacity: pulse.interpolate({ inputRange: [1, 1.8], outputRange: [0.6, 0] }) },
-        ]}
-      />
-      <View style={pinStyles.dot} />
-    </View>
-  );
-}
-
-// Static SVG pin with glow ring (no animation — Animated doesn't work with SVG)
-function SvgPin({ x, y }: { x: number; y: number }) {
-  return (
-    <>
-      <Circle cx={x} cy={y} r={12} fill={CIRCOLOCO_RED} opacity={0.15} />
-      <Circle cx={x} cy={y} r={7} fill={CIRCOLOCO_RED} opacity={0.3} />
-      <Circle cx={x} cy={y} r={4} fill={CIRCOLOCO_RED} stroke="#fff" strokeWidth={1.2} />
-    </>
-  );
-}
-
-const pinStyles = StyleSheet.create({
-  container: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
-  pulseRing: { position: 'absolute', width: 20, height: 20, borderRadius: 10, backgroundColor: CIRCOLOCO_RED },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: CIRCOLOCO_RED, borderWidth: 1.5, borderColor: '#fff' },
-});
 
 interface VenueData {
   name: string;
@@ -126,6 +31,184 @@ interface ArtistHeatMapProps {
   artistId?: string;
   artistSlug?: string;
   backgroundMode?: boolean;
+}
+
+// Build Leaflet HTML with grey tiles, auto-zoom to venues, pulsing red markers
+function buildLeafletHtml(venues: VenueData[], interactive: boolean = true): string {
+  const markers = venues.map(v => `[${v.lat}, ${v.lng}, "${v.name.replace(/"/g, '\\"')}", ${v.setsCount}]`).join(',');
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  * { margin: 0; padding: 0; }
+  html, body, #map { width: 100%; height: 100%; background: #1a1a1e; }
+  .leaflet-container { background: #1a1a1e !important; }
+  .leaflet-control-zoom, .leaflet-control-attribution { display: none !important; }
+
+  @keyframes pulse {
+    0% { transform: translate(-50%,-50%) scale(1); opacity: 0.6; }
+    100% { transform: translate(-50%,-50%) scale(2.2); opacity: 0; }
+  }
+  .venue-marker {
+    position: relative;
+    width: 12px; height: 12px;
+  }
+  .venue-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: ${CIRCOLOCO_RED}; border: 2px solid rgba(255,255,255,0.8);
+    position: absolute; top: 0; left: 0; z-index: 2;
+  }
+  .venue-pulse {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: ${CIRCOLOCO_RED};
+    position: absolute; top: 0; left: 0;
+    left: 50%; top: 50%;
+    animation: pulse 2s ease-out infinite;
+  }
+
+  /* Invisible zoom touch zone on right edge */
+  .zoom-zone {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 44px;
+    height: 100%;
+    z-index: 1000;
+    touch-action: none;
+  }
+  .zoom-indicator {
+    position: absolute;
+    right: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 60px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .zoom-indicator.active {
+    opacity: 1;
+  }
+  .zoom-indicator-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    border-radius: 2px;
+    background: ${CIRCOLOCO_RED};
+  }
+</style>
+</head><body>
+<div id="map"></div>
+<div class="zoom-zone" id="zoomZone">
+  <div class="zoom-indicator" id="zoomInd">
+    <div class="zoom-indicator-fill" id="zoomFill"></div>
+  </div>
+</div>
+<script>
+  var venues = [${markers}];
+  var map = L.map('map', {
+    zoomControl: false,
+    attributionControl: false,
+    dragging: ${interactive},
+    scrollWheelZoom: ${interactive},
+    doubleClickZoom: ${interactive},
+    touchZoom: ${interactive},
+    boxZoom: false,
+    keyboard: false
+  });
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19
+  }).addTo(map);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, opacity: 0.6
+  }).addTo(map);
+
+  var bounds = [];
+  venues.forEach(function(v) {
+    var icon = L.divIcon({
+      className: '',
+      html: '<div class="venue-marker"><div class="venue-pulse"></div><div class="venue-dot"></div></div>',
+      iconSize: [12, 12],
+      iconAnchor: [6, 6]
+    });
+    L.marker([v[0], v[1]], { icon: icon, interactive: ${interactive} })
+      ${interactive ? '.bindPopup("<b>" + v[2] + "</b><br>" + v[3] + " set" + (v[3]!==1?"s":""))' : ''}
+      .addTo(map);
+    bounds.push([v[0], v[1]]);
+  });
+
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 6 });
+  } else {
+    map.setView([30, 0], 2);
+  }
+
+  // Invisible edge-swipe zoom
+  var zone = document.getElementById('zoomZone');
+  var ind = document.getElementById('zoomInd');
+  var fill = document.getElementById('zoomFill');
+  var startY = 0;
+  var startZoom = 0;
+  var dragging = false;
+  var hideTimer = null;
+
+  function updateFill() {
+    var min = map.getMinZoom();
+    var max = map.getMaxZoom();
+    var pct = ((map.getZoom() - min) / (max - min)) * 100;
+    fill.style.height = pct + '%';
+  }
+
+  function showInd() {
+    ind.classList.add('active');
+    updateFill();
+    clearTimeout(hideTimer);
+  }
+
+  function hideInd() {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(function() {
+      if (!dragging) ind.classList.remove('active');
+    }, 800);
+  }
+
+  zone.addEventListener('touchstart', function(e) {
+    dragging = true;
+    startY = e.touches[0].clientY;
+    startZoom = map.getZoom();
+    showInd();
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+
+  zone.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    var dy = startY - e.touches[0].clientY;
+    var newZoom = startZoom + dy / 40;
+    newZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), newZoom));
+    map.setZoom(newZoom);
+    updateFill();
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+
+  zone.addEventListener('touchend', function() {
+    dragging = false;
+    hideInd();
+  });
+
+  map.on('zoom', function() { updateFill(); });
+  setTimeout(updateFill, 500);
+</script>
+</body></html>`;
 }
 
 export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: ArtistHeatMapProps) {
@@ -160,135 +243,38 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     }
   };
 
-  // Calculate region to fit all markers
-  const region = useMemo(() => {
-    if (venues.length === 0) return null;
-
-    const lats = venues.map(v => v.lat);
-    const lngs = venues.map(v => v.lng);
-    const minLat = Math.min(...lats);
-    const maxLat = Math.max(...lats);
-    const minLng = Math.min(...lngs);
-    const maxLng = Math.max(...lngs);
-
-    const latDelta = Math.max(0.5, (maxLat - minLat) * 1.5);
-    const lngDelta = Math.max(0.5, (maxLng - minLng) * 1.5);
-
-    return {
-      latitude: (minLat + maxLat) / 2,
-      longitude: (minLng + maxLng) / 2,
-      latitudeDelta: latDelta,
-      longitudeDelta: lngDelta,
-    };
-  }, [venues]);
-
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
-  // SVG world map — grey continents, labels, red pulsing pins
-  const renderSvgMap = () => (
-    <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
-      <Svg
-        viewBox="0 0 1000 500"
-        style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
-        preserveAspectRatio="xMidYMid slice"
-      >
-          <Defs>
-            <SvgGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0" stopColor="#70707a" stopOpacity="1" />
-              <Stop offset="1" stopColor="#555560" stopOpacity="1" />
-            </SvgGradient>
-            <SvgGradient id="vignette" x1="0.5" y1="0" x2="0.5" y2="1">
-              <Stop offset="0" stopColor="#000" stopOpacity="0" />
-              <Stop offset="0.7" stopColor="#000" stopOpacity="0" />
-              <Stop offset="1" stopColor="#000" stopOpacity="0.25" />
-            </SvgGradient>
-          </Defs>
-
-          {/* Continent shapes with gradient fill + highlight stroke */}
-          <Path d={WORLD_MAP_PATH} fill="url(#landGrad)" stroke="#88888f" strokeWidth={0.5} />
-
-          {/* City labels */}
-          {MAP_LABELS.map((label, idx) => {
-            const { x, y } = toSvgCoords(label.lat, label.lng);
-            return (
-              <SvgText
-                key={idx}
-                x={x}
-                y={y - 6}
-                fill="rgba(255,255,255,0.45)"
-                fontSize={8}
-                fontWeight="600"
-                textAnchor="middle"
-              >
-                {label.name}
-              </SvgText>
-            );
-          })}
-
-          {/* Venue pins */}
-          {venues.map((venue, idx) => {
-            const { x, y } = toSvgCoords(venue.lat, venue.lng);
-            return <SvgPin key={idx} x={x} y={y} />;
-          })}
-
-          {/* Vignette for depth */}
-          <Rect x="0" y="0" width="1000" height="500" fill="url(#vignette)" />
-        </Svg>
-      </View>
+  const leafletHtml = useMemo(
+    () => buildLeafletHtml(venues, true),
+    [venues]
   );
 
-  const renderNativeMap = () => {
-    if (!MapView || !region) return renderSvgMap();
-
-    return (
-      <MapView
-        style={backgroundMode ? styles.bgMap : styles.map}
-        initialRegion={region}
-        customMapStyle={darkMapStyle}
-        showsUserLocation={false}
-        showsCompass={false}
-        showsScale={false}
-        pitchEnabled={false}
-        rotateEnabled={false}
-        scrollEnabled={!backgroundMode}
-        zoomEnabled={!backgroundMode}
-      >
-        {venues.map((venue, idx) => (
-          <Marker
-            key={idx}
-            coordinate={{ latitude: venue.lat, longitude: venue.lng }}
-            anchor={{ x: 0.5, y: 0.5 }}
-          >
-            <PulsingPin />
-            {Callout && !backgroundMode && (
-              <Callout>
-                <View style={styles.callout}>
-                  <Text style={styles.calloutTitle}>{venue.name}</Text>
-                  <Text style={styles.calloutText}>
-                    {venue.setsCount} set{venue.setsCount !== 1 ? 's' : ''}
-                  </Text>
-                  {venue.lastSetDate && (
-                    <Text style={styles.calloutDate}>
-                      Last: {new Date(venue.lastSetDate).toLocaleDateString()}
-                    </Text>
-                  )}
-                </View>
-              </Callout>
-            )}
-          </Marker>
-        ))}
-      </MapView>
-    );
-  };
+  const renderMap = () => (
+    <WebView
+      source={{ html: leafletHtml }}
+      style={backgroundMode ? styles.bgMap : styles.map}
+      scrollEnabled={false}
+      bounces={false}
+      overScrollMode="never"
+      javaScriptEnabled
+      originWhitelist={['*']}
+      showsHorizontalScrollIndicator={false}
+      showsVerticalScrollIndicator={false}
+    />
+  );
 
   // Background mode: just the map, no chrome
   if (backgroundMode) {
     if (isLoading) {
       return <View style={styles.bgFallback} />;
     }
-    // Always use SVG map in background mode for consistent grey look
-    return renderSvgMap();
+    return (
+      <View style={StyleSheet.absoluteFill}>
+        {renderMap()}
+      </View>
+    );
   }
 
   return (
@@ -315,29 +301,13 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
           </View>
         ) : (
           <View style={styles.mapContainer}>
-            {renderNativeMap()}
+            {renderMap()}
           </View>
         )
       )}
     </View>
   );
 }
-
-// Greyed-out dark map styling — desaturated so red pins pop
-const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#2a2a2a' }, { saturation: -100 }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#555555' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#3a3a3a' }] },
-  { featureType: 'administrative.country', elementType: 'geometry.stroke', stylers: [{ color: '#444444' }] },
-  { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
-  { featureType: 'water', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
-];
 
 const styles = StyleSheet.create({
   container: {
@@ -388,39 +358,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
-  callout: {
-    padding: 8,
-    minWidth: 120,
-  },
-  calloutTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    marginBottom: 4,
-  },
-  calloutText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  calloutDate: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 2,
-  },
-  // Fallback styles
-  fallbackMap: {
-    backgroundColor: '#32323a',
-    borderRadius: 12,
-    height: 220,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  // Background mode styles
   bgMap: {
     ...StyleSheet.absoluteFillObject,
   },
   bgFallback: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#32323a',
+    backgroundColor: '#1a1a1e',
   },
 });

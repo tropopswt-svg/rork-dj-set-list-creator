@@ -162,7 +162,7 @@ export default function SubmitScreen() {
   const [isImporting, setIsImporting] = useState(false);
 
   // API base URL from environment
-  const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator-3um4.vercel.app';
+  const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
   // Function to import from URL using the Vercel /api/import endpoint
   const scrapeUrl = async (url: string) => {
@@ -181,6 +181,10 @@ export default function SubmitScreen() {
         body: JSON.stringify({ url }),
       });
 
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server error (${response.status})`);
+      }
       const result = await response.json();
       if (__DEV__) console.log('[Submit] Import result:', result);
 

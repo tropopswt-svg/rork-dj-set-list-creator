@@ -545,14 +545,14 @@ function parseComments(comments, djName = null) {
 
   console.log(`Parsed ${tracks.length} tracks from comments`);
 
-  const sorted = tracks.sort((a, b) => a.timestamp - b.timestamp);
+  const sortedTracks = tracks.sort((a, b) => a.timestamp - b.timestamp);
 
   // Normalize helper for dedup comparison
   const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // Dedup: if two tracks are within 60 seconds and have similar titles, keep the higher-confidence one
   const deduped = [];
-  for (const track of sorted) {
+  for (const track of sortedTracks) {
     const existing = deduped.find(t =>
       Math.abs(t.timestamp - track.timestamp) < 60 &&
       (normalize(t.title) === normalize(track.title) ||
@@ -2948,7 +2948,21 @@ async function handleChromeExtensionImport(req, res, data) {
   function generateSlug(name) {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
-  
+
+  /**
+   * Extract the primary canonical artist name from a collaboration/featuring string.
+   * "Chris Stussy ft Moby" → "Chris Stussy"
+   * "Adam Beyer B2B Cirez D" → "Adam Beyer"
+   * "Peggy Gou" → "Peggy Gou" (unchanged)
+   */
+  function extractPrimaryArtist(name) {
+    if (!name) return name;
+    // Split on featuring/collab separators — take the first (primary) artist
+    const parts = name.split(/\s+(?:ft\.?|feat\.?|featuring|b\d+b|vs\.?|x)\s+|\s*&\s*(?!ME\b)/i);
+    const primary = (parts[0] || name).trim();
+    return primary || name;
+  }
+
   console.log(`[Chrome Import] Processing from ${data.source}:`, {
     artists: data.artists?.length || 0,
     tracks: data.tracks?.length || 0,
@@ -2967,27 +2981,48 @@ async function handleChromeExtensionImport(req, res, data) {
   if (data.artists && Array.isArray(data.artists)) {
     for (const artist of data.artists) {
       if (!artist.name) continue;
-      const slug = generateSlug(artist.name);
-      
+
+      // Extract canonical primary artist name (strip featuring/collab suffixes)
+      const canonicalName = extractPrimaryArtist(artist.name);
+      const slug = generateSlug(canonicalName);
+
       const { data: existing } = await supabase.from('artists').select('id').eq('slug', slug).single();
-      
+
       if (existing) {
+        // If the original name differs, store it as an alias for future matching
+        if (artist.name !== canonicalName) {
+          await supabase.from('artist_aliases').upsert({
+            artist_id: existing.id,
+            alias: artist.name,
+            alias_lower: normalizeText(artist.name),
+          }, { onConflict: 'alias_lower' });
+        }
         results.artistsSkipped++;
         continue;
       }
-      
-      const { error } = await supabase.from('artists').insert({
-        name: artist.name,
+
+      const { data: newArtist, error } = await supabase.from('artists').insert({
+        name: canonicalName,
         slug,
         genres: artist.genres || [],
         country: artist.country || null,
         beatport_url: artist.beatport_url || null,
         soundcloud_url: artist.soundcloud_url || null,
-      });
-      
+      }).select('id').single();
+
       if (error && !error.message.includes('duplicate')) {
-        console.error(`Artist error: ${artist.name}`, error.message);
+        console.error(`Artist error: ${canonicalName}`, error.message);
       }
+
+      // Store original collab name as an alias if it differs
+      if (!error && newArtist && artist.name !== canonicalName) {
+        await supabase.from('artist_aliases').upsert({
+          artist_id: newArtist.id,
+          alias: artist.name,
+          alias_lower: normalizeText(artist.name),
+        }, { onConflict: 'alias_lower' });
+      }
+
       error ? results.artistsSkipped++ : results.artistsCreated++;
     }
   }
