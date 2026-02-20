@@ -13,7 +13,7 @@ RETURNS TABLE (
   dj_name TEXT,
   venue TEXT,
   event_date DATE,
-  position INTEGER,
+  "position" INTEGER,
   timestamp_seconds INTEGER,
   cover_url TEXT,
   tracklist_url TEXT
@@ -26,9 +26,9 @@ BEGIN
     s.dj_name,
     s.venue,
     s.event_date,
-    st.position,
+    st."position",
     st.timestamp_seconds,
-    COALESCE(s.cover_url, NULL) as cover_url,
+    s.cover_url,
     s.tracklist_url
   FROM set_tracks st
   JOIN sets s ON st.set_id = s.id
@@ -54,7 +54,7 @@ RETURNS TABLE (
   dj_name TEXT,
   venue TEXT,
   event_date DATE,
-  position INTEGER,
+  "position" INTEGER,
   timestamp_seconds INTEGER,
   cover_url TEXT,
   tracklist_url TEXT,
@@ -68,9 +68,9 @@ BEGIN
     s.dj_name,
     s.venue,
     s.event_date,
-    st.position,
+    st."position",
     st.timestamp_seconds,
-    COALESCE(s.cover_url, NULL) as cover_url,
+    s.cover_url,
     s.tracklist_url,
     (
       CASE WHEN LOWER(st.track_title) = LOWER(p_track_title) THEN 1.0 ELSE 0.5 END +
