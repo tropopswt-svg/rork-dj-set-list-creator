@@ -50,6 +50,48 @@ import { useUser } from '@/contexts/UserContext';
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
+// Transform API set response into SetList type
+function transformApiSet(apiSet: any): SetList {
+  return {
+    id: apiSet.id,
+    name: apiSet.name,
+    artist: apiSet.artist,
+    venue: apiSet.venue,
+    date: new Date(apiSet.date),
+    totalDuration: apiSet.totalDuration || 0,
+    coverUrl: apiSet.coverUrl || undefined,
+    plays: apiSet.trackCount * 10,
+    sourceLinks: apiSet.sourceLinks || [],
+    tracks: apiSet.tracks?.map((t: any) => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist,
+      duration: 0,
+      coverUrl: t.coverUrl || '',
+      addedAt: new Date(t.addedAt || Date.now()),
+      source: t.source || 'database',
+      timestamp: t.timestamp || 0,
+      timestampStr: t.timestampStr,
+      verified: t.verified || !t.isId,
+      confidence: t.isId ? 0 : 1,
+      isId: t.isId,
+      isReleased: t.isReleased || false,
+      previewUrl: t.previewUrl || undefined,
+      isrc: t.isrc || undefined,
+      releaseDate: t.releaseDate || undefined,
+      popularity: t.popularity || undefined,
+      trackLinks: t.trackLinks || [],
+    })) || [],
+    hasGaps: apiSet.hasGaps,
+    gapCount: apiSet.gapCount,
+    aiProcessed: apiSet.aiProcessed,
+    commentsScraped: apiSet.commentsScraped,
+    tracksIdentified: apiSet.tracksIdentified,
+    description: apiSet.description,
+    source: apiSet.source,
+  };
+}
+
 export default function SetDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -1204,32 +1246,25 @@ export default function SetDetailScreen() {
               {/* YouTube */}
               {(() => {
                 const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
-                // Check if analysis has been run by looking for tracks with timestamps > 0
-                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
-                const needsAnalysis = ytLink && !hasTimestamps;
 
-                // Debug logging
-                if (__DEV__) console.log('[YT Analysis Check] ytLink:', !!ytLink, 'hasTimestamps:', hasTimestamps, 'needsAnalysis:', needsAnalysis);
-
-                return ytLink ? (
-                  <View style={styles.linkCardWrapper}>
-                    <Pressable
-                      style={[styles.linkCard, styles.linkCardFilled]}
-                      onPress={() => handleOpenSource(ytLink)}
-                    >
-                      <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
-                        <Youtube size={16} color="#FF0000" />
-                      </View>
-                      <Text style={styles.linkPlatform}>YouTube</Text>
-                      <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                    </Pressable>
-                    {needsAnalysis ? (
+                if (ytLink) {
+                  return (
+                    <View style={styles.linkCardWrapper}>
+                      <Pressable
+                        style={[styles.linkCard, styles.linkCardFilled]}
+                        onPress={() => handleOpenSource(ytLink)}
+                      >
+                        <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
+                          <Youtube size={16} color="#FF0000" />
+                        </View>
+                        <Text style={styles.linkPlatform}>YouTube</Text>
+                        <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                      </Pressable>
                       <Pressable
                         style={styles.analyzeButton}
+                        disabled={analyzing}
                         onPress={async () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          setSelectedPlatform('youtube');
-                          // Trigger analysis directly without showing modal
                           try {
                             setAnalyzing(true);
                             const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
@@ -1237,10 +1272,10 @@ export default function SetDetailScreen() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ url: ytLink.url }),
                             });
+                            if (!importResponse.ok) throw new Error(`Server error (${importResponse.status})`);
                             const importResult = await importResponse.json();
 
                             if (importResult.success && importResult.setList?.tracks?.length > 0) {
-                              // Update tracks with timestamps and coverUrl
                               await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -1252,46 +1287,18 @@ export default function SetDetailScreen() {
                                 }),
                               });
 
-                              // Immediately update coverUrl for quick visual feedback
-                              if (importResult.setList?.coverUrl) {
-                                setDbSet(prev => prev ? { ...prev, coverUrl: importResult.setList.coverUrl } : prev);
-                              }
+                              // Kick off Spotify enrichment (non-blocking)
+                              fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
+                              }).catch(() => {});
 
                               // Refresh set data
                               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
                               const refreshData = await refreshResponse.json();
                               if (refreshData.success && refreshData.set) {
-                                const refreshedSet: SetList = {
-                                  id: refreshData.set.id,
-                                  name: refreshData.set.name,
-                                  artist: refreshData.set.artist,
-                                  venue: refreshData.set.venue,
-                                  date: new Date(refreshData.set.date),
-                                  totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || undefined,
-                                  plays: refreshData.set.trackCount * 10,
-                                  sourceLinks: refreshData.set.sourceLinks || [],
-                                  tracks: refreshData.set.tracks?.map((t: any) => ({
-                                    id: t.id,
-                                    title: t.title,
-                                    artist: t.artist,
-                                    duration: 0,
-                                    coverUrl: t.coverUrl || '',
-                                    addedAt: new Date(t.addedAt || Date.now()),
-                                    source: t.source || 'database',
-                                    timestamp: t.timestamp || 0,
-                                    timestampStr: t.timestampStr,
-                                    verified: t.verified || !t.isId,
-                                    confidence: t.isId ? 0 : 1,
-                                    isId: t.isId,
-                                    isReleased: t.isReleased || false,
-                                    previewUrl: t.previewUrl || undefined,
-                                    trackLinks: t.trackLinks || [],
-                                  })) || [],
-                                  hasGaps: refreshData.set.hasGaps,
-                                  gapCount: refreshData.set.gapCount,
-                                };
-                                setDbSet(refreshedSet);
+                                setDbSet(transformApiSet(refreshData.set));
                               }
 
                               Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
@@ -1306,15 +1313,13 @@ export default function SetDetailScreen() {
                         }}
                       >
                         <Sparkles size={12} color="#FFF" />
-                        <Text style={styles.analyzeButtonText}>Analyze</Text>
+                        <Text style={styles.analyzeButtonText}>{analyzing ? 'Analyzing...' : 'Reanalyze'}</Text>
                       </Pressable>
-                    ) : hasTimestamps ? (
-                      <View style={styles.identifiedBadge}>
-                        <Text style={styles.identifiedBadgeId}>trakd</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : (
+                    </View>
+                  );
+                }
+
+                return (
                   <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
                     onPress={() => {
@@ -1335,28 +1340,25 @@ export default function SetDetailScreen() {
               {/* SoundCloud */}
               {(() => {
                 const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
-                // Check if analysis has been run by looking for tracks with timestamps > 0
-                const hasTimestamps = setList.tracks?.some(t => t.timestamp && t.timestamp > 0);
-                const needsAnalysis = scLink && !hasTimestamps;
 
-                return scLink ? (
-                  <View style={styles.linkCardWrapper}>
-                    <Pressable
-                      style={[styles.linkCard, styles.linkCardFilled]}
-                      onPress={() => handleOpenSource(scLink)}
-                    >
-                      <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
-                        <Music2 size={16} color="#FF5500" />
-                      </View>
-                      <Text style={styles.linkPlatform}>SoundCloud</Text>
-                      <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
-                    </Pressable>
-                    {needsAnalysis ? (
+                if (scLink) {
+                  return (
+                    <View style={styles.linkCardWrapper}>
+                      <Pressable
+                        style={[styles.linkCard, styles.linkCardFilled]}
+                        onPress={() => handleOpenSource(scLink)}
+                      >
+                        <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
+                          <Music2 size={16} color="#FF5500" />
+                        </View>
+                        <Text style={styles.linkPlatform}>SoundCloud</Text>
+                        <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                      </Pressable>
                       <Pressable
                         style={[styles.analyzeButton, { backgroundColor: '#FF5500' }]}
+                        disabled={analyzing}
                         onPress={async () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          setSelectedPlatform('soundcloud');
                           try {
                             setAnalyzing(true);
                             const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
@@ -1364,6 +1366,7 @@ export default function SetDetailScreen() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ url: scLink.url }),
                             });
+                            if (!importResponse.ok) throw new Error(`Server error (${importResponse.status})`);
                             const importResult = await importResponse.json();
 
                             if (importResult.success && importResult.setList?.tracks?.length > 0) {
@@ -1378,46 +1381,18 @@ export default function SetDetailScreen() {
                                 }),
                               });
 
-                              // Immediately update coverUrl for quick visual feedback
-                              if (importResult.setList?.coverUrl) {
-                                setDbSet(prev => prev ? { ...prev, coverUrl: importResult.setList.coverUrl } : prev);
-                              }
+                              // Kick off Spotify enrichment (non-blocking)
+                              fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
+                              }).catch(() => {});
 
                               // Refresh set data
                               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
                               const refreshData = await refreshResponse.json();
                               if (refreshData.success && refreshData.set) {
-                                const refreshedSet: SetList = {
-                                  id: refreshData.set.id,
-                                  name: refreshData.set.name,
-                                  artist: refreshData.set.artist,
-                                  venue: refreshData.set.venue,
-                                  date: new Date(refreshData.set.date),
-                                  totalDuration: refreshData.set.totalDuration || 0,
-                                  coverUrl: refreshData.set.coverUrl || importResult.setList?.coverUrl || undefined,
-                                  plays: refreshData.set.trackCount * 10,
-                                  sourceLinks: refreshData.set.sourceLinks || [],
-                                  tracks: refreshData.set.tracks?.map((t: any) => ({
-                                    id: t.id,
-                                    title: t.title,
-                                    artist: t.artist,
-                                    duration: 0,
-                                    coverUrl: t.coverUrl || '',
-                                    addedAt: new Date(t.addedAt || Date.now()),
-                                    source: t.source || 'database',
-                                    timestamp: t.timestamp || 0,
-                                    timestampStr: t.timestampStr,
-                                    verified: t.verified || !t.isId,
-                                    confidence: t.isId ? 0 : 1,
-                                    isId: t.isId,
-                                    isReleased: t.isReleased || false,
-                                    previewUrl: t.previewUrl || undefined,
-                                    trackLinks: t.trackLinks || [],
-                                  })) || [],
-                                  hasGaps: refreshData.set.hasGaps,
-                                  gapCount: refreshData.set.gapCount,
-                                };
-                                setDbSet(refreshedSet);
+                                setDbSet(transformApiSet(refreshData.set));
                               }
 
                               Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
@@ -1432,15 +1407,13 @@ export default function SetDetailScreen() {
                         }}
                       >
                         <Sparkles size={12} color="#FFF" />
-                        <Text style={styles.analyzeButtonText}>Analyze</Text>
+                        <Text style={styles.analyzeButtonText}>{analyzing ? 'Analyzing...' : 'Reanalyze'}</Text>
                       </Pressable>
-                    ) : hasTimestamps ? (
-                      <View style={styles.identifiedBadge}>
-                        <Text style={styles.identifiedBadgeId}>trakd</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                ) : (
+                    </View>
+                  );
+                }
+
+                return (
                   <Pressable
                     style={[styles.linkCard, styles.linkCardEmpty]}
                     onPress={() => {
@@ -2067,6 +2040,13 @@ export default function SetDetailScreen() {
                       newFromSecondary: scrapedTracks.length,
                       commentsScraped: importResult.commentsCount || 0,
                     };
+
+                    // Kick off Spotify enrichment (non-blocking)
+                    fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
+                    }).catch(() => {});
                   }
                 }
               } catch (importError: any) {
@@ -2078,37 +2058,7 @@ export default function SetDetailScreen() {
               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
               const refreshData = await refreshResponse.json();
               if (refreshData.success && refreshData.set) {
-                const refreshedSet: SetList = {
-                  id: refreshData.set.id,
-                  name: refreshData.set.name,
-                  artist: refreshData.set.artist,
-                  venue: refreshData.set.venue,
-                  date: new Date(refreshData.set.date),
-                  totalDuration: refreshData.set.totalDuration || 0,
-                  coverUrl: refreshData.set.coverUrl || undefined,
-                  plays: refreshData.set.trackCount * 10,
-                  sourceLinks: refreshData.set.sourceLinks || [],
-                  tracks: refreshData.set.tracks?.map((t: any) => ({
-                    id: t.id,
-                    title: t.title,
-                    artist: t.artist,
-                    duration: 0,
-                    coverUrl: t.coverUrl || '',
-                    addedAt: new Date(t.addedAt || Date.now()),
-                    source: t.source || 'database',
-                    timestamp: t.timestamp || 0,
-                    timestampStr: t.timestampStr,
-                    verified: t.verified || !t.isId,
-                    confidence: t.isId ? 0 : 1,
-                    isId: t.isId,
-                    isReleased: t.isReleased || false,
-                    previewUrl: t.previewUrl || undefined,
-                    trackLinks: t.trackLinks || [],
-                  })) || [],
-                  hasGaps: refreshData.set.hasGaps,
-                  gapCount: refreshData.set.gapCount,
-                };
-                setDbSet(refreshedSet);
+                setDbSet(transformApiSet(refreshData.set));
               }
 
               await addPoints('source_added', setList.id);
