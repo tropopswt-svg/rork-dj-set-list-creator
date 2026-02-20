@@ -11,7 +11,6 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import {
   ArrowLeft,
   Music,
@@ -120,13 +119,9 @@ export default function ArtistProfileScreen() {
             <ArtistHeatMap artistSlug={slug} backgroundMode />
           </View>
 
-          {/* Frosted glass overlay */}
-          <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={styles.glassOverlay} />
-
           {/* Gradient overlay for readability */}
           <LinearGradient
-            colors={['rgba(30,30,30,0.3)', 'rgba(20,20,20,0.5)', 'rgba(10,10,10,0.8)']}
+            colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.8)']}
             style={StyleSheet.absoluteFill}
           />
 
@@ -390,10 +385,6 @@ const styles = StyleSheet.create({
   mapBg: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: '#1a1a1a',
-  },
-  glassOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(50, 50, 55, 0.4)',
   },
   header: {
     alignItems: 'center',
