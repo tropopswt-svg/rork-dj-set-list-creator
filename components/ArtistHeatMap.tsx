@@ -95,29 +95,13 @@ function PulsingPin() {
   );
 }
 
-// Animated SVG circle (must be created outside component)
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-// Pulsing SVG dot for the SVG fallback map
-function PulsingSvgPin({ x, y }: { x: number; y: number }) {
-  const pulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: false }),
-        Animated.timing(pulse, { toValue: 0, duration: 1200, useNativeDriver: false }),
-      ])
-    ).start();
-  }, [pulse]);
-
-  const animatedR = pulse.interpolate({ inputRange: [0, 1], outputRange: [4, 10] });
-  const animatedOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] });
-
+// Static SVG pin with glow ring (no animation — Animated doesn't work with SVG)
+function SvgPin({ x, y }: { x: number; y: number }) {
   return (
     <>
-      <AnimatedCircle cx={x} cy={y} r={animatedR} fill={CIRCOLOCO_RED} opacity={animatedOpacity} />
-      <Circle cx={x} cy={y} r={3.5} fill={CIRCOLOCO_RED} stroke="#fff" strokeWidth={1} />
+      <Circle cx={x} cy={y} r={12} fill={CIRCOLOCO_RED} opacity={0.15} />
+      <Circle cx={x} cy={y} r={7} fill={CIRCOLOCO_RED} opacity={0.3} />
+      <Circle cx={x} cy={y} r={4} fill={CIRCOLOCO_RED} stroke="#fff" strokeWidth={1.2} />
     </>
   );
 }
@@ -266,10 +250,10 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
             );
           })}
 
-          {/* Pulsing venue pins */}
+          {/* Venue pins */}
           {venues.map((venue, idx) => {
             const { x, y } = toSvgCoords(venue.lat, venue.lng);
-            return <PulsingSvgPin key={idx} x={x} y={y} />;
+            return <SvgPin key={idx} x={x} y={y} />;
           })}
 
           {/* Vignette for depth */}
