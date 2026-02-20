@@ -41,9 +41,10 @@ interface VenueData {
 interface ArtistHeatMapProps {
   artistId?: string;
   artistSlug?: string;
+  backgroundMode?: boolean;
 }
 
-export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapProps) {
+export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: ArtistHeatMapProps) {
   const [venues, setVenues] = useState<VenueData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -101,23 +102,38 @@ export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapPro
     return Colors.dark.textMuted; // Muted - single appearance
   };
 
-  // Don't render if no venue data
-  if (!isLoading && venues.length === 0) return null;
+  // Don't render if no venue data (unless background mode — show dark bg anyway)
+  if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
   // Fallback if react-native-maps not available
   const renderFallbackMap = () => (
-    <View style={styles.fallbackMap}>
-      <MapPin size={32} color={Colors.dark.textMuted} />
-      <Text style={styles.fallbackText}>
-        {venues.length} venue{venues.length !== 1 ? 's' : ''}
-      </Text>
-      {venues.map((venue, idx) => (
-        <View key={idx} style={styles.fallbackVenueItem}>
-          <View style={[styles.fallbackDot, { backgroundColor: getMarkerColor(venue.setsCount) }]} />
-          <Text style={styles.fallbackVenueName}>{venue.name}</Text>
-          <Text style={styles.fallbackVenueCount}>
-            {venue.setsCount} set{venue.setsCount !== 1 ? 's' : ''}
+    <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
+      {!backgroundMode && (
+        <>
+          <MapPin size={32} color={Colors.dark.textMuted} />
+          <Text style={styles.fallbackText}>
+            {venues.length} venue{venues.length !== 1 ? 's' : ''}
           </Text>
+        </>
+      )}
+      {venues.map((venue, idx) => (
+        <View key={idx} style={backgroundMode ? styles.bgFallbackDotContainer : styles.fallbackVenueItem}>
+          {backgroundMode ? (
+            <View
+              style={[
+                styles.bgFallbackDot,
+                { backgroundColor: getMarkerColor(venue.setsCount) },
+              ]}
+            />
+          ) : (
+            <>
+              <View style={[styles.fallbackDot, { backgroundColor: getMarkerColor(venue.setsCount) }]} />
+              <Text style={styles.fallbackVenueName}>{venue.name}</Text>
+              <Text style={styles.fallbackVenueCount}>
+                {venue.setsCount} set{venue.setsCount !== 1 ? 's' : ''}
+              </Text>
+            </>
+          )}
         </View>
       ))}
     </View>
@@ -128,7 +144,7 @@ export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapPro
 
     return (
       <MapView
-        style={styles.map}
+        style={backgroundMode ? styles.bgMap : styles.map}
         initialRegion={region}
         customMapStyle={darkMapStyle}
         showsUserLocation={false}
@@ -136,6 +152,8 @@ export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapPro
         showsScale={false}
         pitchEnabled={false}
         rotateEnabled={false}
+        scrollEnabled={!backgroundMode}
+        zoomEnabled={!backgroundMode}
       >
         {venues.map((venue, idx) => (
           <Marker
@@ -143,7 +161,7 @@ export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapPro
             coordinate={{ latitude: venue.lat, longitude: venue.lng }}
             pinColor={getMarkerColor(venue.setsCount)}
           >
-            {Callout && (
+            {Callout && !backgroundMode && (
               <Callout>
                 <View style={styles.callout}>
                   <Text style={styles.calloutTitle}>{venue.name}</Text>
@@ -163,6 +181,14 @@ export default function ArtistHeatMap({ artistId, artistSlug }: ArtistHeatMapPro
       </MapView>
     );
   };
+
+  // Background mode: just the map, no chrome
+  if (backgroundMode) {
+    if (isLoading) {
+      return <View style={styles.bgFallback} />;
+    }
+    return renderMap();
+  }
 
   return (
     <View style={styles.container}>
@@ -313,5 +339,22 @@ const styles = StyleSheet.create({
   fallbackVenueCount: {
     fontSize: 12,
     color: Colors.dark.textMuted,
+  },
+  // Background mode styles
+  bgMap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  bgFallback: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#1a1a1a',
+  },
+  bgFallbackDotContainer: {
+    position: 'absolute' as const,
+  },
+  bgFallbackDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    opacity: 0.6,
   },
 });

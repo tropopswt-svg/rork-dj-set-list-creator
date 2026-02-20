@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft,
   Music,
@@ -111,95 +112,102 @@ export default function ArtistProfileScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Pressable
-            style={styles.backButtonHeader}
-            onPress={() => router.back()}
-          >
-            <ArrowLeft size={24} color={Colors.dark.text} />
-          </Pressable>
-          
-          {/* Artist Image/Avatar */}
-          <View style={styles.avatarContainer}>
-            {artist.image_url ? (
-              <Image
-                source={{ uri: artist.image_url }}
-                style={styles.avatar}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Headphones size={48} color={Colors.dark.textMuted} />
-              </View>
-            )}
-            {artist.verified && (
-              <View style={styles.verifiedBadge}>
-                <CheckCircle size={20} color="#fff" fill={Colors.dark.primary} />
-              </View>
-            )}
+        {/* Header with Heatmap Background */}
+        <View style={styles.headerWrapper}>
+          {/* Map background layer */}
+          <View style={styles.mapBg}>
+            <ArtistHeatMap artistSlug={slug} backgroundMode />
           </View>
-          
-          {/* Artist Name */}
-          <Text style={styles.artistName}>{artist.name}</Text>
-          
-          {/* Country */}
-          {artist.country && (
-            <View style={styles.countryRow}>
-              <MapPin size={14} color={Colors.dark.textMuted} />
-              <Text style={styles.countryText}>{artist.country}</Text>
-            </View>
-          )}
-          
-          {/* Genres */}
-          {artist.genres && artist.genres.length > 0 && (
-            <View style={styles.genresContainer}>
-              {artist.genres.map((genre, index) => (
-                <View key={index} style={styles.genreTag}>
-                  <Text style={styles.genreText}>{genre}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-          
-          {/* Stats */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{tracks.length}</Text>
-              <Text style={styles.statLabel}>Tracks</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{sets.length}</Text>
-              <Text style={styles.statLabel}>Sets</Text>
-            </View>
-          </View>
-          
-          {/* Social Links */}
-          {socialLinks.length > 0 && (
-            <View style={styles.socialLinks}>
-              {socialLinks.map((link) => (
-                <Pressable
-                  key={link.key}
-                  style={[styles.socialButton, { backgroundColor: `${link.color}20` }]}
-                  onPress={() => handleOpenLink(artist[link.key as keyof DbArtist] as string)}
-                >
-                  <Text style={[styles.socialButtonText, { color: link.color }]}>
-                    {link.label}
-                  </Text>
-                  <ExternalLink size={12} color={link.color} />
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
 
-        {/* Artist Venue Heat Map */}
-        {sets.length > 0 && (
-          <View style={styles.heatMapContainer}>
-            <ArtistHeatMap artistSlug={slug} />
+          {/* Gradient overlay for readability */}
+          <LinearGradient
+            colors={['rgba(0,0,0,0.3)', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.8)']}
+            style={StyleSheet.absoluteFill}
+          />
+
+          {/* Artist info overlaid */}
+          <View style={styles.header}>
+            <Pressable
+              style={styles.backButtonHeader}
+              onPress={() => router.back()}
+            >
+              <ArrowLeft size={24} color="#fff" />
+            </Pressable>
+
+            {/* Artist Image/Avatar */}
+            <View style={styles.avatarContainer}>
+              {artist.image_url ? (
+                <Image
+                  source={{ uri: artist.image_url }}
+                  style={styles.avatar}
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.avatarPlaceholder}>
+                  <Headphones size={48} color="rgba(255,255,255,0.5)" />
+                </View>
+              )}
+              {artist.verified && (
+                <View style={styles.verifiedBadge}>
+                  <CheckCircle size={20} color="#fff" fill={Colors.dark.primary} />
+                </View>
+              )}
+            </View>
+
+            {/* Artist Name */}
+            <Text style={styles.artistName}>{artist.name}</Text>
+
+            {/* Country */}
+            {artist.country && (
+              <View style={styles.countryRow}>
+                <MapPin size={14} color="rgba(255,255,255,0.6)" />
+                <Text style={styles.countryText}>{artist.country}</Text>
+              </View>
+            )}
+
+            {/* Genres */}
+            {artist.genres && artist.genres.length > 0 && (
+              <View style={styles.genresContainer}>
+                {artist.genres.map((genre, index) => (
+                  <View key={index} style={styles.genreTag}>
+                    <Text style={styles.genreText}>{genre}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Stats */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{tracks.length}</Text>
+                <Text style={styles.statLabel}>Tracks</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{sets.length}</Text>
+                <Text style={styles.statLabel}>Sets</Text>
+              </View>
+            </View>
+
+            {/* Social Links */}
+            {socialLinks.length > 0 && (
+              <View style={styles.socialLinks}>
+                {socialLinks.map((link) => (
+                  <Pressable
+                    key={link.key}
+                    style={[styles.socialButton, { backgroundColor: `${link.color}30` }]}
+                    onPress={() => handleOpenLink(artist[link.key as keyof DbArtist] as string)}
+                  >
+                    <Text style={[styles.socialButtonText, { color: link.color }]}>
+                      {link.label}
+                    </Text>
+                    <ExternalLink size={12} color={link.color} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
-        )}
+        </View>
 
         {/* Tabs */}
         <View style={styles.tabsContainer}>
@@ -363,6 +371,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  headerWrapper: {
+    position: 'relative',
+    overflow: 'hidden',
+    minHeight: 380,
+  },
+  mapBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#1a1a1a',
+  },
   header: {
     alignItems: 'center',
     paddingTop: 60,
@@ -376,7 +393,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(0,0,0,0.4)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -388,15 +405,19 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.dark.surface,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: '#333',
   },
   avatarPlaceholder: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   verifiedBadge: {
     position: 'absolute',
@@ -405,15 +426,18 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   artistName: {
     fontSize: 28,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#fff',
     marginBottom: 4,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   countryRow: {
     flexDirection: 'row',
@@ -423,7 +447,7 @@ const styles = StyleSheet.create({
   },
   countryText: {
     fontSize: 14,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.7)',
   },
   genresContainer: {
     flexDirection: 'row',
@@ -435,12 +459,12 @@ const styles = StyleSheet.create({
   genreTag: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 16,
   },
   genreText: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(255,255,255,0.8)',
     fontWeight: '500',
   },
   statsRow: {
@@ -455,17 +479,17 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#fff',
   },
   statLabel: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
   },
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: Colors.dark.border,
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   socialLinks: {
     flexDirection: 'row',
@@ -485,15 +509,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
-  heatMapContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 16,
-  },
   tabsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 16,
+    marginTop: 16,
     marginBottom: 16,
     gap: 12,
   },
