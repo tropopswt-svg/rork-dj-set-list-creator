@@ -944,9 +944,14 @@ export default function FeedScreen() {
     // Find the first track with a Spotify preview URL
     const previewTrack = (tracks || []).find((t: any) => t.previewUrl);
     if (!previewTrack) {
+      if (__DEV__) {
+        const total = (tracks || []).length;
+        console.log(`[Feed Audio] No preview URL found in ${total} tracks for set ${setId}`);
+      }
       setNowPlaying(null);
       return;
     }
+    if (__DEV__) console.log(`[Feed Audio] Playing preview: ${previewTrack.title} — ${previewTrack.artist}`);
 
     try {
       const { sound } = await Audio.Sound.createAsync(
@@ -976,13 +981,40 @@ export default function FeedScreen() {
   }, [playPreviewFromTracks]);
 
   // Called when a card scrolls into center position
-  const handleSetBecameVisible = useCallback((setId: string) => {
+  const handleSetBecameVisible = useCallback(async (setId: string) => {
     visibleSetIdRef.current = setId;
+
+    // Try cached tracks first
     const cached = tracksCacheRef.current.get(setId);
     if (cached) {
       playPreviewFromTracks(setId, cached);
+      return;
     }
-    // If tracks aren't cached yet, handleTracksLoaded will trigger playback when ready
+
+    // Not cached yet — fetch independently (don't rely on FeedCard's tracksIdentified check)
+    try {
+      const res = await fetch(`${FEED_API_BASE_URL}/api/sets/${setId}`);
+      const data = await res.json();
+      if (data.success && data.set?.tracks?.length > 0) {
+        tracksCacheRef.current.set(setId, data.set.tracks);
+        // Check we're still viewing this card
+        if (visibleSetIdRef.current === setId) {
+          playPreviewFromTracks(setId, data.set.tracks);
+        }
+        // Trigger Spotify enrichment in background if needed
+        if (data.needsEnrichment) {
+          fetch(`${FEED_API_BASE_URL}/api/spotify-enrich`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'enrich-set', setId }),
+          }).catch(() => {});
+        }
+      } else if (__DEV__) {
+        console.log(`[Feed Audio] No tracks found for set ${setId}`);
+      }
+    } catch (err) {
+      if (__DEV__) console.log('[Feed Audio] Track fetch error:', err);
+    }
   }, [playPreviewFromTracks]);
 
   const toggleMute = useCallback(() => {
