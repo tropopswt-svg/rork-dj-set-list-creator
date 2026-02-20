@@ -28,26 +28,37 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get artist if using slug
-    let resolvedArtistId = artistId;
-    if (!resolvedArtistId && artistSlug) {
+    // Resolve artist name from slug or id
+    let artistName = null;
+    if (artistSlug) {
       const { data: artist } = await supabase
         .from('artists')
-        .select('id')
+        .select('id, name')
         .eq('slug', artistSlug)
         .single();
 
       if (!artist) {
         return res.status(404).json({ success: false, error: 'Artist not found' });
       }
-      resolvedArtistId = artist.id;
+      artistName = artist.name;
+    } else if (artistId) {
+      const { data: artist } = await supabase
+        .from('artists')
+        .select('id, name')
+        .eq('id', artistId)
+        .single();
+
+      if (!artist) {
+        return res.status(404).json({ success: false, error: 'Artist not found' });
+      }
+      artistName = artist.name;
     }
 
-    // Get all sets by this artist with venue info
+    // Get all sets by this artist with venue info (sets table uses artist name, not id)
     const { data: sets, error } = await supabase
       .from('sets')
       .select('id, venue, event_date')
-      .eq('artist_id', resolvedArtistId)
+      .eq('artist', artistName)
       .not('venue', 'is', null);
 
     if (error) throw error;
