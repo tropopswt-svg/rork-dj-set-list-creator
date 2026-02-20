@@ -70,6 +70,11 @@ export default async function handler(req, res) {
     // Sort
     if (sort === 'popular') {
       query = query.order('track_count', { ascending: false });
+    } else if (sort === 'deep_cuts') {
+      // Older sets, fewer tracks — hidden gems
+      query = query.order('event_date', { ascending: true, nullsFirst: false });
+    } else if (sort === 'new') {
+      query = query.order('event_date', { ascending: false, nullsFirst: false });
     } else {
       query = query.order('created_at', { ascending: false });
     }

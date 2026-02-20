@@ -1101,6 +1101,17 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
       delayLongPress={400}
       accessibilityLabel={searchableText}
     >
+      {/* Dark shade overlay — fades in when card is centered/hovered */}
+      {accentOpacity && (
+        <Animated.View
+          style={[
+            styles.hoverShade,
+            { opacity: accentOpacity },
+          ]}
+          pointerEvents="none"
+        />
+      )}
+
       {/* trackd badge - top left corner, floating like venue badge */}
       {isIdentified && (
         <Pressable onPress={handleTrackdBadgePress} hitSlop={4} style={styles.trackdBadgeFloating}>
@@ -1116,12 +1127,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
             fillProgress && {
               backgroundColor: fillProgress.interpolate({
                 inputRange: [0, 0.3, 0.6, 1],
-                outputRange: [Colors.dark.surface, Colors.dark.surface, '#C41E3A', '#C41E3A'],
+                outputRange: ['rgba(196,30,58,0.35)', 'rgba(196,30,58,0.35)', 'rgba(196,30,58,0.5)', 'rgba(196,30,58,0.5)'],
                 extrapolate: 'clamp',
               }),
               borderColor: fillProgress.interpolate({
                 inputRange: [0, 0.3, 0.6, 1],
-                outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
+                outputRange: ['rgba(196,30,58,0.4)', 'rgba(196,30,58,0.4)', 'rgba(196,30,58,0.55)', 'rgba(196,30,58,0.55)'],
                 extrapolate: 'clamp',
               }),
             },
@@ -1136,7 +1147,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                 fillProgress && {
                   color: fillProgress.interpolate({
                     inputRange: [0, 0.3, 0.6, 1],
-                    outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
+                    outputRange: ['#F5E6D3', '#F5E6D3', '#FFFFFF', '#FFFFFF'],
                     extrapolate: 'clamp',
                   }),
                 },
@@ -1239,12 +1250,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                           fillProgress && {
                             backgroundColor: fillProgress.interpolate({
                               inputRange: [0, 0.3, 0.6, 1],
-                              outputRange: [Colors.dark.surfaceLight, Colors.dark.surfaceLight, '#C41E3A', '#C41E3A'],
+                              outputRange: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.14)', 'rgba(255,255,255,0.14)'],
                               extrapolate: 'clamp',
                             }),
                             borderColor: fillProgress.interpolate({
                               inputRange: [0, 0.3, 0.6, 1],
-                              outputRange: [Colors.dark.primary, Colors.dark.primary, '#C41E3A', '#C41E3A'],
+                              outputRange: ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0.28)'],
                               extrapolate: 'clamp',
                             }),
                           },
@@ -1259,7 +1270,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                               fillProgress && {
                                 color: fillProgress.interpolate({
                                   inputRange: [0, 0.3, 0.6, 1],
-                                  outputRange: [Colors.dark.primary, Colors.dark.primary, '#FFFFFF', '#FFFFFF'],
+                                  outputRange: ['#F5E6D3', '#F5E6D3', '#FFFFFF', '#FFFFFF'],
                                   extrapolate: 'clamp',
                                 }),
                               },
@@ -1456,6 +1467,12 @@ const styles = StyleSheet.create({
   containerAnalyzed: {
     borderColor: 'rgba(196, 30, 58, 0.3)',
   },
+  hoverShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    borderRadius: 13,
+    zIndex: 1,
+  },
   trackdBadgeFloating: {
     position: 'absolute',
     top: -6,
@@ -1491,18 +1508,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#C41E3A',
+    backgroundColor: 'rgba(196, 30, 58, 0.35)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#A01830',
+    borderColor: 'rgba(196, 30, 58, 0.4)',
+    borderTopColor: 'rgba(255, 120, 140, 0.35)',
     maxWidth: 120,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 4,
+    shadowColor: 'rgba(196, 30, 58, 0.4)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 5,
   },
   venueBadgeWithFill: {
     overflow: 'hidden',
@@ -1523,9 +1541,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   venueBadgeSelected: {
-    backgroundColor: '#C41E3A', // Circoloco red
-    borderColor: '#C41E3A',
-    borderWidth: 1.5,
+    backgroundColor: 'rgba(196, 30, 58, 0.45)',
+    borderColor: 'rgba(196, 30, 58, 0.5)',
+    borderWidth: 1,
   },
   venueBadgeTextSelected: {
     color: '#FFF8F0',
@@ -1538,6 +1556,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: 12,
     height: 108, // Fixed height to ensure consistent card heights for scroll centering
+    zIndex: 2,
   },
   coverContainer: {
     position: 'relative',
@@ -1645,12 +1664,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   artistChip: {
-    backgroundColor: '#C41E3A',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Colors.dark.primary,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderTopColor: 'rgba(255, 255, 255, 0.28)',
+    shadowColor: 'rgba(0, 0, 0, 0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   artistChipWithFill: {
     overflow: 'hidden',
@@ -1688,59 +1713,59 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   artistChipSelected: {
-    backgroundColor: '#C41E3A', // Circoloco red
-    borderColor: '#C41E3A',
-    borderWidth: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.25)',
+    borderWidth: 1,
   },
   artistChipPressed: {
-    backgroundColor: Colors.dark.primary,
-    shadowColor: Colors.dark.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 1,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
   },
   artistText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: '#FFFFFF',
+    color: '#F5E6D3',
     letterSpacing: 0.3,
   },
   artistTextSelected: {
-    color: '#FFF8F0', // Cream white for selected state
+    color: '#F5E6D3',
   },
   artistTextPressed: {
-    color: '#fff',
+    color: '#FFFFFF',
   },
   artistMoreBadge: {
-    backgroundColor: 'rgba(196, 30, 58, 0.25)', // Subtle primary tint - shows it's different/clickable
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.primary,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
     borderStyle: 'dashed',
   },
   artistMoreBadgeSelected: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderStyle: 'solid',
   },
   artistMoreBadgePressed: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
     borderStyle: 'solid',
-    shadowColor: Colors.dark.primary,
+    shadowColor: 'rgba(0, 0, 0, 0.5)',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 1,
     shadowRadius: 8,
-    elevation: 8,
+    elevation: 6,
   },
   artistMoreText: {
     fontSize: 11,
     fontWeight: '800' as const,
-    color: Colors.dark.primary,
+    color: 'rgba(245, 230, 211, 0.5)',
   },
   artistMoreTextSelected: {
-    color: '#FFF',
+    color: '#F5E6D3',
   },
   nameContainer: {
     flexDirection: 'row',
@@ -1807,7 +1832,7 @@ const styles = StyleSheet.create({
   },
   venueBadgeText: {
     fontSize: 10,
-    color: '#FFFFFF',
+    color: '#F5E6D3',
     fontWeight: '600' as const,
   },
   footer: {
