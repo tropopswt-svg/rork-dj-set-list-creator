@@ -1,6 +1,7 @@
 // API endpoint to get a single set with its tracklist
 import { createClient } from '@supabase/supabase-js';
 import { batchCheckCache, generateLookupKey } from '../_lib/spotify-cache.js';
+import { fetchSoundCloudArtwork } from '../_lib/soundcloud-core.js';
 
 // Format seconds to timestamp string (e.g., 3661 -> "1:01:01")
 function formatTimestamp(seconds) {
@@ -183,6 +184,7 @@ export default async function handler(req, res) {
         timestamp,
         timestampStr,
         isId: track.is_id || false,
+        isUnreleased: track.is_unreleased || false,
         isTimed: track.is_timed !== false || ensureBookendTimestamps,
         trackId: track.track_id,
         addedAt: track.created_at,
@@ -203,6 +205,12 @@ export default async function handler(req, res) {
       };
     }) || [];
 
+    // Set cover fallback: stored cover > YouTube thumbnail > SoundCloud artwork > null (never stock)
+    let setCoverUrl = set.cover_url || getYouTubeThumbnail(extractYouTubeVideoId(set.youtube_url));
+    if (!setCoverUrl && set.soundcloud_url) {
+      setCoverUrl = await fetchSoundCloudArtwork(set.soundcloud_url);
+    }
+
     // Transform set to match app's SetList type
     const transformedSet = {
       id: set.id,
@@ -213,7 +221,7 @@ export default async function handler(req, res) {
       date: set.event_date || set.created_at,
       totalDuration: set.duration_seconds || 0,
       trackCount: set.track_count || tracks.length,
-      coverUrl: set.cover_url || getYouTubeThumbnail(extractYouTubeVideoId(set.youtube_url)),
+      coverUrl: setCoverUrl,
       sourceLinks: [
         set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
         set.youtube_url && { platform: 'youtube', url: set.youtube_url },

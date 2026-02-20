@@ -4,8 +4,10 @@
 // Now uses global cache + rate-limit ledger to prevent duplicate API calls and 429 lockouts
 import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistOnSpotify, normalize } from './_lib/spotify-core.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
+import { fetchSoundCloudClientId, searchTrackOnSoundCloud } from './_lib/soundcloud-core.js';
 
 const DELAY_MS = 1200; // 1.2s between Spotify API calls
+let soundcloudClientId = null;
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -76,7 +78,7 @@ export default async function handler(req, res) {
             // Cache hit — apply to set_tracks without API call
             await supabase
               .from('set_tracks')
-              .update({ spotify_data: cached.spotify_data })
+              .update({ spotify_data: cached.spotify_data, is_unreleased: false })
               .eq('id', track.id);
             enriched++;
             cacheHits++;
@@ -87,7 +89,11 @@ export default async function handler(req, res) {
               source: 'cache',
             });
           } else {
-            // Known not-found in cache
+            // Known not-found in cache — mark as unreleased
+            await supabase
+              .from('set_tracks')
+              .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
             notFound++;
           }
           continue;
@@ -116,7 +122,7 @@ export default async function handler(req, res) {
         if (spotifyData) {
           await supabase
             .from('set_tracks')
-            .update({ spotify_data: spotifyData })
+            .update({ spotify_data: spotifyData, is_unreleased: false })
             .eq('id', track.id);
 
           enriched++;
@@ -127,7 +133,45 @@ export default async function handler(req, res) {
             source: 'api',
           });
         } else {
-          notFound++;
+          // Spotify miss — try SoundCloud as fallback for artwork
+          let scArtwork = null;
+          try {
+            if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
+            if (soundcloudClientId) {
+              scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
+            }
+          } catch (e) {
+            // SoundCloud fallback is best-effort
+          }
+
+          if (scArtwork?.artwork_url) {
+            // Store SoundCloud artwork in spotify_data format so coverUrl picks it up
+            const scData = {
+              album_art_url: scArtwork.artwork_url,
+              title: scArtwork.title || track.track_title,
+              artist: scArtwork.artist || track.artist_name,
+              source: 'soundcloud',
+              permalink_url: scArtwork.permalink_url,
+            };
+            await supabase
+              .from('set_tracks')
+              .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            enriched++;
+            results.push({
+              track: `${track.artist_name} - ${track.track_title}`,
+              spotify: `${scArtwork.artist} - ${scArtwork.title}`,
+              albumArt: true,
+              source: 'soundcloud_fallback',
+            });
+          } else {
+            // Not found on Spotify or SoundCloud — mark as unreleased
+            await supabase
+              .from('set_tracks')
+              .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            notFound++;
+          }
         }
       }
 
@@ -172,14 +216,14 @@ export default async function handler(req, res) {
           if (cached.found && cached.spotify_data) {
             await supabase
               .from('set_tracks')
-              .update({ spotify_data: cached.spotify_data })
+              .update({ spotify_data: cached.spotify_data, is_unreleased: false })
               .eq('id', track.id);
             enriched++;
             cacheHits++;
           } else {
             await supabase
               .from('set_tracks')
-              .update({ spotify_data: { checked: true, found: false } })
+              .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
             notFound++;
           }
@@ -209,15 +253,41 @@ export default async function handler(req, res) {
         if (spotifyData) {
           await supabase
             .from('set_tracks')
-            .update({ spotify_data: spotifyData })
+            .update({ spotify_data: spotifyData, is_unreleased: false })
             .eq('id', track.id);
           enriched++;
         } else {
-          await supabase
-            .from('set_tracks')
-            .update({ spotify_data: { checked: true, found: false } })
-            .eq('id', track.id);
-          notFound++;
+          // Spotify miss — try SoundCloud fallback for artwork
+          let scArtwork = null;
+          try {
+            if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
+            if (soundcloudClientId) {
+              scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
+            }
+          } catch (e) {
+            // Best-effort
+          }
+
+          if (scArtwork?.artwork_url) {
+            const scData = {
+              album_art_url: scArtwork.artwork_url,
+              title: scArtwork.title || track.track_title,
+              artist: scArtwork.artist || track.artist_name,
+              source: 'soundcloud',
+              permalink_url: scArtwork.permalink_url,
+            };
+            await supabase
+              .from('set_tracks')
+              .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            enriched++;
+          } else {
+            await supabase
+              .from('set_tracks')
+              .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            notFound++;
+          }
         }
       }
 
