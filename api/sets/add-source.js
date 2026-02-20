@@ -51,10 +51,10 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'Set not found' });
     }
 
-    // Check if source already exists
+    // If source already exists, update it
     const urlField = `${platform}_url`;
-    if (set[urlField]) {
-      return res.status(400).json({ error: `This set already has a ${platform} link` });
+    if (set[urlField] && set[urlField] === url) {
+      return res.status(200).json({ success: true, message: `${platform} link already set`, setId, platform, url });
     }
 
     // Generate a cover image URL from the source if the set doesn't have one
