@@ -43,6 +43,7 @@ import SimilarSets from '@/components/SimilarSets';
 import IDThisModal from '@/components/IDThisModal';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
+import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 import { useSets } from '@/contexts/SetsContext';
 import { useUser } from '@/contexts/UserContext';
 
@@ -67,6 +68,8 @@ export default function SetDetailScreen() {
   const [dbSet, setDbSet] = useState<SetList | null>(null);
   const [isLoadingSet, setIsLoadingSet] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [needsEnrichment, setNeedsEnrichment] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
 
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -94,6 +97,10 @@ export default function SetDetailScreen() {
   const [pickedTrack, setPickedTrack] = useState<Track | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
 
+  // Cover image fallback state
+  const [coverImageError, setCoverImageError] = useState(false);
+  const [coverTriedHqFallback, setCoverTriedHqFallback] = useState(false);
+
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
   const [playerMinimized, setPlayerMinimized] = useState(false);
@@ -118,6 +125,9 @@ export default function SetDetailScreen() {
         const data = await response.json();
 
         if (data.success && data.set) {
+          // Store enrichment flag from API
+          setNeedsEnrichment(!!data.needsEnrichment);
+
           // Transform API response to match SetList type
           const transformedSet: SetList = {
             id: data.set.id,
@@ -167,6 +177,74 @@ export default function SetDetailScreen() {
 
     fetchSet();
   }, [id]);
+
+  // Auto-enrich: if the API says there are un-cached tracks, fire enrichment in background
+  useEffect(() => {
+    if (!needsEnrichment || !id || isEnriching) return;
+
+    const enrichSet = async () => {
+      setIsEnriching(true);
+      try {
+        const enrichResponse = await fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'enrich-set', setId: id }),
+        });
+        const enrichData = await enrichResponse.json();
+
+        if (enrichData.success && enrichData.enriched > 0) {
+          // Re-fetch set data to get updated album art
+          const refetchResponse = await fetch(`${API_BASE_URL}/api/sets/${id}`);
+          const refetchData = await refetchResponse.json();
+
+          if (refetchData.success && refetchData.set) {
+            const transformedSet: SetList = {
+              id: refetchData.set.id,
+              name: refetchData.set.name,
+              artist: refetchData.set.artist,
+              venue: refetchData.set.venue,
+              date: new Date(refetchData.set.date),
+              totalDuration: refetchData.set.totalDuration || 0,
+              coverUrl: refetchData.set.coverUrl || undefined,
+              plays: refetchData.set.trackCount * 10,
+              sourceLinks: refetchData.set.sourceLinks || [],
+              tracks: refetchData.set.tracks?.map((t: any) => ({
+                id: t.id,
+                title: t.title,
+                artist: t.artist,
+                duration: 0,
+                coverUrl: t.coverUrl || '',
+                addedAt: new Date(t.addedAt || Date.now()),
+                source: t.source || 'database',
+                timestamp: t.timestamp || 0,
+                timestampStr: t.timestampStr,
+                verified: t.verified || !t.isId,
+                confidence: t.isId ? 0 : 1,
+                isId: t.isId,
+                isReleased: t.isReleased || false,
+                previewUrl: t.previewUrl || undefined,
+                isrc: t.isrc || undefined,
+                releaseDate: t.releaseDate || undefined,
+                popularity: t.popularity || undefined,
+                trackLinks: t.trackLinks || [],
+                album: t.album || undefined,
+              })) || [],
+              hasGaps: refetchData.set.hasGaps,
+              gapCount: refetchData.set.gapCount,
+            };
+            setDbSet(transformedSet);
+          }
+        }
+      } catch (err) {
+        if (__DEV__) console.log('[SetDetail] Auto-enrich failed:', err);
+      } finally {
+        setIsEnriching(false);
+        setNeedsEnrichment(false);
+      }
+    };
+
+    enrichSet();
+  }, [needsEnrichment, id]);
 
   // Look up set from API first, then context, then mock data
   const setList = useMemo(() => {
@@ -640,6 +718,31 @@ export default function SetDetailScreen() {
     checkSavedStatus();
   }, [id]);
 
+  const getHeaderCoverImage = useCallback(() => {
+    if (!setList) return getFallbackImage(id || '');
+    const venueFallback = () => setList.venue ? getVenueImage(setList.venue) : getFallbackImage(setList.id);
+    if (coverImageError && coverTriedHqFallback) {
+      return venueFallback();
+    }
+    if (setList.coverUrl) {
+      if (coverImageError && setList.coverUrl.includes('maxresdefault')) {
+        return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+      }
+      return setList.coverUrl;
+    }
+    return venueFallback();
+  }, [setList, id, coverImageError, coverTriedHqFallback]);
+
+  const handleCoverImageError = useCallback(() => {
+    if (!coverTriedHqFallback && setList?.coverUrl?.includes('maxresdefault')) {
+      setCoverTriedHqFallback(true);
+      setCoverImageError(true);
+    } else {
+      setCoverTriedHqFallback(true);
+      setCoverImageError(true);
+    }
+  }, [coverTriedHqFallback, setList?.coverUrl]);
+
   // Show loading / error / not found state
   if (isLoadingSet || !setList) {
     return (
@@ -917,6 +1020,7 @@ export default function SetDetailScreen() {
     }
   };
 
+
   const getPlatformName = (platform: string) => {
     switch (platform) {
       case 'youtube': return 'YouTube';
@@ -939,9 +1043,10 @@ export default function SetDetailScreen() {
         <View style={styles.headerImage}>
           <Image
             key={setList.coverUrl || 'default-cover'}
-            source={{ uri: setList.coverUrl || undefined }}
+            source={{ uri: getHeaderCoverImage() }}
             style={styles.coverImage}
             cachePolicy="none"
+            onError={handleCoverImageError}
           />
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.7)', Colors.dark.background]}
