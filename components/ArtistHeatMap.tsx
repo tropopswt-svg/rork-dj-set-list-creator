@@ -9,8 +9,10 @@ import {
   Platform,
   Animated,
 } from 'react-native';
+import Svg, { Path, Circle } from 'react-native-svg';
 import { MapPin, ChevronDown, ChevronUp } from 'lucide-react-native';
 import Colors from '@/constants/colors';
+import { WORLD_MAP_PATH } from '@/constants/worldMap';
 
 // Only import react-native-maps on native platforms
 let MapView: any = null;
@@ -32,7 +34,15 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-
 const { width: screenWidth } = Dimensions.get('window');
 const CIRCOLOCO_RED = '#C41E3A';
 
-// Pulsing red dot marker for map pins
+// Convert lat/lng to SVG coordinates (equirectangular, viewBox 0 0 1000 500)
+function toSvgCoords(lat: number, lng: number): { x: number; y: number } {
+  return {
+    x: (lng + 180) / 360 * 1000,
+    y: (90 - lat) / 180 * 500,
+  };
+}
+
+// Pulsing red dot marker for native map pins
 function PulsingPin() {
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -55,6 +65,31 @@ function PulsingPin() {
       />
       <View style={pinStyles.dot} />
     </View>
+  );
+}
+
+// Pulsing SVG dot for the SVG fallback map
+function PulsingSvgPin({ x, y }: { x: number; y: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 1200, useNativeDriver: false }),
+        Animated.timing(pulse, { toValue: 0, duration: 1200, useNativeDriver: false }),
+      ])
+    ).start();
+  }, [pulse]);
+
+  const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+  const animatedR = pulse.interpolate({ inputRange: [0, 1], outputRange: [4, 10] });
+  const animatedOpacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] });
+
+  return (
+    <>
+      <AnimatedCircle cx={x} cy={y} r={animatedR} fill={CIRCOLOCO_RED} opacity={animatedOpacity} />
+      <Circle cx={x} cy={y} r={3.5} fill={CIRCOLOCO_RED} stroke="#fff" strokeWidth={1} />
+    </>
   );
 }
 
@@ -134,48 +169,30 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     };
   }, [venues]);
 
-  // All pins use Circoloco red
-  const getMarkerColor = (_setsCount: number) => CIRCOLOCO_RED;
-
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
-  // Fallback if react-native-maps not available
-  const renderFallbackMap = () => (
+  // SVG world map fallback — grey continents, dark water, red pulsing pins
+  const renderSvgMap = () => (
     <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
-      {!backgroundMode && (
-        <>
-          <MapPin size={32} color={Colors.dark.textMuted} />
-          <Text style={styles.fallbackText}>
-            {venues.length} venue{venues.length !== 1 ? 's' : ''}
-          </Text>
-        </>
-      )}
-      {venues.map((venue, idx) => (
-        <View key={idx} style={backgroundMode ? styles.bgFallbackDotContainer : styles.fallbackVenueItem}>
-          {backgroundMode ? (
-            <View
-              style={[
-                styles.bgFallbackDot,
-                { backgroundColor: getMarkerColor(venue.setsCount) },
-              ]}
-            />
-          ) : (
-            <>
-              <View style={[styles.fallbackDot, { backgroundColor: getMarkerColor(venue.setsCount) }]} />
-              <Text style={styles.fallbackVenueName}>{venue.name}</Text>
-              <Text style={styles.fallbackVenueCount}>
-                {venue.setsCount} set{venue.setsCount !== 1 ? 's' : ''}
-              </Text>
-            </>
-          )}
-        </View>
-      ))}
+      <Svg
+        viewBox="0 0 1000 500"
+        style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
+        preserveAspectRatio="xMidYMid slice"
+      >
+        {/* Grey continent outlines */}
+        <Path d={WORLD_MAP_PATH} fill="#333338" stroke="#444448" strokeWidth={0.5} />
+        {/* Pulsing venue pins */}
+        {venues.map((venue, idx) => {
+          const { x, y } = toSvgCoords(venue.lat, venue.lng);
+          return <PulsingSvgPin key={idx} x={x} y={y} />;
+        })}
+      </Svg>
     </View>
   );
 
-  const renderMap = () => {
-    if (!MapView || !region) return renderFallbackMap();
+  const renderNativeMap = () => {
+    if (!MapView || !region) return renderSvgMap();
 
     return (
       <MapView
@@ -223,7 +240,8 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     if (isLoading) {
       return <View style={styles.bgFallback} />;
     }
-    return renderMap();
+    // Always use SVG map in background mode for consistent grey look
+    return renderSvgMap();
   }
 
   return (
@@ -250,7 +268,7 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
           </View>
         ) : (
           <View style={styles.mapContainer}>
-            {renderMap()}
+            {renderNativeMap()}
           </View>
         )
       )}
@@ -342,41 +360,13 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 2,
   },
-  // Fallback styles (when react-native-maps not installed)
+  // Fallback styles
   fallbackMap: {
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: '#1a1a1e',
     borderRadius: 12,
-    padding: 16,
+    height: 220,
     marginTop: 8,
-    alignItems: 'center',
-    gap: 12,
-  },
-  fallbackText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
-    marginBottom: 8,
-  },
-  fallbackVenueItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    width: '100%',
-    paddingVertical: 4,
-  },
-  fallbackDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  fallbackVenueName: {
-    flex: 1,
-    fontSize: 13,
-    color: Colors.dark.text,
-  },
-  fallbackVenueCount: {
-    fontSize: 12,
-    color: Colors.dark.textMuted,
+    overflow: 'hidden',
   },
   // Background mode styles
   bgMap: {
@@ -384,15 +374,6 @@ const styles = StyleSheet.create({
   },
   bgFallback: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#222228',
-  },
-  bgFallbackDotContainer: {
-    position: 'absolute' as const,
-  },
-  bgFallbackDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    opacity: 0.6,
+    backgroundColor: '#1a1a1e',
   },
 });
