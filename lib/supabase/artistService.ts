@@ -410,23 +410,23 @@ export async function searchArtists(query: string, limit: number = 20): Promise<
 }
 
 /**
- * Get artist's tracks
+ * Get artist's tracks with the sets they appear in
  */
 export async function getArtistTracks(artistId: string, limit: number = 50): Promise<any[]> {
   if (!isSupabaseConfigured()) return [];
-  
+
   const { data, error } = await supabase
     .from('tracks')
-    .select('*')
+    .select('*, set_tracks(set_id, timestamp_seconds, sets(id, title, venue, cover_url, youtube_url))')
     .eq('artist_id', artistId)
     .order('created_at', { ascending: false })
     .limit(limit);
-  
+
   if (error) {
     if (__DEV__) console.error('[ArtistService] Error fetching artist tracks:', error);
     return [];
   }
-  
+
   return data;
 }
 

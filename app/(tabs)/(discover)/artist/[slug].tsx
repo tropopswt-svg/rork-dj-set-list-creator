@@ -18,6 +18,8 @@ import {
   CheckCircle,
   MapPin,
   Headphones,
+  HelpCircle,
+  Disc3,
 } from 'lucide-react-native';
 import TrackdLogo from '@/components/TrackdLogo';
 import * as Haptics from 'expo-haptics';
@@ -234,36 +236,82 @@ export default function ArtistProfileScreen() {
                   <Text style={styles.emptyText}>No tracks in database yet</Text>
                 </View>
               ) : (
-                tracks.map((track, index) => (
-                  <View key={track.id} style={styles.trackItem}>
-                    <View style={styles.trackIndex}>
-                      <Text style={styles.trackIndexText}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.trackInfo}>
-                      <Text style={styles.trackTitle} numberOfLines={1}>
-                        {track.title}
-                        {track.remix_artist_name && (
-                          <Text style={styles.remixText}>
-                            {' '}({track.remix_artist_name} {track.remix_type || 'Remix'})
+                tracks.map((track, index) => {
+                  const isId = track.title?.toLowerCase() === 'id' || track.title?.toLowerCase() === 'unknown' || track.title?.toLowerCase() === 'unknown track';
+                  // Get sets this track appears in (from joined set_tracks → sets)
+                  const featuredSets = (track.set_tracks || [])
+                    .map((st: any) => st.sets)
+                    .filter(Boolean)
+                    .slice(0, 3);
+
+                  return (
+                    <View key={track.id} style={[styles.trackItem, isId && styles.trackItemId]}>
+                      <View style={styles.trackIndex}>
+                        <Text style={styles.trackIndexText}>{index + 1}</Text>
+                      </View>
+                      <View style={styles.trackInfo}>
+                        <Text style={[styles.trackTitle, isId && styles.trackTitleId]} numberOfLines={1}>
+                          {isId ? 'Unknown Track' : track.title}
+                          {!isId && track.remix_artist_name && (
+                            <Text style={styles.remixText}>
+                              {' '}({track.remix_artist_name} {track.remix_type || 'Remix'})
+                            </Text>
+                          )}
+                        </Text>
+                        {isId ? (
+                          <Text style={styles.trackMetaId}>Help identify this track</Text>
+                        ) : (
+                          <Text style={styles.trackMeta} numberOfLines={1}>
+                            {track.label || 'Unknown Label'}
+                            {track.release_year && ` • ${track.release_year}`}
                           </Text>
                         )}
-                      </Text>
-                      <Text style={styles.trackMeta} numberOfLines={1}>
-                        {track.label || 'Unknown Label'}
-                        {track.release_year && ` • ${track.release_year}`}
-                      </Text>
-                    </View>
-                    {track.is_unreleased && (
-                      <View style={styles.unreleasedBadge}>
-                        <Text style={styles.unreleasedText}>Unreleased</Text>
+                        {/* Set links — show which set(s) this track was played in */}
+                        {featuredSets.length > 0 && (
+                          <View style={styles.trackSetsRow}>
+                            {featuredSets.map((set: any) => (
+                              <Pressable
+                                key={set.id}
+                                style={styles.trackSetLink}
+                                onPress={() => {
+                                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                                  router.push(`/(tabs)/(discover)/${set.id}`);
+                                }}
+                              >
+                                <Disc3 size={10} color={Colors.dark.primary} />
+                                <Text style={styles.trackSetLinkText} numberOfLines={1}>
+                                  {set.title || 'Set'}
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        )}
                       </View>
-                    )}
-                    <View style={styles.playsBadge}>
-                      <Play size={10} color={Colors.dark.textMuted} />
-                      <Text style={styles.playsText}>{track.times_played}</Text>
+                      {track.is_unreleased && !isId && (
+                        <View style={styles.unreleasedBadge}>
+                          <Text style={styles.unreleasedText}>Unreleased</Text>
+                        </View>
+                      )}
+                      {isId && featuredSets.length > 0 ? (
+                        <Pressable
+                          style={styles.idThisBadge}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                            router.push(`/(tabs)/(discover)/${featuredSets[0].id}`);
+                          }}
+                        >
+                          <HelpCircle size={12} color={Colors.dark.primary} />
+                          <Text style={styles.idThisText}>Go to Set</Text>
+                        </Pressable>
+                      ) : (
+                        <View style={styles.playsBadge}>
+                          <Play size={10} color={Colors.dark.textMuted} />
+                          <Text style={styles.playsText}>{track.times_played}</Text>
+                        </View>
+                      )}
                     </View>
-                  </View>
-                ))
+                  );
+                })
               )}
             </>
           )}
@@ -581,10 +629,20 @@ const styles = StyleSheet.create({
   trackInfo: {
     flex: 1,
   },
+  trackItemId: {
+    borderWidth: 1,
+    borderColor: 'rgba(205, 106, 111, 0.2)',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(205, 106, 111, 0.06)',
+  },
   trackTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.dark.text,
+  },
+  trackTitleId: {
+    color: Colors.dark.primary,
+    fontStyle: 'italic',
   },
   remixText: {
     fontSize: 13,
@@ -596,8 +654,51 @@ const styles = StyleSheet.create({
     color: Colors.dark.textMuted,
     marginTop: 2,
   },
+  trackMetaId: {
+    fontSize: 12,
+    color: 'rgba(205, 106, 111, 0.6)',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  trackSetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 6,
+  },
+  trackSetLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  trackSetLinkText: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Colors.dark.primary,
+    maxWidth: 120,
+  },
+  idThisBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+  },
+  idThisText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.dark.primary,
+  },
   unreleasedBadge: {
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    backgroundColor: 'rgba(212, 160, 23, 0.15)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -606,7 +707,7 @@ const styles = StyleSheet.create({
   unreleasedText: {
     fontSize: 10,
     fontWeight: '600',
-    color: Colors.dark.primary,
+    color: '#D4A017',
   },
   playsBadge: {
     flexDirection: 'row',
