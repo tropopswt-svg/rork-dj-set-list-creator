@@ -442,16 +442,70 @@ function SavedSetCard({
 // ─── Main Screen ────────────────────────────────────────────
 // ═══════════════════════════════════════════════════════════════
 
+// ─── Mock Data for Preview ──────────────────────────────────
+const MOCK_SAVED_SETS = [
+  {
+    id: 'mock-1',
+    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+    set: { id: 'mock-set-1', name: 'Boiler Room Berlin', artist_name: 'Ben Böhmer', cover_url: 'https://img.youtube.com/vi/RvRhUHTV_8k/maxresdefault.jpg', venue: 'Printworks' },
+  },
+  {
+    id: 'mock-2',
+    created_at: new Date(Date.now() - 8 * 3600000).toISOString(),
+    set: { id: 'mock-set-2', name: 'Tomorrowland Mainstage 2024', artist_name: 'Charlotte de Witte', cover_url: 'https://img.youtube.com/vi/DiLqnB0MxOs/maxresdefault.jpg', venue: 'Tomorrowland' },
+  },
+  {
+    id: 'mock-3',
+    created_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    set: { id: 'mock-set-3', name: 'Cercle @ Torre de Belém', artist_name: 'Agents Of Time', cover_url: 'https://img.youtube.com/vi/VjWTnbMRUKs/maxresdefault.jpg', venue: 'Torre de Belém' },
+  },
+  {
+    id: 'mock-4',
+    created_at: new Date(Date.now() - 48 * 3600000).toISOString(),
+    set: { id: 'mock-set-4', name: 'Afterlife Tulum', artist_name: 'Tale Of Us', cover_url: 'https://img.youtube.com/vi/nVjsGKrE6E0/maxresdefault.jpg', venue: 'Zamna Tulum' },
+  },
+  {
+    id: 'mock-5',
+    created_at: new Date(Date.now() - 72 * 3600000).toISOString(),
+    set: { id: 'mock-set-5', name: 'DC-10 Closing Party', artist_name: 'Jamie Jones', cover_url: 'https://img.youtube.com/vi/Q_tCsGnqNIw/maxresdefault.jpg', venue: 'DC-10 Ibiza' },
+  },
+];
+
+const MOCK_LIKED_SETS = MOCK_SAVED_SETS.slice(1, 4);
+
+const now = new Date();
+const MOCK_IDENTIFIED_TRACKS = [
+  { id: 'mt-1', track_title: 'Nightfall', track_artist: 'Agents Of Time', timestamp_seconds: 1823, created_at: new Date(Date.now() - 1 * 3600000).toISOString(), set: { id: 'mock-set-3', name: 'Cercle @ Torre de Belém' } },
+  { id: 'mt-2', track_title: 'Age of Love', track_artist: 'Charlotte de Witte', timestamp_seconds: 3420, created_at: new Date(Date.now() - 3 * 3600000).toISOString(), set: { id: 'mock-set-2', name: 'Tomorrowland Mainstage' } },
+  { id: 'mt-3', track_title: 'Breathing', track_artist: 'Ben Böhmer', timestamp_seconds: 720, created_at: new Date(Date.now() - 5 * 3600000).toISOString(), set: { id: 'mock-set-1', name: 'Boiler Room Berlin' } },
+  { id: 'mt-4', track_title: 'Nova', track_artist: 'Tale Of Us', timestamp_seconds: 2100, created_at: new Date(Date.now() - 12 * 3600000).toISOString(), set: { id: 'mock-set-4', name: 'Afterlife Tulum' } },
+  { id: 'mt-5', track_title: 'Devotion', track_artist: 'Anyma', timestamp_seconds: 4500, created_at: new Date(Date.now() - 24 * 3600000).toISOString(), set: { id: 'mock-set-4', name: 'Afterlife Tulum' } },
+  { id: 'mt-6', track_title: 'Running', track_artist: 'Jamie Jones', timestamp_seconds: 1200, created_at: new Date(Date.now() - 36 * 3600000).toISOString(), set: { id: 'mock-set-5', name: 'DC-10 Closing Party' } },
+  { id: 'mt-7', track_title: 'Acid Rain', track_artist: 'Charlotte de Witte', timestamp_seconds: 5100, created_at: new Date(Date.now() - 48 * 3600000).toISOString(), set: { id: 'mock-set-2', name: 'Tomorrowland Mainstage' } },
+  { id: 'mt-8', track_title: 'Fade Into You', track_artist: 'Agents Of Time', timestamp_seconds: 3000, created_at: new Date(Date.now() - 60 * 3600000).toISOString(), set: { id: 'mock-set-3', name: 'Cercle @ Torre de Belém' } },
+  { id: 'mt-9', track_title: 'Afterlife', track_artist: 'Tale Of Us', timestamp_seconds: 600, created_at: new Date(Date.now() - 96 * 3600000).toISOString(), set: { id: 'mock-set-4', name: 'Afterlife Tulum' } },
+  { id: 'mt-10', track_title: 'Beyond', track_artist: 'Ben Böhmer', timestamp_seconds: 2400, created_at: new Date(Date.now() - 120 * 3600000).toISOString(), set: { id: 'mock-set-1', name: 'Boiler Room Berlin' } },
+  { id: 'mt-11', track_title: 'Sequence', track_artist: 'Stephan Bodzin', timestamp_seconds: 1500, created_at: new Date(Date.now() - 144 * 3600000).toISOString(), set: { id: 'mock-set-3', name: 'Cercle @ Torre de Belém' } },
+  { id: 'mt-12', track_title: 'Opus', track_artist: 'Eric Prydz', timestamp_seconds: 3600, created_at: new Date(Date.now() - 150 * 3600000).toISOString(), set: { id: 'mock-set-2', name: 'Tomorrowland Mainstage' } },
+];
+
+const USE_MOCK_DATA = true; // Flip to false to use real data
+
 export default function MyStuffScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
-  const { savedSets, isLoading: savedLoading, refresh: refreshSaved } = useSavedSets();
-  const { likedSets, isLoading: likedLoading, refresh: refreshLiked } = useLikedSets();
+  const { savedSets: realSavedSets, isLoading: savedLoading, refresh: refreshSaved } = useSavedSets();
+  const { likedSets: realLikedSets, isLoading: likedLoading, refresh: refreshLiked } = useLikedSets();
   const {
-    identifiedTracks,
+    identifiedTracks: realIdentifiedTracks,
     isLoading: contributionsLoading,
     refresh: refreshContributions,
   } = useContributions();
+
+  // Use mock data if real data is empty
+  const savedSets = USE_MOCK_DATA && realSavedSets.length === 0 ? MOCK_SAVED_SETS : realSavedSets;
+  const likedSets = USE_MOCK_DATA && realLikedSets.length === 0 ? MOCK_LIKED_SETS : realLikedSets;
+  const identifiedTracks = USE_MOCK_DATA && realIdentifiedTracks.length === 0 ? MOCK_IDENTIFIED_TRACKS : realIdentifiedTracks;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
