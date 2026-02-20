@@ -1021,20 +1021,33 @@ export default function FeedScreen() {
       if (await loadAndPlay(gen, spotifyTrack.previewUrl, spotifyTrack.title, spotifyTrack.artist)) return;
     }
 
-    // 2. Deezer fallback — search first 3 identified tracks
+    // 2. Deezer fallback — search first 5 identified tracks
     const candidates = (tracks || []).filter(
       (t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID'
-    ).slice(0, 3);
+        && t.artist && t.artist !== 'Unknown' && t.artist !== 'ID'
+    ).slice(0, 5);
+
+    // Strip parenthetical suffixes like "(Chris Stussy Edit)" that break Deezer's strict matching
+    const cleanTitle = (t: string) => t.replace(/\s*\([^)]*\)\s*/g, '').trim();
 
     for (const track of candidates) {
       if (audioGenRef.current !== gen) return;
+      const title = cleanTitle(track.title);
+      const artist = cleanTitle(track.artist);
+      if (!title || !artist) continue;
       try {
-        const q = encodeURIComponent(`artist:"${track.artist}" track:"${track.title}"`);
-        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
-        if (audioGenRef.current !== gen) return;
-        const json = await res.json();
-        const preview = json?.data?.[0]?.preview;
-        if (preview && await loadAndPlay(gen, preview, track.title, track.artist)) return;
+        // Try structured query first, then simple fallback
+        for (const q of [
+          encodeURIComponent(`artist:"${artist}" track:"${title}"`),
+          encodeURIComponent(`${artist} ${title}`),
+        ]) {
+          if (audioGenRef.current !== gen) return;
+          const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
+          if (audioGenRef.current !== gen) return;
+          const json = await res.json();
+          const preview = json?.data?.[0]?.preview;
+          if (preview && await loadAndPlay(gen, preview, track.title, track.artist)) return;
+        }
       } catch {}
     }
   }, [stopAudio, loadAndPlay]);
