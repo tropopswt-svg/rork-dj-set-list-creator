@@ -81,34 +81,27 @@ export default async function handler(req, res) {
       }
     }
 
-    // Get coordinates for these venues
-    const venueNames = Object.keys(venueMap);
-    const { data: coordinates } = await supabase
+    // Get ALL venue coordinates for fuzzy matching
+    const { data: allCoordinates } = await supabase
       .from('venue_coordinates')
-      .select('venue_name, latitude, longitude, city, country')
-      .in('venue_name', venueNames);
+      .select('venue_name, latitude, longitude, city, country');
 
-    // Also try partial matching for venues that don't have exact matches
-    // e.g., "Berghain / Panorama Bar" should match "Berghain"
-    const coordMap = {};
-    if (coordinates) {
-      for (const coord of coordinates) {
-        coordMap[coord.venue_name] = coord;
-      }
-    }
+    const coordList = allCoordinates || [];
 
-    // Build final venue list with coordinates
+    // Build final venue list with coordinates using fuzzy matching
     const venues = [];
     for (const [name, data] of Object.entries(venueMap)) {
-      let coord = coordMap[name];
+      const nameLower = name.toLowerCase().trim();
 
-      // Try partial match if no exact match
+      // Try exact match first
+      let coord = coordList.find(c => c.venue_name.toLowerCase() === nameLower);
+
+      // Try partial/contains match
       if (!coord) {
-        const partialMatch = coordinates?.find(c =>
-          name.toLowerCase().includes(c.venue_name.toLowerCase()) ||
-          c.venue_name.toLowerCase().includes(name.toLowerCase())
+        coord = coordList.find(c =>
+          nameLower.includes(c.venue_name.toLowerCase()) ||
+          c.venue_name.toLowerCase().includes(nameLower)
         );
-        if (partialMatch) coord = partialMatch;
       }
 
       if (coord) {
