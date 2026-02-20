@@ -57,7 +57,7 @@ async function backfillSetThumbnails(supabase: any, limit: number, dryRun: boole
 
   const { data: sets, error } = await supabase
     .from('sets')
-    .select('id, name, youtube_url')
+    .select('id, title, youtube_url')
     .is('cover_url', null)
     .not('youtube_url', 'is', null)
     .limit(limit);
@@ -80,7 +80,7 @@ async function backfillSetThumbnails(supabase: any, limit: number, dryRun: boole
   for (const set of sets) {
     const videoId = extractVideoId(set.youtube_url);
     if (!videoId) {
-      console.log(`  SKIP: Invalid YouTube URL for "${set.name}"`);
+      console.log(`  SKIP: Invalid YouTube URL for "${set.title}"`);
       failed++;
       continue;
     }
@@ -115,7 +115,7 @@ async function backfillSetThumbnails(supabase: any, limit: number, dryRun: boole
     }
 
     if (dryRun) {
-      console.log(`  DRY: "${set.name}" -> ${coverUrl}`);
+      console.log(`  DRY: "${set.title}" -> ${coverUrl}`);
     } else {
       const { error: updateError } = await supabase
         .from('sets')
@@ -123,10 +123,10 @@ async function backfillSetThumbnails(supabase: any, limit: number, dryRun: boole
         .eq('id', set.id);
 
       if (updateError) {
-        console.log(`  FAIL: "${set.name}" - ${updateError.message}`);
+        console.log(`  FAIL: "${set.title}" - ${updateError.message}`);
         failed++;
       } else {
-        console.log(`  OK: "${set.name}"`);
+        console.log(`  OK: "${set.title}"`);
         updated++;
       }
     }

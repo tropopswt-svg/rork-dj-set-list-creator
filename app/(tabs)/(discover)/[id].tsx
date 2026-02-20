@@ -3,7 +3,15 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicat
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import Animated, {
+  useSharedValue,
+  useAnimatedProps,
+  withTiming,
+  withDelay,
+  withSpring,
+  useAnimatedStyle,
+} from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import {
   ArrowLeft,
   Play,
@@ -50,6 +58,162 @@ import { useUser } from '@/contexts/UserContext';
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
+
+// Animated circle for the identification ring
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// Identification Ring Component — animated circular gauge
+function IdentificationRing({ identified, total }: { identified: number; total: number }) {
+  const progress = useSharedValue(0);
+  const ringOpacity = useSharedValue(0);
+  const percentage = total > 0 ? Math.round((identified / total) * 100) : 0;
+
+  const size = 52;
+  const strokeWidth = 5;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+
+  useEffect(() => {
+    // Fade in
+    ringOpacity.value = withTiming(1, { duration: 300 });
+    // Animate arc with spring
+    progress.value = withDelay(200, withSpring(percentage / 100, {
+      damping: 18,
+      stiffness: 80,
+      mass: 1,
+    }));
+  }, [percentage]);
+
+  const animatedStrokeProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - progress.value),
+  }));
+
+  const containerStyle = useAnimatedStyle(() => ({
+    opacity: ringOpacity.value,
+  }));
+
+  // Color based on percentage
+  const arcColor = percentage >= 75 ? '#22C55E' : percentage >= 40 ? '#F59E0B' : '#C41E3A';
+
+  return (
+    <Animated.View style={[ringStyles.container, containerStyle]}>
+      <View style={ringStyles.ringContainer}>
+        <View style={[ringStyles.ringGlow, { shadowColor: arcColor }]} />
+        <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+          {/* Background track */}
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+          {/* Animated progress arc */}
+          <AnimatedCircle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke={arcColor}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={circumference}
+            animatedProps={animatedStrokeProps}
+            strokeLinecap="round"
+          />
+        </Svg>
+        {/* Center percentage - using static Text since reanimated text is complex */}
+        <View style={ringStyles.centerLabel}>
+          <Text style={[ringStyles.percentText, { color: arcColor }]}>{percentage}</Text>
+          <Text style={ringStyles.percentSymbol}>%</Text>
+        </View>
+      </View>
+      <View style={ringStyles.legend}>
+        <View style={ringStyles.legendItem}>
+          <View style={[ringStyles.legendDot, { backgroundColor: '#22C55E' }]} />
+          <Text style={ringStyles.legendValue}>{identified}</Text>
+        </View>
+        <View style={ringStyles.legendDivider} />
+        <View style={ringStyles.legendItem}>
+          <View style={[ringStyles.legendDot, { backgroundColor: '#C41E3A' }]} />
+          <Text style={ringStyles.legendValue}>{total - identified}</Text>
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+const ringStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+  },
+  ringContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  ringGlow: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    shadowOpacity: 0.6,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  centerLabel: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  percentText: {
+    fontSize: 13,
+    fontWeight: '800',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  percentSymbol: {
+    fontSize: 7,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.5)',
+    marginTop: -2,
+    marginLeft: 1,
+  },
+  legend: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  legendDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+  },
+  legendDivider: {
+    width: 1,
+    height: 8,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  legendValue: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+});
 
 // Transform API set response into SetList type
 function transformApiSet(apiSet: any): SetList {
@@ -1435,7 +1599,6 @@ export default function SetDetailScreen() {
             <View style={styles.statCardOuter}>
               <View style={styles.statCardShadow} />
               <View style={styles.statCard}>
-                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
                 <View style={styles.statCardContent}>
                   <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
@@ -1450,7 +1613,6 @@ export default function SetDetailScreen() {
             <View style={styles.statCardOuter}>
               <View style={styles.statCardShadow} />
               <View style={styles.statCard}>
-                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
                 <View style={styles.statCardContent}>
                   <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
@@ -1465,7 +1627,6 @@ export default function SetDetailScreen() {
             <View style={styles.statCardOuter}>
               <View style={styles.statCardShadow} />
               <View style={styles.statCard}>
-                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                 <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
                 <View style={styles.statCardContent}>
                   <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.2)' }]}>
@@ -1477,54 +1638,22 @@ export default function SetDetailScreen() {
               </View>
             </View>
 
-            {/* Released / ID Status Card */}
+            {/* Animated Identification Ring */}
             {(() => {
-              const releasedTracks = tracks.filter(t =>
+              const identifiedTracks = tracks.filter(t =>
                 t.verified && !t.isId && t.title?.toLowerCase() !== 'id'
               );
-              const unreleasedTracks = tracks.filter(t =>
-                t.isId || t.title?.toLowerCase() === 'id' || !t.verified
-              );
-              const releasedCount = releasedTracks.length;
-              const unreleasedCount = unreleasedTracks.length;
+              const totalTracks = tracks.length;
 
               return (
-                <View style={[styles.statCardOuter, { flex: 1.2, minWidth: 85 }]}>
+                <View style={[styles.statCardOuter, { flex: 1.3, minWidth: 88 }]}>
                   <View style={styles.statCardShadow} />
                   <View style={styles.statCardWide}>
-                    <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
                     <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
-                    <View style={styles.statCardContent}>
-                      <View style={styles.releaseStatusRow}>
-                        <View style={styles.releaseStatusItem}>
-                          <CheckCircle size={10} color="#22C55E" />
-                          <Text style={styles.releaseStatusValue}>{releasedCount}</Text>
-                          <Text style={styles.releaseStatusLabel}>Rel</Text>
-                        </View>
-                        <View style={styles.releaseStatusDivider} />
-                        <View style={styles.releaseStatusItem}>
-                          <Sparkles size={10} color="#C41E3A" />
-                          <Text style={styles.releaseStatusValue}>{unreleasedCount}</Text>
-                          <Text style={styles.releaseStatusLabel}>ID</Text>
-                        </View>
-                      </View>
-                      <View style={styles.releaseStatusBarContainer}>
-                        <View
-                          style={[
-                            styles.releaseStatusBar,
-                            styles.releaseStatusBarReleased,
-                            { flex: releasedCount || 0.1 }
-                          ]}
-                        />
-                        <View
-                          style={[
-                            styles.releaseStatusBar,
-                            styles.releaseStatusBarUnreleased,
-                            { flex: unreleasedCount || 0.1 }
-                          ]}
-                        />
-                      </View>
-                    </View>
+                    <IdentificationRing
+                      identified={identifiedTracks.length}
+                      total={totalTracks}
+                    />
                   </View>
                 </View>
               );
@@ -2139,7 +2268,7 @@ const styles = StyleSheet.create({
     paddingBottom: 100,
   },
   headerImage: {
-    height: 300,
+    height: 420,
     position: 'relative',
   },
   coverImage: {
@@ -2151,7 +2280,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 200,
+    height: 300,
   },
   backButton: {
     position: 'absolute',
@@ -2174,7 +2303,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 20,
-    marginTop: -60,
+    marginTop: -240,
   },
   titleSection: {
     marginBottom: 24,
@@ -2450,12 +2579,14 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     overflow: 'hidden',
+    backgroundColor: 'rgba(15, 15, 15, 0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderTopColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.28)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
   },
   statCardTint: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
   },
   statCardContent: {
     padding: 8,
@@ -2491,54 +2622,11 @@ const styles = StyleSheet.create({
   statCardWide: {
     borderRadius: 10,
     overflow: 'hidden',
+    backgroundColor: 'rgba(15, 15, 15, 0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderTopColor: 'rgba(255,255,255,0.3)',
-  },
-  releaseStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-    flexWrap: 'nowrap',
-  },
-  releaseStatusItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  releaseStatusDivider: {
-    width: 1,
-    height: 10,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    marginHorizontal: 4,
-  },
-  releaseStatusValue: {
-    fontSize: 11,
-    fontWeight: '700' as const,
-    color: '#FFFFFF',
-  },
-  releaseStatusLabel: {
-    fontSize: 7,
-    color: 'rgba(255,255,255,0.5)',
-    textTransform: 'uppercase',
-  },
-  releaseStatusBarContainer: {
-    flexDirection: 'row',
-    height: 3,
-    borderRadius: 1.5,
-    overflow: 'hidden',
-    gap: 1,
-  },
-  releaseStatusBar: {
-    height: '100%',
-    borderRadius: 1.5,
-  },
-  releaseStatusBarReleased: {
-    backgroundColor: '#22C55E',
-  },
-  releaseStatusBarUnreleased: {
-    backgroundColor: '#C41E3A',
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.28)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
   },
   // Missing tracks banner
   missingTracksBanner: {

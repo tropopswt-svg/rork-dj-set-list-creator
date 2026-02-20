@@ -5,8 +5,9 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Music, Heart, MessageCircle, Share2, MapPin, Headphones, Clock, Send, Reply, Trash2, X } from 'lucide-react-native';
+import { Music, Heart, MessageCircle, Share2, MapPin, Headphones, Clock, Send, Reply, Trash2, X, Volume2, VolumeX } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
+import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useSets } from '@/contexts/SetsContext';
@@ -656,7 +657,7 @@ const csStyles = StyleSheet.create({
 
 // ── Feed Card ───────────────────────────────────────────────────────────
 // Immersive TikTok-style card with frosted glass overlays and 3D depth
-function FeedCard({ item, onPress, cardHeight, onOpenComments }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void }) {
+function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void }) {
   const { user } = useAuth();
   const { isLiked, likeCount, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
   const router = useRouter();
@@ -674,8 +675,9 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments }: { item: any; on
           const res = await fetch(`${FEED_API_BASE_URL}/api/sets/${item.set.id}`);
           const data = await res.json();
           if (!cancelled && data.success && data.set?.tracks?.length > 0) {
+            const allTracks = data.set.tracks;
             setFloatingTracks(
-              data.set.tracks
+              allTracks
                 .filter((t: any) => t.title && t.title !== 'ID')
                 .slice(0, 8)
                 .map((t: any) => ({
@@ -685,6 +687,8 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments }: { item: any; on
                   isId: t.isId || false,
                 }))
             );
+            // Pass full track data up for audio preview
+            onTracksLoaded?.(item.set.id, allTracks);
           }
         } catch {}
       })();
@@ -898,6 +902,94 @@ export default function FeedScreen() {
   const [commentSheetSetId, setCommentSheetSetId] = useState<string | null>(null);
   const feedListRef = useRef<FlatList>(null);
 
+  // ── Audio Preview State ──
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const currentPlayingRef = useRef<string | null>(null);
+  const visibleSetIdRef = useRef<string | null>(null);
+  const tracksCacheRef = useRef<Map<string, any[]>>(new Map());
+  const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  const [nowPlaying, setNowPlaying] = useState<{ title: string; artist: string } | null>(null);
+
+  // Configure audio session
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+      shouldDuckAndroid: true,
+    });
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
+  }, []);
+
+  // Sync muted state to ref and active sound
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    soundRef.current?.setVolumeAsync(isMuted ? 0 : 0.7).catch(() => {});
+  }, [isMuted]);
+
+  // Play a Spotify preview for a set's tracks
+  const playPreviewFromTracks = useCallback(async (setId: string, tracks: any[]) => {
+    if (currentPlayingRef.current === setId) return;
+
+    // Stop current playback
+    if (soundRef.current) {
+      try { await soundRef.current.stopAsync(); await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
+    }
+
+    currentPlayingRef.current = setId;
+
+    // Find the first track with a Spotify preview URL
+    const previewTrack = (tracks || []).find((t: any) => t.previewUrl);
+    if (!previewTrack) {
+      setNowPlaying(null);
+      return;
+    }
+
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: previewTrack.previewUrl },
+        { shouldPlay: true, isLooping: true, volume: isMutedRef.current ? 0 : 0.7 }
+      );
+      // Stale check: user may have scrolled during load
+      if (currentPlayingRef.current !== setId) {
+        await sound.unloadAsync();
+        return;
+      }
+      soundRef.current = sound;
+      setNowPlaying({ title: previewTrack.title, artist: previewTrack.artist });
+    } catch (err) {
+      if (__DEV__) console.log('[Feed] Audio preview error:', err);
+      setNowPlaying(null);
+    }
+  }, []);
+
+  // Called by FeedCard when track data loads
+  const handleTracksLoaded = useCallback((setId: string, tracks: any[]) => {
+    tracksCacheRef.current.set(setId, tracks);
+    // If this is the currently visible card, start playing
+    if (visibleSetIdRef.current === setId) {
+      playPreviewFromTracks(setId, tracks);
+    }
+  }, [playPreviewFromTracks]);
+
+  // Called when a card scrolls into center position
+  const handleSetBecameVisible = useCallback((setId: string) => {
+    visibleSetIdRef.current = setId;
+    const cached = tracksCacheRef.current.get(setId);
+    if (cached) {
+      playPreviewFromTracks(setId, cached);
+    }
+    // If tracks aren't cached yet, handleTracksLoaded will trigger playback when ready
+  }, [playPreviewFromTracks]);
+
+  const toggleMute = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setIsMuted(prev => !prev);
+  }, []);
+
   // Map category to API sort param
   const categoryToSort = (cat: FeedCategory): string => {
     switch (cat) {
@@ -945,6 +1037,13 @@ export default function FeedScreen() {
     setActiveCategory(cat);
     // Scroll back to top when switching tabs
     feedListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    // Reset audio — new data will trigger playback for the first card
+    soundRef.current?.stopAsync().catch(() => {});
+    soundRef.current?.unloadAsync().catch(() => {});
+    soundRef.current = null;
+    currentPlayingRef.current = null;
+    visibleSetIdRef.current = null;
+    setNowPlaying(null);
   };
 
   const loadFollowedArtistSets = async () => {
@@ -1098,6 +1197,23 @@ export default function FeedScreen() {
   const CARD_GAP = 10;
   const cardPageHeight = fullFeedHeight - CARD_GAP - 16; // slightly shorter cards
 
+  // ── Audio: detect visible card from paging scroll ──
+  const handleMomentumScrollEnd = useCallback((e: any) => {
+    if (fullFeedHeight <= 0) return;
+    const offsetY = e.nativeEvent.contentOffset.y;
+    const index = Math.round(offsetY / fullFeedHeight);
+    if (index >= 0 && index < realFeedItems.length) {
+      handleSetBecameVisible(realFeedItems[index].set.id);
+    }
+  }, [fullFeedHeight, realFeedItems, handleSetBecameVisible]);
+
+  // Auto-play first card when feed data loads
+  useEffect(() => {
+    if (realFeedItems.length > 0 && !visibleSetIdRef.current) {
+      handleSetBecameVisible(realFeedItems[0].set.id);
+    }
+  }, [realFeedItems.length, handleSetBecameVisible]);
+
   const renderFeedCard = useCallback(({ item }: { item: any }) => (
     <View style={{ height: fullFeedHeight, justifyContent: 'center', paddingVertical: CARD_GAP / 2 }}>
       <FeedCard
@@ -1105,12 +1221,19 @@ export default function FeedScreen() {
         cardHeight={cardPageHeight}
         onPress={() => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          // Stop audio when navigating to set detail
+          soundRef.current?.stopAsync().catch(() => {});
+          soundRef.current?.unloadAsync().catch(() => {});
+          soundRef.current = null;
+          currentPlayingRef.current = null;
+          setNowPlaying(null);
           router.push(`/(tabs)/(discover)/${item.set.id}`);
         }}
         onOpenComments={(setId) => setCommentSheetSetId(setId)}
+        onTracksLoaded={handleTracksLoaded}
       />
     </View>
-  ), [cardPageHeight, fullFeedHeight, router]);
+  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded]);
 
   return (
     <View style={styles.container}>
@@ -1125,6 +1248,13 @@ export default function FeedScreen() {
         {/* Fixed header */}
         <View style={styles.header}>
           <Text style={styles.headerLogo}>trakd</Text>
+          <Pressable onPress={toggleMute} hitSlop={12} style={styles.muteButton}>
+            {isMuted ? (
+              <VolumeX size={20} color="rgba(0,0,0,0.4)" />
+            ) : (
+              <Volume2 size={20} color="#C41E3A" />
+            )}
+          </Pressable>
         </View>
 
         {/* ── Category tab bar ── */}
@@ -1162,6 +1292,16 @@ export default function FeedScreen() {
           />
         </View>
 
+        {/* Now playing indicator */}
+        {nowPlaying && !isMuted && (
+          <View style={styles.nowPlayingBar}>
+            <Music size={10} color="#C41E3A" />
+            <Text style={styles.nowPlayingText} numberOfLines={1}>
+              {nowPlaying.title} — {nowPlaying.artist}
+            </Text>
+          </View>
+        )}
+
         {/* TikTok-style paging feed */}
         <View
           style={styles.feedScrollWrapper}
@@ -1181,6 +1321,7 @@ export default function FeedScreen() {
               pagingEnabled
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.feedListContent}
+              onMomentumScrollEnd={handleMomentumScrollEnd}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
@@ -1276,6 +1417,33 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     color: '#C41E3A',
     letterSpacing: -0.5,
+  },
+  muteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+
+  // ── Now Playing bar ──
+  nowPlayingBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(196, 30, 58, 0.06)',
+  },
+  nowPlayingText: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: 'rgba(0,0,0,0.45)',
+    letterSpacing: -0.2,
   },
 
   // ── Category tab bar ──

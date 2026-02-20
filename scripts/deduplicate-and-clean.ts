@@ -163,8 +163,8 @@ async function deduplicateArtists(supabase: any, dryRun: boolean) {
 
         await supabase
           .from('sets')
-          .update({ artist_id: keeper.id })
-          .eq('artist_id', dupId);
+          .update({ dj_id: keeper.id })
+          .eq('dj_id', dupId);
 
         // Delete the duplicate artist (cascades aliases)
         await supabase
@@ -472,7 +472,7 @@ async function cleanEmptyRecords(supabase: any, dryRun: boolean) {
       const { count: setCount } = await supabase
         .from('sets')
         .select('id', { count: 'exact', head: true })
-        .eq('artist_id', artist.id);
+        .eq('dj_id', artist.id);
 
       if ((trackCount || 0) === 0 && (setCount || 0) === 0) {
         if (dryRun) {

@@ -80,10 +80,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: setError.message });
     }
 
-    // Get the tracklist
+    // Get the tracklist — join with tracks table for Spotify enrichment fallback
     const { data: setTracks, error: tracksError } = await supabase
       .from('set_tracks')
-      .select('*')
+      .select('*, track:track_id(spotify_preview_url, artwork_url, spotify_url)')
       .eq('set_id', id)
       .order('position', { ascending: true });
 
@@ -185,9 +185,10 @@ export default async function handler(req, res) {
         }
       }
 
-      // Spotify enrichment data (album art, preview, etc.)
+      // Spotify enrichment data: try denormalized spotify_data first, then joined tracks table
       const spotify = track.spotify_data || {};
-      const hasSpotify = !!spotify.spotify_id;
+      const linkedTrack = track.track || {};
+      const hasSpotify = !!spotify.spotify_id || !!linkedTrack.spotify_url;
 
       return {
         id: track.id,
@@ -204,16 +205,19 @@ export default async function handler(req, res) {
         source: track.source || '1001tracklists',
         verified: !track.is_id,
         confidence: track.is_id ? 0 : 1,
-        // Spotify data
-        coverUrl: spotify.album_art_url || undefined,
+        // Spotify data — cascade: spotify_data JSONB → joined tracks table
+        coverUrl: spotify.album_art_url || linkedTrack.artwork_url || undefined,
         album: spotify.album || undefined,
-        previewUrl: spotify.preview_url || undefined,
+        previewUrl: spotify.preview_url || linkedTrack.spotify_preview_url || undefined,
         isrc: spotify.isrc || undefined,
         releaseDate: spotify.release_date || undefined,
         popularity: spotify.popularity || undefined,
         isReleased: hasSpotify,
         trackLinks: [
-          spotify.spotify_url && { platform: 'spotify', url: spotify.spotify_url },
+          (spotify.spotify_url || linkedTrack.spotify_url) && {
+            platform: 'spotify',
+            url: spotify.spotify_url || linkedTrack.spotify_url,
+          },
         ].filter(Boolean),
       };
     }) || [];

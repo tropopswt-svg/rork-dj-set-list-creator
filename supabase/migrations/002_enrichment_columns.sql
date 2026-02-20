@@ -55,8 +55,8 @@ CREATE INDEX IF NOT EXISTS idx_sets_no_cover
   ON sets(id) WHERE cover_url IS NULL AND youtube_url IS NOT NULL;
 
 -- Sets missing artist link (used by backfill-links)
-CREATE INDEX IF NOT EXISTS idx_sets_no_artist_id
-  ON sets(id) WHERE artist_id IS NULL AND artist_name IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sets_no_dj_id
+  ON sets(id) WHERE dj_id IS NULL AND dj_name IS NOT NULL;
 
 -- Tracks missing artist link
 CREATE INDEX IF NOT EXISTS idx_tracks_no_artist_id

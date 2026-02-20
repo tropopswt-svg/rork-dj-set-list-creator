@@ -76,13 +76,13 @@ function calculateSimilarity(str1: string, str2: string): number {
 async function linkSetsToArtists(supabase: any, limit: number, dryRun: boolean) {
   console.log('\n--- Sets ↔ Artists Linkage ---\n');
 
-  // Find sets with artist_name but no artist_id
+  // Find sets with dj_name but no dj_id
   const { data: sets, error } = await supabase
     .from('sets')
-    .select('id, name, artist_name, artist_id')
-    .is('artist_id', null)
-    .not('artist_name', 'is', null)
-    .neq('artist_name', '')
+    .select('id, title, dj_name, dj_id')
+    .is('dj_id', null)
+    .not('dj_name', 'is', null)
+    .neq('dj_name', '')
     .limit(limit);
 
   if (error) {
@@ -117,7 +117,7 @@ async function linkSetsToArtists(supabase: any, limit: number, dryRun: boolean) 
   let notFound = 0;
 
   for (const set of sets) {
-    const djName = set.artist_name.trim();
+    const djName = set.dj_name.trim();
     const normalized = normalizeText(djName);
 
     // 1. Exact match
@@ -148,17 +148,17 @@ async function linkSetsToArtists(supabase: any, limit: number, dryRun: boolean) 
 
     if (matchId) {
       if (dryRun) {
-        console.log(`  DRY: Set "${set.name}" -> artist_id ${matchId}`);
+        console.log(`  DRY: Set "${set.title}" -> artist_id ${matchId}`);
       } else {
         await supabase
           .from('sets')
-          .update({ artist_id: matchId })
+          .update({ dj_id: matchId })
           .eq('id', set.id);
-        console.log(`  LINKED: "${djName}" in set "${set.name}"`);
+        console.log(`  LINKED: "${djName}" in set "${set.title}"`);
       }
       linked++;
     } else {
-      console.log(`  MISS: "${djName}" (set: "${set.name}")`);
+      console.log(`  MISS: "${djName}" (set: "${set.title}")`);
       notFound++;
     }
   }
@@ -379,7 +379,7 @@ async function updateArtistCounts(supabase: any, dryRun: boolean) {
     const { count: setsCount } = await supabase
       .from('sets')
       .select('id', { count: 'exact', head: true })
-      .eq('artist_id', artist.id);
+      .eq('dj_id', artist.id);
 
     const newTracksCount = tracksCount || 0;
     const newSetsCount = setsCount || 0;
