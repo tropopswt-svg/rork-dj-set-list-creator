@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicat
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import {
   ArrowLeft,
   Play,
@@ -20,7 +21,7 @@ import {
   Bookmark,
   BookmarkCheck,
   AlertCircle,
-  Radio,
+
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -36,7 +37,7 @@ import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import TrackDetailModal from '@/components/TrackDetailModal';
 import AudioPreviewModal from '@/components/AudioPreviewModal';
-import IdentifyTrackModal from '@/components/IdentifyTrackModal';
+
 import CommentsSection from '@/components/CommentsSection';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import SimilarSets from '@/components/SimilarSets';
@@ -76,6 +77,7 @@ function transformApiSet(apiSet: any): SetList {
       confidence: t.isId ? 0 : 1,
       isId: t.isId,
       isReleased: t.isReleased || false,
+              isUnreleased: t.isUnreleased || false,
       previewUrl: t.previewUrl || undefined,
       isrc: t.isrc || undefined,
       releaseDate: t.releaseDate || undefined,
@@ -112,6 +114,8 @@ export default function SetDetailScreen() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [needsEnrichment, setNeedsEnrichment] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
+  const [artistGenres, setArtistGenres] = useState<string[]>([]);
+  const [setGenre, setSetGenre] = useState<string | null>(null);
 
   // Add Source Modal state
   const [showSourceModal, setShowSourceModal] = useState(false);
@@ -124,9 +128,6 @@ export default function SetDetailScreen() {
   // Audio Preview Modal state (for identifying unknown tracks)
   const [audioPreviewTrack, setAudioPreviewTrack] = useState<Track | null>(null);
 
-  // Identify Track Modal state (for ACRCloud identification)
-  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
-  const [identifyTimestamp, setIdentifyTimestamp] = useState(0);
 
   // ID This Modal state
   const [showIDThisModal, setShowIDThisModal] = useState(false);
@@ -167,8 +168,10 @@ export default function SetDetailScreen() {
         const data = await response.json();
 
         if (data.success && data.set) {
-          // Store enrichment flag from API
+          // Store enrichment flag, artist genres, and set genre from API
           setNeedsEnrichment(!!data.needsEnrichment);
+          setArtistGenres(data.set.artistGenres || []);
+          setSetGenre(data.set.genre || null);
 
           // Transform API response to match SetList type
           const transformedSet: SetList = {
@@ -195,6 +198,7 @@ export default function SetDetailScreen() {
               confidence: t.isId ? 0 : 1,
               isId: t.isId,
               isReleased: t.isReleased || false,
+              isUnreleased: t.isUnreleased || false,
               previewUrl: t.previewUrl || undefined,
               isrc: t.isrc || undefined,
               releaseDate: t.releaseDate || undefined,
@@ -264,6 +268,7 @@ export default function SetDetailScreen() {
                 confidence: t.isId ? 0 : 1,
                 isId: t.isId,
                 isReleased: t.isReleased || false,
+              isUnreleased: t.isUnreleased || false,
                 previewUrl: t.previewUrl || undefined,
                 isrc: t.isrc || undefined,
                 releaseDate: t.releaseDate || undefined,
@@ -792,7 +797,7 @@ export default function SetDetailScreen() {
           <View style={{ alignItems: 'center', marginTop: 16, paddingHorizontal: 32 }}>
             <Text style={styles.loadingText}>{loadError}</Text>
             <Pressable
-              style={{ marginTop: 12, backgroundColor: Colors.dark.primary, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 }}
+              style={{ marginTop: 12, backgroundColor: 'rgba(196, 30, 58, 0.85)', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)', shadowColor: '#C41E3A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 6 }}
               onPress={() => {
                 setLoadError(null);
                 setIsLoadingSet(true);
@@ -810,7 +815,8 @@ export default function SetDetailScreen() {
                           addedAt: new Date(t.addedAt || Date.now()), source: t.source || 'database',
                           timestamp: t.timestamp || 0, timestampStr: t.timestampStr,
                           verified: t.verified || !t.isId, confidence: t.isId ? 0 : 1, isId: t.isId,
-                          isReleased: t.isReleased || false, previewUrl: t.previewUrl || undefined,
+                          isReleased: t.isReleased || false, isUnreleased: t.isUnreleased || false,
+                          previewUrl: t.previewUrl || undefined,
                           trackLinks: t.trackLinks || [], album: t.album || undefined,
                         })) || [],
                         hasGaps: data.set.hasGaps, gapCount: data.set.gapCount,
@@ -988,6 +994,7 @@ export default function SetDetailScreen() {
               verified: t.verified || !t.isId,
               isId: t.isId,
               isReleased: t.isReleased || false,
+              isUnreleased: t.isUnreleased || false,
               previewUrl: t.previewUrl || undefined,
               trackLinks: t.trackLinks || [],
             })) || [],
@@ -1003,35 +1010,6 @@ export default function SetDetailScreen() {
     }
   };
 
-  // Handle ACRCloud identification result from IdentifyTrackModal
-  const handleACRCloudIdentified = async (
-    track: { title: string; artist: string; album?: string; label?: string; confidence: number },
-    timestamp: number
-  ) => {
-    if (!setList) return;
-
-    // Create a new track object from the ACRCloud result
-    const newTrack: Track = {
-      id: `acrcloud-${Date.now()}`,
-      title: track.title,
-      artist: track.artist,
-      duration: 0,
-      coverUrl: '',
-      addedAt: new Date(),
-      source: 'database',
-      timestamp,
-      verified: true,
-      confidence: track.confidence / 100, // Convert percentage to 0-1
-      isId: false,
-    };
-
-    // Add track to set via context
-    addTracksToSet(setList.id, [newTrack]);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Award points for using ACRCloud to identify a track
-    await addPoints('track_confirmed', setList.id);
-  };
 
   // Get the source URL and platform for audio preview
   const getAudioSource = (): { url: string; platform: 'youtube' | 'soundcloud' } | null => {
@@ -1056,7 +1034,7 @@ export default function SetDetailScreen() {
       case 'soundcloud':
         return <Music2 size={size} color="#FF5500" />;
       default:
-        return <ExternalLink size={size} color={Colors.dark.textSecondary} />;
+        return <ExternalLink size={size} color="rgba(255,255,255,0.5)" />;
     }
   };
 
@@ -1088,6 +1066,8 @@ export default function SetDetailScreen() {
               style={styles.coverImage}
               cachePolicy="none"
               onError={handleCoverImageError}
+              placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+              transition={250}
             />
           ) : (
             <View style={[styles.coverImage, { backgroundColor: Colors.dark.surface }]} />
@@ -1107,7 +1087,7 @@ export default function SetDetailScreen() {
               }
             }}
           >
-            <ArrowLeft size={24} color={Colors.dark.text} />
+            <ArrowLeft size={24} color="#FFFFFF" />
           </Pressable>
         </View>
 
@@ -1134,9 +1114,9 @@ export default function SetDetailScreen() {
               </View>
               <Pressable style={styles.saveButton} onPress={handleSave}>
                 {isSaved ? (
-                  <BookmarkCheck size={24} color={Colors.dark.primary} fill={Colors.dark.primary} />
+                  <BookmarkCheck size={24} color="#C41E3A" fill="#C41E3A" />
                 ) : (
-                  <Bookmark size={24} color={Colors.dark.text} />
+                  <Bookmark size={24} color="#FFFFFF" />
                 )}
               </Pressable>
             </View>
@@ -1164,25 +1144,41 @@ export default function SetDetailScreen() {
               ) : null}
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
             </View>
-            
+
+            {/* Genre Pills */}
+            {(artistGenres.length > 0 || setGenre) && (
+              <View style={styles.genreRow}>
+                {(artistGenres.length > 0 ? artistGenres : [setGenre])
+                  .filter(Boolean).slice(0, 4).map((genre) => (
+                    <Pressable
+                      key={genre}
+                      style={styles.genrePill}
+                      onPress={() => router.push(`/(tabs)/(discover)/genre/${encodeURIComponent(genre)}`)}
+                    >
+                      <Text style={styles.genrePillText}>{genre}</Text>
+                    </Pressable>
+                ))}
+              </View>
+            )}
+
             {/* IDentified Matching Progress Banner */}
             {setList.isMatchingInProgress && (
               <View style={styles.matchingBanner}>
-                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                <ActivityIndicator size="small" color="#C41E3A" />
                 <View style={styles.matchingBannerContent}>
                   <Text style={styles.matchingBannerTitle}>Identifying tracks...</Text>
                   <Text style={styles.matchingBannerSubtext}>
                     Matching tracks to database
                   </Text>
                 </View>
-                <Sparkles size={18} color={Colors.dark.primary} />
+                <Sparkles size={18} color="#C41E3A" />
               </View>
             )}
-            
+
             {/* Matching Complete Banner */}
             {!setList.isMatchingInProgress && setList.matchingStats && (
               <View style={styles.matchingCompleteBanner}>
-                <CheckCircle size={16} color={Colors.dark.success} />
+                <CheckCircle size={16} color="#22C55E" />
                 <Text style={styles.matchingCompleteText}>
                   {setList.matchingStats.matched} matched
                   {setList.matchingStats.unreleased > 0 && (
@@ -1211,7 +1207,7 @@ export default function SetDetailScreen() {
               return (
                 <View style={styles.needsSourceBanner}>
                   <View style={styles.needsSourceIconContainer}>
-                    <AlertCircle size={20} color={Colors.dark.primary} />
+                    <AlertCircle size={20} color="#FF6B35" />
                   </View>
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Source Needed for Analysis</Text>
@@ -1253,14 +1249,14 @@ export default function SetDetailScreen() {
                   return (
                     <View style={styles.linkCardWrapper}>
                       <Pressable
-                        style={[styles.linkCard, styles.linkCardFilled]}
+                        style={[styles.linkCard, styles.linkCardFilled, { backgroundColor: 'rgba(255, 0, 0, 0.06)', borderColor: 'rgba(255, 0, 0, 0.15)' }]}
                         onPress={() => handleOpenSource(ytLink)}
                       >
                         <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
                           <Youtube size={16} color="#FF0000" />
                         </View>
-                        <Text style={styles.linkPlatform}>YouTube</Text>
-                        <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                        <Text style={[styles.linkPlatform, { color: '#CC0000' }]}>YouTube</Text>
+                        <ExternalLink size={12} color="#9C968E" style={styles.linkExternal} />
                       </Pressable>
                       <Pressable
                         style={styles.analyzeButton}
@@ -1331,10 +1327,10 @@ export default function SetDetailScreen() {
                     }}
                   >
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Youtube size={16} color={Colors.dark.textMuted} />
+                      <Youtube size={16} color="rgba(255,255,255,0.4)" />
                     </View>
                     <Text style={styles.linkPlatformEmpty}>Add YouTube</Text>
-                    <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
+                    <Plus size={14} color="#FFFFFF" style={styles.linkExternal} />
                   </Pressable>
                 );
               })()}
@@ -1347,17 +1343,17 @@ export default function SetDetailScreen() {
                   return (
                     <View style={styles.linkCardWrapper}>
                       <Pressable
-                        style={[styles.linkCard, styles.linkCardFilled]}
+                        style={[styles.linkCard, styles.linkCardFilled, { backgroundColor: 'rgba(255, 85, 0, 0.06)', borderColor: 'rgba(255, 85, 0, 0.15)' }]}
                         onPress={() => handleOpenSource(scLink)}
                       >
                         <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
                           <Music2 size={16} color="#FF5500" />
                         </View>
-                        <Text style={styles.linkPlatform}>SoundCloud</Text>
-                        <ExternalLink size={12} color={Colors.dark.textMuted} style={styles.linkExternal} />
+                        <Text style={[styles.linkPlatform, { color: '#E04D00' }]}>SoundCloud</Text>
+                        <ExternalLink size={12} color="#9C968E" style={styles.linkExternal} />
                       </Pressable>
                       <Pressable
-                        style={[styles.analyzeButton, { backgroundColor: '#FF5500' }]}
+                        style={[styles.analyzeButton, { backgroundColor: 'rgba(255, 85, 0, 0.75)' }]}
                         disabled={analyzing}
                         onPress={async () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -1425,10 +1421,10 @@ export default function SetDetailScreen() {
                     }}
                   >
                     <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Music2 size={16} color={Colors.dark.textMuted} />
+                      <Music2 size={16} color="rgba(255,255,255,0.4)" />
                     </View>
                     <Text style={styles.linkPlatformEmpty}>Add SoundCloud</Text>
-                    <Plus size={14} color={Colors.dark.primary} style={styles.linkExternal} />
+                    <Plus size={14} color="#FFFFFF" style={styles.linkExternal} />
                   </Pressable>
                 );
               })()}
@@ -1438,7 +1434,7 @@ export default function SetDetailScreen() {
           <View style={styles.statsSection}>
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.15)' }]}>
-                <Sparkles size={14} color={Colors.dark.primary} />
+                <Sparkles size={14} color="#00D4AA" />
               </View>
               <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
               <Text style={styles.statLabel}>trakd</Text>
@@ -1446,7 +1442,7 @@ export default function SetDetailScreen() {
 
             <View style={styles.statCard}>
               <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
-                <CheckCircle size={14} color={Colors.dark.success} />
+                <CheckCircle size={14} color="#22C55E" />
               </View>
               <Text style={styles.statValue}>{verifiedCount}</Text>
               <Text style={styles.statLabel}>Verified</Text>
@@ -1481,7 +1477,7 @@ export default function SetDetailScreen() {
                     </View>
                     <View style={styles.releaseStatusDivider} />
                     <View style={styles.releaseStatusItem}>
-                      <Sparkles size={10} color={Colors.dark.primary} />
+                      <Sparkles size={10} color="#C41E3A" />
                       <Text style={styles.releaseStatusValue}>{unreleasedCount}</Text>
                       <Text style={styles.releaseStatusLabel}>ID</Text>
                     </View>
@@ -1526,7 +1522,7 @@ export default function SetDetailScreen() {
 
           {setList.aiProcessed && (setList.commentsScraped || 0) > 0 && (
             <View style={styles.aiInfoBanner}>
-              <Sparkles size={14} color={Colors.dark.primary} />
+              <Sparkles size={14} color="#00D4AA" />
               <Text style={styles.aiInfoText}>
                 trakd • {setList.commentsScraped?.toLocaleString()} data points analyzed
               </Text>
@@ -1582,8 +1578,8 @@ export default function SetDetailScreen() {
               tracks={tracks}
               totalDuration={setList.totalDuration || 0}
               onGapPress={(timestamp) => {
-                setIdentifyTimestamp(timestamp);
-                setShowIdentifyModal(true);
+                setFillGapTimestamp(timestamp);
+                setShowFillGapModal(true);
               }}
             />
           )}
@@ -1607,7 +1603,7 @@ export default function SetDetailScreen() {
                   setShowAddModal(true);
                 }}
               >
-                <Plus size={16} color={Colors.dark.primary} />
+                <Plus size={16} color="#C41E3A" />
                 <Text style={styles.addTrackText}>Add Track</Text>
               </Pressable>
             </View>
@@ -1646,7 +1642,6 @@ export default function SetDetailScreen() {
                   return `${mins}:${s.toString().padStart(2, '0')}`;
                 };
                 const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
-                const hasAudioSource = !!audioSource;
                 const isPickMode = !!pickedTrack;
 
                 return (
@@ -1659,45 +1654,25 @@ export default function SetDetailScreen() {
                     onPress={isPickMode ? () => handlePlaceTrack(item.timestamp) : undefined}
                     disabled={!isPickMode}
                   >
-                    <View style={styles.gapTimestamp}>
-                      <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
-                    </View>
-                    <View style={styles.gapContent}>
-                      <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
-                      <Text style={[styles.gapText, isPickMode && styles.gapTextActive]}>
-                        {isPickMode ? 'Place here' : `~${estimatedTracks} track${estimatedTracks > 1 ? 's' : ''} missing`}
-                      </Text>
-                      <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
-                    </View>
-                    <View style={styles.gapActions}>
-                      {!isPickMode && hasAudioSource && (
-                        <Pressable
-                          style={styles.gapIdentifyButton}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                            setIdentifyTimestamp(item.timestamp);
-                            setShowIdentifyModal(true);
-                          }}
-                          hitSlop={8}
-                        >
-                          <Radio size={14} color={Colors.dark.primary} />
-                          <Text style={styles.gapIdentifyText}>Identify</Text>
-                        </Pressable>
-                      )}
-                      {!isPickMode && (
-                        <Pressable
-                          style={styles.gapAddButton}
-                          onPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            setFillGapTimestamp(item.timestamp);
-                            setShowFillGapModal(true);
-                          }}
-                          hitSlop={8}
-                        >
-                          <Plus size={16} color={Colors.dark.primary} />
-                        </Pressable>
-                      )}
-                    </View>
+                    <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
+                    <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
+                    <Text style={[styles.gapText, isPickMode && styles.gapTextActive]}>
+                      {isPickMode ? 'Place here' : `~${estimatedTracks} missing`}
+                    </Text>
+                    <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
+                    {!isPickMode && (
+                      <Pressable
+                        style={styles.gapAddButton}
+                        onPress={() => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setFillGapTimestamp(item.timestamp);
+                          setShowFillGapModal(true);
+                        }}
+                        hitSlop={8}
+                      >
+                        <Plus size={14} color="#C41E3A" />
+                      </Pressable>
+                    )}
                   </Pressable>
                 );
               }
@@ -1734,7 +1709,7 @@ export default function SetDetailScreen() {
                         } : undefined}
                       />
                       <View style={styles.votedTrackBadge}>
-                        <CheckCircle size={10} color={Colors.dark.primary} />
+                        <CheckCircle size={10} color="#00D4AA" />
                         <Text style={styles.votedTrackBadgeText}>Your vote • Pending</Text>
                       </View>
                     </View>
@@ -1817,7 +1792,7 @@ export default function SetDetailScreen() {
             
             {tracklistItems.length === 0 && unplacedTracks.length === 0 && (
               <View style={styles.emptyTracks}>
-                <Sparkles size={32} color={Colors.dark.textMuted} />
+                <Sparkles size={32} color="#9C968E" />
                 <Text style={styles.emptyText}>No tracks identified yet</Text>
                 <Text style={styles.emptySubtext}>
                   Be the first to contribute! Add a track you recognize.
@@ -1826,7 +1801,7 @@ export default function SetDetailScreen() {
                   style={styles.emptyAddButton}
                   onPress={() => setShowAddModal(true)}
                 >
-                  <Plus size={16} color={Colors.dark.background} />
+                  <Plus size={16} color="#FFF" />
                   <Text style={styles.emptyAddButtonText}>Add First Track</Text>
                 </Pressable>
               </View>
@@ -1837,7 +1812,7 @@ export default function SetDetailScreen() {
               <View style={styles.unplacedSection}>
                 <View style={styles.unplacedHeader}>
                   <View style={styles.unplacedTitleRow}>
-                    <ListMusic size={16} color={Colors.dark.textSecondary} />
+                    <ListMusic size={16} color="#6B6560" />
                     <Text style={styles.unplacedTitle}>
                       {tracklistItems.length > 0 ? 'Unplaced Tracks' : 'Track List'}
                     </Text>
@@ -2110,14 +2085,6 @@ export default function SetDetailScreen() {
         }
       />
 
-      <IdentifyTrackModal
-        visible={showIdentifyModal}
-        onClose={() => setShowIdentifyModal(false)}
-        onIdentified={handleACRCloudIdentified}
-        timestamp={identifyTimestamp}
-        setTitle={setList?.name}
-        audioUrl={audioSource?.url}
-      />
 
       <IDThisModal
         visible={showIDThisModal}
@@ -2165,9 +2132,17 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(10, 10, 10, 0.6)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
   },
   content: {
     paddingHorizontal: 20,
@@ -2198,32 +2173,40 @@ const styles = StyleSheet.create({
   artist: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#00D4AA',
   },
   artistSeparator: {
     fontSize: 15,
     fontWeight: '400' as const,
-    color: Colors.dark.primary,
+    color: '#00D4AA',
     opacity: 0.4,
     marginHorizontal: 8,
   },
   title: {
     fontSize: 24,
     fontWeight: '700' as const,
-    color: Colors.dark.text,
+    color: '#FFFFFF',
     lineHeight: 30,
   },
   saveButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(10, 10, 10, 0.55)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 4,
   },
   venue: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 6,
   },
   quickStats: {
@@ -2234,12 +2217,32 @@ const styles = StyleSheet.create({
   },
   quickStatText: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.45)',
   },
   quickStatDot: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.45)',
     marginHorizontal: 8,
+  },
+  genreRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  genrePill: {
+    backgroundColor: 'rgba(10, 10, 10, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.15)',
+  },
+  genrePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.75)',
   },
   linksSection: {
     marginBottom: 24,
@@ -2247,7 +2250,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 12,
@@ -2260,48 +2263,52 @@ const styles = StyleSheet.create({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
     gap: 8,
     flex: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderTopColor: 'rgba(255,255,255,1)',
+    borderBottomColor: 'rgba(232,226,217,0.5)',
   },
   linkCardFilled: {
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: 'rgba(255,255,255,0.9)',
   },
   linkCardEmpty: {
     borderWidth: 1,
-    borderColor: Colors.dark.surfaceLight,
+    borderColor: '#E8E2D9',
     borderStyle: 'dashed',
   },
   linkIconContainer: {
     width: 28,
     height: 28,
     borderRadius: 6,
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(240, 235, 227, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   linkIconEmpty: {
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: Colors.dark.surfaceLight,
+    borderColor: '#E8E2D9',
   },
   linkPlatform: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#2D2A26',
   },
   linkPlatformEmpty: {
     fontSize: 12,
     fontWeight: '500' as const,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
   },
   linkLabel: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
   },
   linkExternal: {
     marginLeft: 'auto',
@@ -2314,11 +2321,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: '#FF0000',
-    borderRadius: 6,
+    backgroundColor: 'rgba(255, 0, 0, 0.75)',
+    borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 10,
     marginTop: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#FF0000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   analyzeButtonText: {
     fontSize: 11,
@@ -2381,7 +2396,7 @@ const styles = StyleSheet.create({
   },
   conflictHintText: {
     fontSize: 12,
-    color: Colors.dark.primary,
+    color: '#FB923C',
     fontWeight: '600',
     textAlign: 'center',
   },
@@ -2392,10 +2407,19 @@ const styles = StyleSheet.create({
   },
   statCard: {
     flex: 1,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(10, 10, 10, 0.7)',
     borderRadius: 10,
     padding: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(0,0,0,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   statIconContainer: {
     width: 26,
@@ -2408,22 +2432,31 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 15,
     fontWeight: '700' as const,
-    color: Colors.dark.text,
+    color: '#FFFFFF',
     marginBottom: 1,
   },
   statLabel: {
     fontSize: 8,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.55)',
     textTransform: 'uppercase',
     letterSpacing: 0.2,
   },
   statCardWide: {
     flex: 1.2,
     minWidth: 85,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(10, 10, 10, 0.7)',
     borderRadius: 10,
     padding: 8,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(0,0,0,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   releaseStatusRow: {
     flexDirection: 'row',
@@ -2440,17 +2473,17 @@ const styles = StyleSheet.create({
   releaseStatusDivider: {
     width: 1,
     height: 10,
-    backgroundColor: Colors.dark.border,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     marginHorizontal: 4,
   },
   releaseStatusValue: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.dark.text,
+    color: '#FFFFFF',
   },
   releaseStatusLabel: {
     fontSize: 7,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.5)',
     textTransform: 'uppercase',
   },
   releaseStatusBarContainer: {
@@ -2468,7 +2501,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#22C55E',
   },
   releaseStatusBarUnreleased: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#C41E3A',
   },
   // Missing tracks banner
   missingTracksBanner: {
@@ -2499,7 +2532,7 @@ const styles = StyleSheet.create({
   },
   missingTracksHint: {
     fontSize: 11,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
   },
   // Timestamp conflict styles
   timestampConflict: {
@@ -2529,23 +2562,25 @@ const styles = StyleSheet.create({
   timestampConflictTime: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.45)',
     fontVariant: ['tabular-nums'] as any,
   },
   timestampConflictSubtext: {
     fontSize: 11,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
     marginBottom: 12,
     lineHeight: 16,
   },
   timestampConflictOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
     borderRadius: 10,
     padding: 10,
     marginBottom: 6,
     gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
   },
   timestampConflictVoteBtn: {
     width: 28,
@@ -2568,17 +2603,17 @@ const styles = StyleSheet.create({
   timestampConflictTrackTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#2D2A26',
   },
   timestampConflictTrackArtist: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
     marginTop: 1,
   },
   timestampConflictTrackTime: {
     fontSize: 11,
     fontWeight: '500' as const,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
     fontVariant: ['tabular-nums'] as any,
   },
   // Voted track with pending indicator
@@ -2605,35 +2640,49 @@ const styles = StyleSheet.create({
   votedTrackBadgeText: {
     fontSize: 10,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#00D4AA',
   },
   aiInfoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    backgroundColor: 'rgba(0, 212, 170, 0.08)',
     borderRadius: 10,
     padding: 10,
     marginBottom: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.2)',
   },
   playInAppButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
+    backgroundColor: 'rgba(10, 10, 10, 0.55)',
+    borderRadius: 16,
     padding: 14,
     marginBottom: 16,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 0, 0, 0.2)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
   },
   playInAppIcon: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FF0000',
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#FF0000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
   },
   playInAppInfo: {
     flex: 1,
@@ -2641,17 +2690,17 @@ const styles = StyleSheet.create({
   playInAppTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#FFFFFF',
   },
   playInAppSubtitle: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
   },
   aiInfoText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
   },
   tracksSection: {},
   tracksSectionHeader: {
@@ -2663,7 +2712,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#2D2A26',
   },
   addTrackButton: {
     flexDirection: 'row',
@@ -2671,30 +2720,43 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderTopColor: 'rgba(255,255,255,1)',
+    borderBottomColor: 'rgba(232,226,217,0.6)',
+    shadowColor: 'rgba(45, 42, 38, 0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   addTrackText: {
     fontSize: 13,
-    color: Colors.dark.primary,
+    color: '#C41E3A',
     fontWeight: '500' as const,
   },
   emptyTracks: {
     alignItems: 'center',
     paddingVertical: 48,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderTopColor: 'rgba(255,255,255,1)',
+    borderBottomColor: 'rgba(232,226,217,0.6)',
   },
   emptyText: {
     fontSize: 16,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#2D2A26',
     marginTop: 16,
     marginBottom: 6,
   },
   emptySubtext: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
     textAlign: 'center',
     paddingHorizontal: 40,
     marginBottom: 20,
@@ -2703,114 +2765,91 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(0, 212, 170, 0.8)',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowColor: '#00D4AA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   emptyAddButtonText: {
-    color: Colors.dark.background,
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600' as const,
   },
   gapIndicator: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 107, 53, 0.06)',
-    borderRadius: 6,
-    paddingVertical: 6,
+    paddingVertical: 3,
     paddingHorizontal: 10,
-    marginBottom: 4,
-    marginTop: -2,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 53, 0.15)',
-    borderStyle: 'dashed',
-    minHeight: 32,
-  },
-  gapTimestamp: {
-    width: 38,
-    marginRight: 8,
+    marginBottom: 2,
+    gap: 6,
   },
   gapTimestampText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: 'rgba(255, 107, 53, 0.6)',
     fontVariant: ['tabular-nums'],
-  },
-  gapContent: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
   },
   gapLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255, 107, 53, 0.25)',
+    backgroundColor: 'rgba(255, 107, 53, 0.15)',
   },
   gapText: {
-    fontSize: 10,
-    color: Colors.dark.primary,
+    fontSize: 9,
+    color: 'rgba(255, 107, 53, 0.5)',
     fontWeight: '500' as const,
   },
   gapIndicatorDropTarget: {
     backgroundColor: 'rgba(255, 107, 53, 0.12)',
-    borderColor: Colors.dark.primary,
+    borderWidth: 1,
+    borderColor: '#FF6B35',
     borderStyle: 'dashed',
-    minHeight: 44,
+    borderRadius: 6,
+    minHeight: 36,
   },
   gapLineActive: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: '#C41E3A',
     height: 2,
   },
   gapTextActive: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.dark.primary,
-  },
-  gapActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginLeft: 8,
-  },
-  gapIdentifyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 212, 170, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  gapIdentifyText: {
-    fontSize: 10,
-    fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#C41E3A',
   },
   gapAddButton: {
-    padding: 4,
+    padding: 2,
   },
   unplacedIdsBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
     marginBottom: 12,
     gap: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderTopColor: 'rgba(255,255,255,1)',
+    borderBottomColor: 'rgba(232,226,217,0.5)',
   },
   unplacedIdsText: {
     flex: 1,
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
   },
   unplacedSection: {
     marginTop: 24,
     paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: Colors.dark.border,
+    borderTopColor: '#E8E2D9',
   },
   unplacedHeader: {
     marginBottom: 12,
@@ -2824,34 +2863,45 @@ const styles = StyleSheet.create({
   unplacedTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
   },
   unplacedSubtitle: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: '#9C968E',
   },
   missingTrackCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
     borderRadius: 14,
     padding: 16,
     marginTop: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    borderTopColor: 'rgba(255,255,255,1)',
+    borderBottomColor: 'rgba(232,226,217,0.6)',
+    shadowColor: 'rgba(45, 42, 38, 0.1)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   missingTrackText: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
   },
   contributeButton: {
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.2)',
   },
   contributeButtonText: {
     fontSize: 13,
-    color: Colors.dark.primary,
+    color: '#C41E3A',
     fontWeight: '600' as const,
   },
   loadingContainer: {
@@ -2889,11 +2939,11 @@ const styles = StyleSheet.create({
   matchingBannerTitle: {
     fontSize: 14,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#FF6B35',
   },
   matchingBannerSubtext: {
     fontSize: 12,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
     marginTop: 2,
   },
   matchingCompleteBanner: {
@@ -2909,10 +2959,10 @@ const styles = StyleSheet.create({
   matchingCompleteText: {
     fontSize: 13,
     fontWeight: '500' as const,
-    color: Colors.dark.success,
+    color: '#22C55E',
   },
   matchingUnreleasedText: {
-    color: Colors.dark.primary,
+    color: '#C41E3A',
   },
   // Needs Source Banner styles
   needsSourceBanner: {
@@ -2940,36 +2990,43 @@ const styles = StyleSheet.create({
   needsSourceTitle: {
     fontSize: 15,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#FF6B35',
     marginBottom: 4,
   },
   needsSourceText: {
     fontSize: 13,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
     lineHeight: 18,
   },
   // Pick-and-place styles
   unplacedTrackCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.65)',
     borderRadius: 10,
     marginHorizontal: 16,
     marginBottom: 8,
     padding: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.85)',
+    borderTopColor: 'rgba(255,255,255,0.95)',
+    borderBottomColor: 'rgba(232,226,217,0.5)',
+    shadowColor: 'rgba(45, 42, 38, 0.08)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   unplacedTrackCardPicked: {
-    borderColor: Colors.dark.primary,
+    borderColor: 'rgba(0, 212, 170, 0.5)',
     borderWidth: 2,
-    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    backgroundColor: 'rgba(0, 212, 170, 0.08)',
   },
   unplacedTrackIndex: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(240, 235, 227, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 10,
@@ -2977,7 +3034,7 @@ const styles = StyleSheet.create({
   unplacedTrackIndexText: {
     fontSize: 11,
     fontWeight: '700' as const,
-    color: Colors.dark.textSecondary,
+    color: '#9C968E',
   },
   unplacedTrackInfo: {
     flex: 1,
@@ -2985,15 +3042,15 @@ const styles = StyleSheet.create({
   unplacedTrackTitle: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: '#2D2A26',
     marginBottom: 2,
   },
   unplacedTrackArtist: {
     fontSize: 11,
-    color: Colors.dark.textSecondary,
+    color: '#6B6560',
   },
   pickedBadge: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(0, 212, 170, 0.8)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -3010,13 +3067,16 @@ const styles = StyleSheet.create({
     bottom: 100,
     left: 16,
     right: 16,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(10, 10, 10, 0.75)',
     borderRadius: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
     elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.3)',
+    borderTopColor: 'rgba(255,255,255,0.15)',
   },
   pickedBannerContent: {
     flexDirection: 'row',

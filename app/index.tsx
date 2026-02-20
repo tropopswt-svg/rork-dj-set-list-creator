@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 12,
   },
   animationArea: {
-    height: SCREEN_HEIGHT * 0.4,
+    height: SCREEN_HEIGHT * 0.28,
     width: '100%',
     overflow: 'visible',
   },
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   },
   buttonArea: {
     alignItems: 'center',
-    paddingTop: 20,
+    paddingTop: 8,
   },
   exploreButton: {
     backgroundColor: '#C41E3A',
