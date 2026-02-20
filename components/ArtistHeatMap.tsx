@@ -198,6 +198,30 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     };
   }, [venues]);
 
+  // Calculate zoomed viewBox centered on venue cluster
+  const svgViewBox = useMemo(() => {
+    if (venues.length === 0) return '0 0 1000 500';
+
+    const coords = venues.map(v => toSvgCoords(v.lat, v.lng));
+    const xs = coords.map(c => c.x);
+    const ys = coords.map(c => c.y);
+
+    const centerX = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const centerY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    const spanY = Math.max(...ys) - Math.min(...ys);
+
+    // Width should show enough context — at least 300 SVG units, at most full world
+    const w = Math.min(1000, Math.max(300, spanX * 3));
+    const h = w / 2; // maintain 2:1 aspect ratio
+
+    // Center on the cluster, clamp to world bounds
+    const x = Math.max(0, Math.min(centerX - w / 2, 1000 - w));
+    const y = Math.max(0, Math.min(centerY - h / 2, 500 - h));
+
+    return `${Math.round(x)} ${Math.round(y)} ${Math.round(w)} ${Math.round(h)}`;
+  }, [venues]);
+
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
@@ -205,7 +229,7 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
   const renderSvgMap = () => (
     <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
       <Svg
-        viewBox="0 0 1000 500"
+        viewBox={venues.length > 0 ? svgViewBox : '0 0 1000 500'}
         style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
         preserveAspectRatio="xMidYMid slice"
       >
