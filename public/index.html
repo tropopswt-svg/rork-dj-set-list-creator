@@ -49,12 +49,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      opacity: 0.5;
+      opacity: 0.6;
       pointer-events: none;
     }
 
     .hero-map-bg svg {
-      width: 140%;
+      width: 160%;
       max-width: none;
       height: auto;
     }
@@ -77,17 +77,20 @@
     .hero .tagline {
       font-size: 18px;
       color: rgba(245, 240, 232, 0.8);
-      margin-bottom: 8px;
+      margin-bottom: 32px;
       line-height: 1.5;
     }
 
     .hero .map-label {
-      font-size: 12px;
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      font-size: 10px;
       font-weight: 600;
       letter-spacing: 2px;
       text-transform: uppercase;
-      color: #C41E3A;
-      margin-bottom: 32px;
+      color: rgba(196, 30, 58, 0.6);
+      z-index: 3;
     }
 
     /* Form */
@@ -267,115 +270,116 @@
   <!-- Hero with map background -->
   <section class="hero">
     <div class="hero-map-bg">
-      <svg viewBox="80 60 600 280" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <filter id="glow">
-            <feGaussianBlur stdDeviation="6" result="blur"/>
+            <feGaussianBlur stdDeviation="8" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-big">
+            <feGaussianBlur stdDeviation="14" result="blur"/>
             <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
           </filter>
         </defs>
 
-        <!-- Subtle continent outlines -->
-        <g fill="rgba(245,240,232,0.03)" stroke="rgba(245,240,232,0.06)" stroke-width="0.5">
-          <path d="M120,90 L160,75 L200,72 L230,80 L240,95 L235,110 L220,120 L230,135 L225,155 L210,165 L195,160 L180,170 L165,165 L155,150 L140,145 L130,130 L125,115 Z"/>
-          <path d="M195,160 L210,165 L215,175 L225,185 L230,195 L220,198 L210,192 L200,180 L195,170 Z"/>
-          <path d="M230,195 L250,190 L275,195 L290,210 L300,230 L305,260 L295,285 L280,305 L260,315 L245,305 L240,280 L235,255 L230,230 L225,210 Z"/>
-          <path d="M460,78 L475,72 L495,70 L510,72 L525,78 L535,85 L530,95 L520,105 L530,112 L520,118 L505,115 L495,120 L480,118 L470,112 L465,100 L458,90 Z"/>
-          <path d="M470,130 L490,125 L510,128 L530,135 L545,150 L550,170 L548,195 L535,220 L520,240 L505,250 L490,248 L478,235 L470,215 L465,190 L460,165 L462,145 Z"/>
-          <path d="M458,82 L465,78 L468,85 L464,92 L458,90 Z"/>
-          <path d="M535,78 L570,72 L620,68 L660,75 L680,85 L690,100 L685,115 L670,125 L650,130 L630,128 L610,120 L590,115 L570,110 L555,100 L540,90 Z"/>
-          <path d="M640,220 L670,215 L690,225 L695,240 L685,255 L665,260 L645,252 L635,238 Z"/>
+        <!-- Large ambient glow for hotspots -->
+        <g filter="url(#glow-big)">
+          <circle cx="504" cy="142" r="18" fill="#C41E3A" opacity="0.25"/><!-- Europe/Ibiza region -->
+          <circle cx="500" cy="107" r="16" fill="#C41E3A" opacity="0.2"/><!-- UK region -->
+          <circle cx="294" cy="137" r="14" fill="#C41E3A" opacity="0.18"/><!-- US East -->
+          <circle cx="177" cy="150" r="12" fill="#C41E3A" opacity="0.15"/><!-- US West -->
         </g>
 
         <!-- Venue heatmap dots -->
         <g filter="url(#glow)">
           <!-- IBIZA cluster -->
-          <circle cx="504" cy="142" r="5" fill="#C41E3A" opacity="0.9"/>
-          <circle cx="502" cy="144" r="4" fill="#C41E3A" opacity="0.7"/>
-          <circle cx="506" cy="143" r="4" fill="#C41E3A" opacity="0.7"/>
-          <circle cx="503" cy="140" r="3" fill="#C41E3A" opacity="0.6"/>
-          <circle cx="505" cy="145" r="3" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="504" cy="142" r="7" fill="#C41E3A" opacity="0.9"/>
+          <circle cx="501" cy="144" r="5.5" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="507" cy="143" r="5.5" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="503" cy="139" r="4.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="506" cy="146" r="4.5" fill="#C41E3A" opacity="0.6"/>
           <!-- LONDON cluster -->
-          <circle cx="500" cy="107" r="4.5" fill="#C41E3A" opacity="0.85"/>
-          <circle cx="498" cy="108" r="3.5" fill="#C41E3A" opacity="0.7"/>
-          <circle cx="502" cy="106" r="3" fill="#C41E3A" opacity="0.6"/>
-          <circle cx="499" cy="109" r="3" fill="#C41E3A" opacity="0.5"/>
+          <circle cx="500" cy="107" r="6.5" fill="#C41E3A" opacity="0.85"/>
+          <circle cx="497" cy="108" r="5" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="503" cy="106" r="4.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="499" cy="110" r="4" fill="#C41E3A" opacity="0.5"/>
           <!-- BERLIN cluster -->
-          <circle cx="537" cy="104" r="4" fill="#C41E3A" opacity="0.85"/>
-          <circle cx="536" cy="105" r="3" fill="#C41E3A" opacity="0.6"/>
-          <circle cx="538" cy="103" r="3" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="537" cy="104" r="6" fill="#C41E3A" opacity="0.85"/>
+          <circle cx="535" cy="106" r="4.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="539" cy="102" r="4.5" fill="#C41E3A" opacity="0.6"/>
           <!-- AMSTERDAM cluster -->
-          <circle cx="514" cy="104" r="3.5" fill="#C41E3A" opacity="0.8"/>
-          <circle cx="512" cy="105" r="3" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="514" cy="104" r="5" fill="#C41E3A" opacity="0.8"/>
+          <circle cx="511" cy="106" r="4" fill="#C41E3A" opacity="0.6"/>
           <!-- NYC cluster -->
-          <circle cx="294" cy="137" r="4.5" fill="#C41E3A" opacity="0.85"/>
-          <circle cx="293" cy="138" r="3.5" fill="#C41E3A" opacity="0.65"/>
-          <circle cx="296" cy="136" r="3" fill="#C41E3A" opacity="0.5"/>
+          <circle cx="294" cy="137" r="6.5" fill="#C41E3A" opacity="0.85"/>
+          <circle cx="292" cy="139" r="5" fill="#C41E3A" opacity="0.65"/>
+          <circle cx="297" cy="135" r="4" fill="#C41E3A" opacity="0.5"/>
           <!-- TOMORROWLAND -->
-          <circle cx="512" cy="108" r="3" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="512" cy="108" r="4" fill="#C41E3A" opacity="0.7"/>
           <!-- PARIS -->
-          <circle cx="507" cy="114" r="2.5" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="507" cy="114" r="3.5" fill="#C41E3A" opacity="0.7"/>
           <!-- BARCELONA -->
-          <circle cx="506" cy="135" r="3" fill="#C41E3A" opacity="0.75"/>
+          <circle cx="506" cy="135" r="4.5" fill="#C41E3A" opacity="0.75"/>
           <!-- MANCHESTER -->
-          <circle cx="494" cy="101" r="2.5" fill="#C41E3A" opacity="0.65"/>
+          <circle cx="494" cy="101" r="3.5" fill="#C41E3A" opacity="0.65"/>
           <!-- BRISTOL -->
-          <circle cx="493" cy="107" r="2.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="493" cy="107" r="3.5" fill="#C41E3A" opacity="0.6"/>
           <!-- EDINBURGH -->
-          <circle cx="491" cy="95" r="2" fill="#C41E3A" opacity="0.55"/>
+          <circle cx="491" cy="95" r="3" fill="#C41E3A" opacity="0.55"/>
           <!-- BELFAST -->
-          <circle cx="484" cy="98" r="2" fill="#C41E3A" opacity="0.55"/>
+          <circle cx="484" cy="98" r="3" fill="#C41E3A" opacity="0.55"/>
           <!-- DUBLIN -->
-          <circle cx="483" cy="102" r="2" fill="#C41E3A" opacity="0.55"/>
+          <circle cx="483" cy="102" r="3" fill="#C41E3A" opacity="0.55"/>
           <!-- MAMAIA Romania -->
-          <circle cx="580" cy="127" r="2.5" fill="#C41E3A" opacity="0.65"/>
+          <circle cx="580" cy="127" r="3.5" fill="#C41E3A" opacity="0.65"/>
           <!-- COACHELLA / LA -->
-          <circle cx="177" cy="157" r="3.5" fill="#C41E3A" opacity="0.75"/>
-          <circle cx="171" cy="155" r="3" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="177" cy="157" r="5" fill="#C41E3A" opacity="0.75"/>
+          <circle cx="171" cy="155" r="4" fill="#C41E3A" opacity="0.6"/>
           <!-- LAS VEGAS -->
-          <circle cx="181" cy="149" r="3" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="181" cy="149" r="4.5" fill="#C41E3A" opacity="0.7"/>
           <!-- RED ROCKS -->
-          <circle cx="208" cy="140" r="2.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="208" cy="140" r="3.5" fill="#C41E3A" opacity="0.6"/>
           <!-- BURNING MAN -->
-          <circle cx="169" cy="137" r="2" fill="#C41E3A" opacity="0.55"/>
+          <circle cx="169" cy="137" r="3" fill="#C41E3A" opacity="0.55"/>
           <!-- TULUM -->
-          <circle cx="257" cy="194" r="3" fill="#C41E3A" opacity="0.7"/>
-          <circle cx="258" cy="193" r="2.5" fill="#C41E3A" opacity="0.55"/>
+          <circle cx="257" cy="194" r="4.5" fill="#C41E3A" opacity="0.7"/>
+          <circle cx="259" cy="192" r="3.5" fill="#C41E3A" opacity="0.55"/>
           <!-- SAO PAULO -->
-          <circle cx="371" cy="315" r="2.5" fill="#C41E3A" opacity="0.6"/>
+          <circle cx="371" cy="315" r="3.5" fill="#C41E3A" opacity="0.6"/>
           <!-- GLASTONBURY -->
-          <circle cx="493" cy="108" r="2" fill="#C41E3A" opacity="0.5"/>
+          <circle cx="493" cy="108" r="3" fill="#C41E3A" opacity="0.5"/>
         </g>
 
         <!-- Bright pin dots -->
         <g>
-          <circle cx="504" cy="142" r="1.5" fill="#F5F0E8" opacity="0.9"/>
-          <circle cx="500" cy="107" r="1.5" fill="#F5F0E8" opacity="0.9"/>
-          <circle cx="537" cy="104" r="1.5" fill="#F5F0E8" opacity="0.9"/>
-          <circle cx="514" cy="104" r="1.5" fill="#F5F0E8" opacity="0.85"/>
-          <circle cx="294" cy="137" r="1.5" fill="#F5F0E8" opacity="0.9"/>
-          <circle cx="512" cy="108" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="507" cy="114" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="506" cy="135" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="494" cy="101" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="580" cy="127" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="177" cy="157" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="181" cy="149" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="208" cy="140" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="257" cy="194" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="371" cy="315" r="1" fill="#F5F0E8" opacity="0.8"/>
-          <circle cx="169" cy="137" r="1" fill="#F5F0E8" opacity="0.7"/>
-          <circle cx="484" cy="98" r="1" fill="#F5F0E8" opacity="0.7"/>
-          <circle cx="483" cy="102" r="1" fill="#F5F0E8" opacity="0.7"/>
-          <circle cx="491" cy="95" r="1" fill="#F5F0E8" opacity="0.7"/>
+          <circle cx="504" cy="142" r="2" fill="#F5F0E8" opacity="0.9"/>
+          <circle cx="500" cy="107" r="2" fill="#F5F0E8" opacity="0.9"/>
+          <circle cx="537" cy="104" r="2" fill="#F5F0E8" opacity="0.9"/>
+          <circle cx="514" cy="104" r="2" fill="#F5F0E8" opacity="0.85"/>
+          <circle cx="294" cy="137" r="2" fill="#F5F0E8" opacity="0.9"/>
+          <circle cx="512" cy="108" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="507" cy="114" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="506" cy="135" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="494" cy="101" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="580" cy="127" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="177" cy="157" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="181" cy="149" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="208" cy="140" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="257" cy="194" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="371" cy="315" r="1.5" fill="#F5F0E8" opacity="0.8"/>
+          <circle cx="169" cy="137" r="1.5" fill="#F5F0E8" opacity="0.7"/>
+          <circle cx="484" cy="98" r="1.5" fill="#F5F0E8" opacity="0.7"/>
+          <circle cx="483" cy="102" r="1.5" fill="#F5F0E8" opacity="0.7"/>
+          <circle cx="491" cy="95" r="1.5" fill="#F5F0E8" opacity="0.7"/>
         </g>
       </svg>
     </div>
 
+    <p class="map-label">Sets TRAKD Worldwide</p>
+
     <div class="hero-content">
       <h1>TRAKD</h1>
       <p class="tagline">Find every ID.<br>From the set to your playlist.</p>
-      <p class="map-label">Sets TRAKD Worldwide</p>
 
       <form class="signup-form" id="waitlistForm">
         <input type="text" id="nameInput" placeholder="Your name" required autocomplete="name">
