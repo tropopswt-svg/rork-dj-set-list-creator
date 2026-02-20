@@ -97,25 +97,51 @@
       gap: 10px;
     }
 
+    /* Input waveform wrappers */
+    .input-wave-wrap {
+      position: relative;
+      border-radius: 12px;
+      overflow: hidden;
+      background: rgba(15, 15, 15, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-top-color: rgba(255, 255, 255, 0.2);
+      border-bottom-color: rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(20px) saturate(1.2);
+      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+    }
+
+    .input-wave-wrap:focus-within {
+      border-color: rgba(255, 255, 255, 0.2);
+      background: rgba(15, 15, 15, 0.8);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 16px rgba(196, 30, 58, 0.1);
+    }
+
+    .wave-bg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
     .signup-form input[type="text"],
     .signup-form input[type="email"] {
       width: 100%;
       padding: 14px 16px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-top-color: rgba(255, 255, 255, 0.2);
-      border-bottom-color: rgba(0, 0, 0, 0.25);
-      background: rgba(15, 15, 15, 0.7);
-      backdrop-filter: blur(20px) saturate(1.2);
-      -webkit-backdrop-filter: blur(20px) saturate(1.2);
+      border-radius: 0;
+      border: none;
+      background: transparent;
       color: #F5F0E8;
       font-size: 16px;
       font-family: 'Inter', sans-serif;
       outline: none;
-      transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
       -webkit-appearance: none;
       appearance: none;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      position: relative;
+      z-index: 1;
     }
 
     .signup-form input[type="text"]::placeholder,
@@ -125,9 +151,7 @@
 
     .signup-form input[type="text"]:focus,
     .signup-form input[type="email"]:focus {
-      border-color: rgba(255, 255, 255, 0.2);
-      background: rgba(15, 15, 15, 0.8);
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 16px rgba(196, 30, 58, 0.1);
+      background: transparent;
     }
 
     .signup-form button {
@@ -451,9 +475,18 @@
       <p class="tagline">1001 Tracklists, but updated.</p>
 
       <form class="signup-form" id="waitlistForm">
-        <input type="text" id="nameInput" placeholder="Your name" required autocomplete="name">
-        <input type="text" id="cityInput" placeholder="Your city" required autocomplete="address-level2">
-        <input type="email" id="emailInput" placeholder="Your email" required autocomplete="email" inputmode="email">
+        <div class="input-wave-wrap">
+          <canvas class="wave-bg" aria-hidden="true"></canvas>
+          <input type="text" id="nameInput" placeholder="Your name" required autocomplete="name">
+        </div>
+        <div class="input-wave-wrap">
+          <canvas class="wave-bg" aria-hidden="true"></canvas>
+          <input type="text" id="cityInput" placeholder="Your city" required autocomplete="address-level2">
+        </div>
+        <div class="input-wave-wrap">
+          <canvas class="wave-bg" aria-hidden="true"></canvas>
+          <input type="email" id="emailInput" placeholder="Your email" required autocomplete="email" inputmode="email">
+        </div>
         <button type="submit" id="submitBtn">Join the Waitlist</button>
         <p class="form-message" id="formMessage"></p>
       </form>
@@ -569,6 +602,81 @@
           submitBtn.textContent = 'Join the Waitlist';
         }
       });
+    })();
+  </script>
+
+  <script>
+    // Animated waveform bars inside inputs
+    (function() {
+      var wraps = document.querySelectorAll('.input-wave-wrap');
+      var dpr = window.devicePixelRatio || 1;
+      var waves = [];
+
+      wraps.forEach(function(wrap, idx) {
+        var canvas = wrap.querySelector('.wave-bg');
+        var rect = wrap.getBoundingClientRect();
+        canvas.width = Math.round(rect.width * dpr);
+        canvas.height = Math.round(rect.height * dpr);
+
+        // Generate random bar heights (normalized 0.15–1.0)
+        var barCount = 50;
+        var bars = [];
+        for (var i = 0; i < barCount; i++) {
+          bars.push(0.15 + Math.random() * 0.85);
+        }
+
+        waves.push({
+          canvas: canvas,
+          ctx: canvas.getContext('2d'),
+          bars: bars,
+          speed: (16 + idx * 5) * dpr // slightly different speed per row
+        });
+      });
+
+      function draw(t) {
+        waves.forEach(function(w) {
+          var cw = w.canvas.width;
+          var ch = w.canvas.height;
+          var ctx = w.ctx;
+          ctx.clearRect(0, 0, cw, ch);
+
+          var barW = Math.round(2 * dpr);
+          var gap = Math.round(7 * dpr);
+          var step = barW + gap;
+          var r = barW / 2;
+          var scroll = (t / 1000) * w.speed;
+
+          var startIdx = Math.floor(scroll / step) - 1;
+          var visibleCount = Math.ceil(cw / step) + 2;
+
+          ctx.fillStyle = 'rgba(196, 30, 58, 0.12)';
+
+          for (var i = startIdx; i <= startIdx + visibleCount; i++) {
+            var barIdx = ((i % w.bars.length) + w.bars.length) % w.bars.length;
+            var x = Math.round(i * step - scroll);
+            var barH = Math.max(Math.round(w.bars[barIdx] * ch * 0.6), 2);
+            var y = Math.round((ch - barH) / 2);
+
+            // Rounded rect bars
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + barW - r, y);
+            ctx.quadraticCurveTo(x + barW, y, x + barW, y + r);
+            ctx.lineTo(x + barW, y + barH - r);
+            ctx.quadraticCurveTo(x + barW, y + barH, x + barW - r, y + barH);
+            ctx.lineTo(x + r, y + barH);
+            ctx.quadraticCurveTo(x, y + barH, x, y + barH - r);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fill();
+          }
+        });
+
+        requestAnimationFrame(draw);
+      }
+
+      requestAnimationFrame(draw);
     })();
   </script>
 </body>
