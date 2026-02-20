@@ -911,6 +911,9 @@ export default function FeedScreen() {
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(false);
   const [nowPlaying, setNowPlaying] = useState<{ title: string; artist: string } | null>(null);
+  const isScrollingRef = useRef(false);
+  const scrollCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasPlayedOnceRef = useRef(false); // fade in volume on first play
 
   // Configure audio session once
   useEffect(() => {
@@ -944,10 +947,12 @@ export default function FeedScreen() {
 
   const loadAndPlay = useCallback(async (gen: number, url: string, title: string, artist: string): Promise<boolean> => {
     if (audioGenRef.current !== gen) return false;
+    const targetVol = isMutedRef.current ? 0 : 0.7;
+    const isFirstPlay = !hasPlayedOnceRef.current;
     try {
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
-        { shouldPlay: true, isLooping: true, volume: isMutedRef.current ? 0 : 0.7 }
+        { shouldPlay: true, isLooping: true, volume: isFirstPlay ? 0 : targetVol }
       );
       if (audioGenRef.current !== gen) {
         sound.unloadAsync().catch(() => {});
@@ -961,6 +966,17 @@ export default function FeedScreen() {
       }
       soundRef.current = sound;
       setNowPlaying({ title, artist });
+      hasPlayedOnceRef.current = true;
+      // Gentle fade-in on first play (0 → target over ~1.5s)
+      if (isFirstPlay && targetVol > 0) {
+        const steps = 8;
+        const stepMs = 180;
+        for (let i = 1; i <= steps; i++) {
+          await new Promise(r => setTimeout(r, stepMs));
+          if (audioGenRef.current !== gen) return true; // scrolled away, sound already set
+          await sound.setVolumeAsync(targetVol * (i / steps)).catch(() => {});
+        }
+      }
       return true;
     } catch {
       return false;
@@ -1258,8 +1274,17 @@ export default function FeedScreen() {
   const CARD_GAP = 10;
   const cardPageHeight = fullFeedHeight - CARD_GAP - 16; // slightly shorter cards
 
-  // ── Audio: detect visible card from paging scroll ──
+  // ── Scroll tracking: suppress accidental taps during/after scroll ──
+  const handleScrollBegin = useCallback(() => {
+    isScrollingRef.current = true;
+    if (scrollCooldownRef.current) clearTimeout(scrollCooldownRef.current);
+  }, []);
+
   const handleScrollEnd = useCallback((e: any) => {
+    // Mark scrolling done after a short cooldown (prevents tap-on-land)
+    if (scrollCooldownRef.current) clearTimeout(scrollCooldownRef.current);
+    scrollCooldownRef.current = setTimeout(() => { isScrollingRef.current = false; }, 300);
+
     if (fullFeedHeight <= 0) return;
     const offsetY = e.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / fullFeedHeight);
@@ -1281,6 +1306,8 @@ export default function FeedScreen() {
         item={item}
         cardHeight={cardPageHeight}
         onPress={() => {
+          // Suppress accidental taps during/right-after scroll
+          if (isScrollingRef.current) return;
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           stopAudio();
           router.push(`/(tabs)/(discover)/${item.set.id}`);
@@ -1348,15 +1375,17 @@ export default function FeedScreen() {
           />
         </View>
 
-        {/* Now playing indicator */}
-        {nowPlaying && !isMuted && (
-          <View style={styles.nowPlayingBar}>
-            <Music size={10} color="#C41E3A" />
-            <Text style={styles.nowPlayingText} numberOfLines={1}>
-              {nowPlaying.title} — {nowPlaying.artist}
-            </Text>
-          </View>
-        )}
+        {/* Now playing indicator — always rendered to avoid layout shift */}
+        <View style={styles.nowPlayingBar}>
+          {nowPlaying && !isMuted ? (
+            <>
+              <Music size={10} color="#C41E3A" />
+              <Text style={styles.nowPlayingText} numberOfLines={1}>
+                {nowPlaying.title} — {nowPlaying.artist}
+              </Text>
+            </>
+          ) : null}
+        </View>
 
         {/* TikTok-style paging feed */}
         <View
@@ -1375,8 +1404,10 @@ export default function FeedScreen() {
               renderItem={renderFeedCard}
               keyExtractor={(item) => item.id}
               pagingEnabled
+              decelerationRate="fast"
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.feedListContent}
+              onScrollBeginDrag={handleScrollBegin}
               onMomentumScrollEnd={handleScrollEnd}
               onScrollEndDrag={handleScrollEnd}
               refreshControl={
@@ -1498,8 +1529,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 16,
-    paddingVertical: 4,
-    backgroundColor: 'rgba(196, 30, 58, 0.06)',
+    height: 22,
+    overflow: 'hidden',
   },
   nowPlayingText: {
     flex: 1,
