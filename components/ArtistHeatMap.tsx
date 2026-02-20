@@ -196,63 +196,98 @@ export default function ArtistHeatMap({ artistId, artistSlug, backgroundMode }: 
     };
   }, [venues]);
 
+  // Calculate SVG viewBox zoomed into venue cluster
+  const svgViewBox = useMemo(() => {
+    if (venues.length === 0) return '0 0 1000 500';
+
+    const coords = venues.map(v => toSvgCoords(v.lat, v.lng));
+    const xs = coords.map(c => c.x);
+    const ys = coords.map(c => c.y);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    // Add generous padding around the cluster
+    const spanX = Math.max(maxX - minX, 60);
+    const spanY = Math.max(maxY - minY, 40);
+    const padding = Math.max(spanX, spanY) * 0.8;
+
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+
+    // Ensure 2:1 aspect ratio for the viewBox
+    let vw = spanX + padding * 2;
+    let vh = spanY + padding * 2;
+    if (vw / vh < 2) vw = vh * 2;
+    else vh = vw / 2;
+
+    // Clamp to world bounds
+    const vx = Math.max(0, Math.min(cx - vw / 2, 1000 - vw));
+    const vy = Math.max(0, Math.min(cy - vh / 2, 500 - vh));
+
+    return `${vx} ${vy} ${Math.min(vw, 1000)} ${Math.min(vh, 500)}`;
+  }, [venues]);
+
   // Don't render if no venue data (unless background mode — show dark bg anyway)
   if (!backgroundMode && !isLoading && venues.length === 0) return null;
 
   // SVG world map — grey continents, labels, red pulsing pins
-  const renderSvgMap = () => (
-    <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
-      <Svg
-        viewBox="0 0 1000 500"
-        style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <Defs>
-          {/* Subtle top-down gradient on continents for 3D depth */}
-          <SvgGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#58585f" stopOpacity="1" />
-            <Stop offset="1" stopColor="#3e3e44" stopOpacity="1" />
-          </SvgGradient>
-          {/* Vignette overlay */}
-          <SvgGradient id="vignette" x1="0.5" y1="0" x2="0.5" y2="1">
-            <Stop offset="0" stopColor="#000" stopOpacity="0" />
-            <Stop offset="0.7" stopColor="#000" stopOpacity="0" />
-            <Stop offset="1" stopColor="#000" stopOpacity="0.3" />
-          </SvgGradient>
-        </Defs>
+  const renderSvgMap = () => {
+    const vb = backgroundMode && venues.length > 0 ? svgViewBox : '0 0 1000 500';
 
-        {/* Continent shapes with gradient fill + highlight stroke */}
-        <Path d={WORLD_MAP_PATH} fill="url(#landGrad)" stroke="#6a6a70" strokeWidth={0.4} />
+    return (
+      <View style={backgroundMode ? styles.bgFallback : styles.fallbackMap}>
+        <Svg
+          viewBox={vb}
+          style={backgroundMode ? StyleSheet.absoluteFill : { width: '100%', height: '100%' }}
+          preserveAspectRatio="xMidYMid slice"
+        >
+          <Defs>
+            <SvgGradient id="landGrad" x1="0" y1="0" x2="0" y2="1">
+              <Stop offset="0" stopColor="#70707a" stopOpacity="1" />
+              <Stop offset="1" stopColor="#555560" stopOpacity="1" />
+            </SvgGradient>
+            <SvgGradient id="vignette" x1="0.5" y1="0" x2="0.5" y2="1">
+              <Stop offset="0" stopColor="#000" stopOpacity="0" />
+              <Stop offset="0.7" stopColor="#000" stopOpacity="0" />
+              <Stop offset="1" stopColor="#000" stopOpacity="0.25" />
+            </SvgGradient>
+          </Defs>
 
-        {/* City labels */}
-        {MAP_LABELS.map((label, idx) => {
-          const { x, y } = toSvgCoords(label.lat, label.lng);
-          return (
-            <SvgText
-              key={idx}
-              x={x}
-              y={y - 5}
-              fill="rgba(255,255,255,0.25)"
-              fontSize={7}
-              fontWeight="500"
-              textAnchor="middle"
-            >
-              {label.name}
-            </SvgText>
-          );
-        })}
+          {/* Continent shapes with gradient fill + highlight stroke */}
+          <Path d={WORLD_MAP_PATH} fill="url(#landGrad)" stroke="#88888f" strokeWidth={0.5} />
 
-        {/* Pulsing venue pins */}
-        {venues.map((venue, idx) => {
-          const { x, y } = toSvgCoords(venue.lat, venue.lng);
-          return <PulsingSvgPin key={idx} x={x} y={y} />;
-        })}
+          {/* City labels */}
+          {MAP_LABELS.map((label, idx) => {
+            const { x, y } = toSvgCoords(label.lat, label.lng);
+            return (
+              <SvgText
+                key={idx}
+                x={x}
+                y={y - 6}
+                fill="rgba(255,255,255,0.45)"
+                fontSize={8}
+                fontWeight="600"
+                textAnchor="middle"
+              >
+                {label.name}
+              </SvgText>
+            );
+          })}
 
-        {/* Vignette for depth */}
-        <Rect x="0" y="0" width="1000" height="500" fill="url(#vignette)" />
-      </Svg>
-    </View>
-  );
+          {/* Pulsing venue pins */}
+          {venues.map((venue, idx) => {
+            const { x, y } = toSvgCoords(venue.lat, venue.lng);
+            return <PulsingSvgPin key={idx} x={x} y={y} />;
+          })}
+
+          {/* Vignette for depth */}
+          <Rect x="0" y="0" width="1000" height="500" fill="url(#vignette)" />
+        </Svg>
+      </View>
+    );
+  };
 
   const renderNativeMap = () => {
     if (!MapView || !region) return renderSvgMap();
@@ -425,7 +460,7 @@ const styles = StyleSheet.create({
   },
   // Fallback styles
   fallbackMap: {
-    backgroundColor: '#282830',
+    backgroundColor: '#32323a',
     borderRadius: 12,
     height: 220,
     marginTop: 8,
@@ -437,6 +472,6 @@ const styles = StyleSheet.create({
   },
   bgFallback: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#282830',
+    backgroundColor: '#32323a',
   },
 });
