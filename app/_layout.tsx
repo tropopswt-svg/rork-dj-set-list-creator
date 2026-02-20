@@ -23,6 +23,7 @@ function RootLayoutNav() {
         contentStyle: { backgroundColor: Colors.dark.background },
       }}
     >
+      <Stack.Screen name="index" options={{ headerShown: false, animation: 'fade' }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="user/[username]" options={{ headerShown: false }} />
