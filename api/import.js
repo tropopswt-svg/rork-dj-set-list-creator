@@ -1,85 +1,8 @@
+import { fetchSoundCloudClientId } from './_lib/soundcloud-core.js';
+
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const SOUNDCLOUD_OEMBED = 'https://soundcloud.com/oembed';
 const SOUNDCLOUD_API_V2 = 'https://api-v2.soundcloud.com';
-
-// Cache for dynamic SoundCloud client_id
-let cachedSoundCloudClientId = null;
-let clientIdFetchedAt = 0;
-const CLIENT_ID_CACHE_DURATION = 3600000; // 1 hour
-
-// Dynamically fetch a fresh SoundCloud client_id from their JS files
-async function fetchSoundCloudClientId() {
-  // Return cached if still valid
-  if (cachedSoundCloudClientId && (Date.now() - clientIdFetchedAt) < CLIENT_ID_CACHE_DURATION) {
-    return cachedSoundCloudClientId;
-  }
-  
-  try {
-    // Step 1: Fetch SoundCloud homepage to find JS files
-    const homeResponse = await fetch('https://soundcloud.com', {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-    });
-    
-    if (!homeResponse.ok) {
-      console.log('Failed to fetch SoundCloud homepage');
-      return null;
-    }
-    
-    const html = await homeResponse.text();
-    
-    // Step 2: Extract JS file URLs from <script crossorigin src="..."> tags
-    const scriptPattern = /<script crossorigin src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g;
-    const urls = [];
-    let match;
-    while ((match = scriptPattern.exec(html)) !== null) {
-      urls.push(match[1]);
-    }
-    
-    if (urls.length === 0) {
-      console.log('No SoundCloud JS files found');
-      return null;
-    }
-    
-    // Step 3: Fetch the last JS file (usually contains the client_id)
-    const jsUrl = urls[urls.length - 1];
-    console.log('Fetching SoundCloud JS:', jsUrl);
-    
-    const jsResponse = await fetch(jsUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    });
-    
-    if (!jsResponse.ok) {
-      console.log('Failed to fetch SoundCloud JS file');
-      return null;
-    }
-    
-    const jsContent = await jsResponse.text();
-    
-    // Step 4: Extract client_id from the JS content
-    const clientIdMatch = jsContent.match(/,client_id:"([^"]+)"/);
-    if (clientIdMatch) {
-      cachedSoundCloudClientId = clientIdMatch[1];
-      clientIdFetchedAt = Date.now();
-      console.log('Found fresh SoundCloud client_id:', cachedSoundCloudClientId.substring(0, 10) + '...');
-      return cachedSoundCloudClientId;
-    }
-    
-    // Try alternative patterns
-    const altMatch = jsContent.match(/client_id=([a-zA-Z0-9]+)/);
-    if (altMatch) {
-      cachedSoundCloudClientId = altMatch[1];
-      clientIdFetchedAt = Date.now();
-      console.log('Found SoundCloud client_id (alt):', cachedSoundCloudClientId.substring(0, 10) + '...');
-      return cachedSoundCloudClientId;
-    }
-    
-    console.log('Could not find client_id in JS file');
-    return null;
-  } catch (error) {
-    console.error('Error fetching SoundCloud client_id:', error);
-    return null;
-  }
-}
 
 // ============ PLATFORM DETECTION ============
 
@@ -191,14 +114,22 @@ async function fetchVideoComments(videoId, apiKey, maxResults = 500) {
   }
 
   // Fetch by relevance (most liked/engaged comments - often have good tracklists)
-  const relevanceComments = await fetchWithOrder('relevance', maxResults);
-  allComments.push(...relevanceComments);
-  console.log(`Fetched ${relevanceComments.length} comments by relevance`);
+  try {
+    const relevanceComments = await fetchWithOrder('relevance', maxResults);
+    allComments.push(...relevanceComments);
+    console.log(`Fetched ${relevanceComments.length} comments by relevance`);
+  } catch (e) {
+    console.log(`[Comments] Relevance fetch failed: ${e.message}`);
+  }
 
   // Also fetch by time (recent comments - catch new comprehensive tracklists)
-  const timeComments = await fetchWithOrder('time', Math.floor(maxResults / 2));
-  allComments.push(...timeComments);
-  console.log(`Fetched ${timeComments.length} additional comments by time`);
+  try {
+    const timeComments = await fetchWithOrder('time', Math.floor(maxResults / 2));
+    allComments.push(...timeComments);
+    console.log(`Fetched ${timeComments.length} additional comments by time`);
+  } catch (e) {
+    console.log(`[Comments] Time fetch failed: ${e.message}`);
+  }
 
   console.log(`Total: ${allComments.length} YouTube comments (including replies)`);
   return allComments;
@@ -1797,7 +1728,7 @@ async function importFromSoundCloud(url) {
       title: pt.title,
       artist: pt.artist,
       duration: pt.duration || 0,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: '',
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
@@ -2177,7 +2108,7 @@ async function importFromYouTube(url, apiKey) {
       title: pt.title,
       artist: pt.artist,
       duration: pt.duration || 0,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: '',
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
@@ -3789,6 +3720,20 @@ module.exports = async (req, res) => {
     
   } catch (error) {
     console.error('Import error:', error);
-    return res.status(500).json({ success: false, error: error.message || 'Import failed' });
+    // Return appropriate status codes for known error types
+    const msg = error.message || 'Import failed';
+    if (msg === 'Video not found' || msg.includes('not found')) {
+      return res.status(404).json({ success: false, error: 'Video not found — it may have been deleted or made private' });
+    }
+    if (msg.includes('quotaExceeded') || msg.includes('quota')) {
+      return res.status(429).json({ success: false, error: 'YouTube API quota exceeded. Please try again later.' });
+    }
+    if (msg === 'Invalid YouTube URL' || msg === 'Invalid SoundCloud URL') {
+      return res.status(400).json({ success: false, error: msg });
+    }
+    if (msg.includes('commentsDisabled')) {
+      return res.status(200).json({ success: true, setList: { tracks: [] }, error: 'Comments are disabled on this video' });
+    }
+    return res.status(500).json({ success: false, error: msg });
   }
 };

@@ -494,7 +494,7 @@ export function parsedTracksToTracks(parsedTracks: ParsedTrack[]): Track[] {
     title: pt.title,
     artist: pt.artist,
     duration: 0, // Unknown
-    coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+    coverUrl: '',
     addedAt: new Date(),
     source: 'ai' as const,
     timestamp: pt.timestamp,

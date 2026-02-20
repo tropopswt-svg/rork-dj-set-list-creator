@@ -18,25 +18,16 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
 
-  const getSetFallbackImage = useCallback(() => {
-    if (setList.venue) return getVenueImage(setList.venue);
-    return getFallbackImage(setList.id);
-  }, [setList.id, setList.venue]);
-
-  const getCoverImage = useCallback(() => {
-    if (imageError && triedHqFallback) {
-      return getSetFallbackImage();
-    }
-
+  const getCoverImage = useCallback((): string | null => {
     if (setList.coverUrl) {
       if (imageError && setList.coverUrl.includes('maxresdefault')) {
-        return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+        if (!triedHqFallback) return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+        return null;
       }
       return setList.coverUrl;
     }
-
-    return getSetFallbackImage();
-  }, [setList.coverUrl, imageError, triedHqFallback, getSetFallbackImage]);
+    return null;
+  }, [setList.coverUrl, imageError, triedHqFallback]);
 
   const handleImageError = useCallback(() => {
     console.log(`[SetListCard] Image error for set: ${setList.name}`);
@@ -78,12 +69,16 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
   if (large) {
     return (
       <Pressable style={styles.largeContainer} onPress={handlePress}>
-        <Image 
-          source={{ uri: getCoverImage() }} 
-          style={styles.largeCover}
-          onError={handleImageError}
-          cachePolicy="memory-disk"
-        />
+        {getCoverImage() ? (
+          <Image
+            source={{ uri: getCoverImage()! }}
+            style={styles.largeCover}
+            onError={handleImageError}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={[styles.largeCover, { backgroundColor: Colors.dark.surface }]} />
+        )}
         <LinearGradient
           colors={['transparent', 'rgba(0,0,0,0.9)']}
           style={styles.largeGradient}
@@ -130,12 +125,16 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
   return (
     <Pressable style={styles.container} onPress={handlePress}>
       <View style={styles.coverContainer}>
-        <Image 
-          source={{ uri: getCoverImage() }} 
-          style={styles.cover}
-          onError={handleImageError}
-          cachePolicy="memory-disk"
-        />
+        {getCoverImage() ? (
+          <Image
+            source={{ uri: getCoverImage()! }}
+            style={styles.cover}
+            onError={handleImageError}
+            cachePolicy="memory-disk"
+          />
+        ) : (
+          <View style={[styles.cover, { backgroundColor: Colors.dark.surface }]} />
+        )}
         {setList.sourcePlatform && (
           <View style={styles.platformBadge}>
             {setList.sourcePlatform === 'youtube' ? (

@@ -79,7 +79,7 @@ export async function browseVenues(options: BrowseVenuesOptions = {}): Promise<{
     let venues: VenueInfo[] = Array.from(venueMap.entries()).map(([name, count]) => ({
       name,
       setsCount: count,
-      imageUrl: getVenueImage(name),
+      imageUrl: undefined,
     }));
 
     // Apply sorting
@@ -200,7 +200,7 @@ export async function getVenueWithSets(venueName: string, setsLimit: number = 20
     return {
       name: venueName,
       setsCount: count || sets.length,
-      imageUrl: getVenueImage(venueName),
+      imageUrl: undefined,
       recentSets: sets,
     };
   } catch (err) {

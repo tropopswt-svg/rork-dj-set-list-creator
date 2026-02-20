@@ -75,7 +75,11 @@ export default function SimilarSets({ setId }: SimilarSetsProps) {
 
   const renderItem = ({ item }: { item: SimilarSet }) => (
     <Pressable style={styles.card} onPress={() => handlePress(item.id)}>
-      <Image source={{ uri: getCoverImageUrl(item.coverUrl, item.id, item.venue) }} style={styles.cardImage} contentFit="cover" />
+      {getCoverImageUrl(item.coverUrl) ? (
+        <Image source={{ uri: getCoverImageUrl(item.coverUrl)! }} style={styles.cardImage} contentFit="cover" />
+      ) : (
+        <View style={[styles.cardImage, { backgroundColor: Colors.dark.surface }]} />
+      )}
       <View style={styles.cardInfo}>
         <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
         <Text style={styles.cardArtist} numberOfLines={1}>{item.artist}</Text>

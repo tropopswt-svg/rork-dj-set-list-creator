@@ -975,13 +975,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
   const [imageError, setImageError] = useState(false);
   const [triedHqFallback, setTriedHqFallback] = useState(false);
 
-  const getSetFallbackImage = useCallback(() => {
+  const getSetFallbackImage = useCallback((): string | null => {
     if (setList.artistImageUrl) return setList.artistImageUrl;
-    if (venue) return getVenueImage(venue);
-    return getFallbackImage(setList.id);
-  }, [setList.id, setList.artistImageUrl, venue]);
+    return null;
+  }, [setList.artistImageUrl]);
 
-  const getCoverImage = useCallback(() => {
+  const getCoverImage = useCallback((): string | null => {
     if (imageError && triedHqFallback) {
       return getSetFallbackImage();
     }
@@ -1187,14 +1186,16 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                 {EVENT_BADGES[detectedEvent].label}
               </Text>
             </View>
-          ) : (
+          ) : getCoverImage() ? (
             <Image
-              source={{ uri: getCoverImage() }}
+              source={{ uri: getCoverImage()! }}
               style={styles.cover}
               contentFit="cover"
               onError={handleImageError}
               cachePolicy="memory-disk"
             />
+          ) : (
+            <View style={[styles.cover, { backgroundColor: Colors.dark.surface }]} />
           )}
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
@@ -1348,8 +1349,8 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                 </View>
               </View>
 
-              {/* Right side: all badges in a single row */}
-              <View style={styles.rightStats}>
+              {/* Right side: all badges in a single row - fade in/out based on scroll position */}
+              <Animated.View style={[styles.rightStats, accentOpacity ? { opacity: accentOpacity } : { opacity: isSelected ? 1 : 0 }]}>
                 <View style={styles.rightBadgesRow}>
                   {/* Blue location icon - clickable to show full location */}
                   {(locationCity || smartLocation) && (
@@ -1394,7 +1395,7 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                     </Pressable>
                   )}
                 </View>
-              </View>
+              </Animated.View>
             </View>
           </View>
         </View>

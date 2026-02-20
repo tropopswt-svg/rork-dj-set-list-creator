@@ -760,20 +760,18 @@ export default function SetDetailScreen() {
     checkSavedStatus();
   }, [id]);
 
-  const getHeaderCoverImage = useCallback(() => {
-    if (!setList) return getFallbackImage(id || '');
-    const venueFallback = () => setList.venue ? getVenueImage(setList.venue) : getFallbackImage(setList.id);
-    if (coverImageError && coverTriedHqFallback) {
-      return venueFallback();
-    }
+  const getHeaderCoverImage = useCallback((): string | null => {
+    if (!setList) return null;
+    if (coverImageError && coverTriedHqFallback) return null;
     if (setList.coverUrl) {
       if (coverImageError && setList.coverUrl.includes('maxresdefault')) {
-        return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+        if (!coverTriedHqFallback) return setList.coverUrl.replace('maxresdefault', 'hqdefault');
+        return null;
       }
       return setList.coverUrl;
     }
-    return venueFallback();
-  }, [setList, id, coverImageError, coverTriedHqFallback]);
+    return null;
+  }, [setList, coverImageError, coverTriedHqFallback]);
 
   const handleCoverImageError = useCallback(() => {
     if (!coverTriedHqFallback && setList?.coverUrl?.includes('maxresdefault')) {
@@ -1083,13 +1081,17 @@ export default function SetDetailScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.headerImage}>
-          <Image
-            key={setList.coverUrl || 'default-cover'}
-            source={{ uri: getHeaderCoverImage() }}
-            style={styles.coverImage}
-            cachePolicy="none"
-            onError={handleCoverImageError}
-          />
+          {getHeaderCoverImage() ? (
+            <Image
+              key={setList.coverUrl || 'default-cover'}
+              source={{ uri: getHeaderCoverImage()! }}
+              style={styles.coverImage}
+              cachePolicy="none"
+              onError={handleCoverImageError}
+            />
+          ) : (
+            <View style={[styles.coverImage, { backgroundColor: Colors.dark.surface }]} />
+          )}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.7)', Colors.dark.background]}
             style={styles.headerGradient}
@@ -1272,8 +1274,8 @@ export default function SetDetailScreen() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ url: ytLink.url }),
                             });
-                            if (!importResponse.ok) throw new Error(`Server error (${importResponse.status})`);
                             const importResult = await importResponse.json();
+                            if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
 
                             if (importResult.success && importResult.setList?.tracks?.length > 0) {
                               await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
@@ -1366,8 +1368,8 @@ export default function SetDetailScreen() {
                               headers: { 'Content-Type': 'application/json' },
                               body: JSON.stringify({ url: scLink.url }),
                             });
-                            if (!importResponse.ok) throw new Error(`Server error (${importResponse.status})`);
                             const importResult = await importResponse.json();
+                            if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
 
                             if (importResult.success && importResult.setList?.tracks?.length > 0) {
                               await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
@@ -1805,14 +1807,7 @@ export default function SetDetailScreen() {
                       }
                     }}
                     onContributorPress={(username) => setSelectedContributor(username)}
-                    onListen={isUnidentified && audioSource ? () => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      setAudioPreviewTrack(track);
-                    } : undefined}
-                    onIDThis={isUnidentified ? () => {
-                      setIdThisTrack(track);
-                      setShowIDThisModal(true);
-                    } : undefined}
+                    slim={isUnidentified}
                   />
                 );
               }

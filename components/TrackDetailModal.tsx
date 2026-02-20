@@ -148,7 +148,7 @@ export default function TrackDetailModal({
       return { label: 'Unidentified', color: Colors.dark.primary, icon: AlertCircle };
     }
     if (track.isUnreleased) {
-      return { label: 'Unreleased', color: '#EC4899', icon: AlertCircle };
+      return { label: 'Unreleased', color: '#D4A017', icon: AlertCircle };
     }
     if (isSpotifyVerified) {
       return { label: 'Verified on Spotify', color: '#1DB954', icon: Shield };
@@ -365,10 +365,16 @@ export default function TrackDetailModal({
                       router.push(`/${set.setId}`);
                     }}
                   >
-                    <Image
-                      source={{ uri: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=100&h=100&fit=crop' }}
-                      style={styles.featuredSetCover}
-                    />
+                    {set.coverUrl ? (
+                      <Image
+                        source={{ uri: set.coverUrl }}
+                        style={styles.featuredSetCover}
+                      />
+                    ) : (
+                      <View style={[styles.featuredSetCover, { backgroundColor: Colors.dark.surface, justifyContent: 'center', alignItems: 'center' }]}>
+                        <Disc3 size={16} color={Colors.dark.textMuted} />
+                      </View>
+                    )}
                     <View style={styles.featuredSetInfo}>
                       <Text style={styles.featuredSetName} numberOfLines={1}>{set.setName}</Text>
                       <Text style={styles.featuredSetArtist} numberOfLines={1}>{set.artist}</Text>

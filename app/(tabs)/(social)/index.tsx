@@ -68,11 +68,15 @@ function SavedSetCard({ savedSet, onPress }: { savedSet: any; onPress: () => voi
 
   return (
     <Pressable style={styles.savedSetCard} onPress={onPress}>
-      <Image
-        source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
-        style={styles.savedSetImage}
-        contentFit="cover"
-      />
+      {getCoverImageUrl(set.cover_url) ? (
+        <Image
+          source={{ uri: getCoverImageUrl(set.cover_url)! }}
+          style={styles.savedSetImage}
+          contentFit="cover"
+        />
+      ) : (
+        <View style={[styles.savedSetImage, { backgroundColor: Colors.dark.surface }]} />
+      )}
       <View style={styles.savedSetInfo}>
         <Text style={styles.savedSetName} numberOfLines={1}>
           {set.name}

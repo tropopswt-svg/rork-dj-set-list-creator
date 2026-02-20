@@ -92,7 +92,7 @@ export default function FillGapModal({
       title: dbTrack.title,
       artist: dbTrack.artist,
       duration: 0,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: '',
       addedAt: new Date(),
       source: 'database',
       timestamp: timestamp,

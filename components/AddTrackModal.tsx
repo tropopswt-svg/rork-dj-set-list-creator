@@ -237,7 +237,7 @@ export default function AddTrackModal({ visible, onClose, onAdd, totalDuration }
       verified: false,
       addedAt: new Date(),
       duration: 0,
-      coverUrl: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=300&h=300&fit=crop',
+      coverUrl: '',
       isUnreleased: isUnreleased,
       trackLinks: trackLinks.length > 0 ? trackLinks : undefined,
     };

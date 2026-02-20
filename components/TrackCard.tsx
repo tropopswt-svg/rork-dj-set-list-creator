@@ -14,6 +14,7 @@ interface TrackCardProps {
   showIndex?: number;
   showTimestamp?: boolean;
   compact?: boolean;
+  slim?: boolean; // Thin rendering for unidentified tracks
   onUpvote?: () => void;
   onContributorPress?: (username: string) => void;
   onIdentify?: () => void;
@@ -28,6 +29,7 @@ export default function TrackCard({
   showIndex,
   showTimestamp,
   compact,
+  slim,
   onUpvote,
   onContributorPress,
   onIdentify,
@@ -227,6 +229,20 @@ export default function TrackCard({
     );
   }
 
+  if (slim) {
+    return (
+      <Pressable style={styles.slimContainer} onPress={handlePress}>
+        {showTimestamp && track.timestamp !== undefined && (
+          <View style={styles.slimTimestamp}>
+            <Text style={styles.slimTimestampText}>{formatTimestamp(track.timestamp)}</Text>
+          </View>
+        )}
+        <View style={styles.slimDash} />
+        <Text style={styles.slimTitle} numberOfLines={1}>Unknown Track</Text>
+      </Pressable>
+    );
+  }
+
   // Check if this is an unidentified track that needs to be filled in
   const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
 
@@ -291,13 +307,13 @@ export default function TrackCard({
             {/* Release status badges */}
             {showUnreleasedBadge && (
               <View style={styles.unreleasedBadge}>
-                <Sparkles size={9} color="#EC4899" />
+                <Sparkles size={9} color="#D4A017" />
                 <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
               </View>
             )}
             {showPartialIdBadge && (
               <View style={styles.unreleasedBadge}>
-                <Sparkles size={9} color="#EC4899" />
+                <Sparkles size={9} color="#D4A017" />
                 <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
               </View>
             )}
@@ -419,10 +435,16 @@ export default function TrackCard({
                   style={styles.featuredSetItem}
                   onPress={() => handleNavigateToSet(set.setId)}
                 >
-                  <Image 
-                    source={{ uri: set.coverUrl || 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=100&h=100&fit=crop' }} 
-                    style={styles.featuredSetCover} 
-                  />
+                  {set.coverUrl ? (
+                    <Image
+                      source={{ uri: set.coverUrl }}
+                      style={styles.featuredSetCover}
+                    />
+                  ) : (
+                    <View style={[styles.featuredSetCover, { backgroundColor: Colors.dark.surface, justifyContent: 'center', alignItems: 'center' }]}>
+                      <Disc3 size={16} color={Colors.dark.textMuted} />
+                    </View>
+                  )}
                   <View style={styles.featuredSetInfo}>
                     <Text style={styles.featuredSetName} numberOfLines={1}>{set.setName}</Text>
                     <Text style={styles.featuredSetArtist} numberOfLines={1}>{set.artist}</Text>
@@ -577,14 +599,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: 'rgba(236, 72, 153, 0.15)',
+    backgroundColor: 'rgba(212, 160, 23, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(236, 72, 153, 0.3)',
+    borderColor: 'rgba(212, 160, 23, 0.3)',
   },
   unreleasedBadgeText: {
     fontSize: 9,
     fontWeight: '600' as const,
-    color: '#EC4899',
+    color: '#D4A017',
   },
   releasedBadge: {
     flexDirection: 'row',
@@ -760,6 +782,39 @@ const styles = StyleSheet.create({
   },
   unidentifiedArtist: {
     color: 'rgba(205, 106, 111, 0.7)',
+    fontStyle: 'italic',
+  },
+  slimContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    marginBottom: 2,
+  },
+  slimTimestamp: {
+    backgroundColor: 'rgba(205, 106, 111, 0.15)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 8,
+    minWidth: 50,
+    alignItems: 'center',
+  },
+  slimTimestampText: {
+    color: 'rgba(205, 106, 111, 0.6)',
+    fontSize: 11,
+    fontWeight: '600' as const,
+    fontVariant: ['tabular-nums'],
+  },
+  slimDash: {
+    width: 16,
+    height: 1,
+    backgroundColor: 'rgba(205, 106, 111, 0.25)',
+    marginRight: 8,
+  },
+  slimTitle: {
+    color: 'rgba(205, 106, 111, 0.5)',
+    fontSize: 12,
     fontStyle: 'italic',
   },
   compactContainer: {

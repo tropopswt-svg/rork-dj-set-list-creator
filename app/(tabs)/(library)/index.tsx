@@ -91,10 +91,14 @@ export default function LibraryScreen() {
                   style={styles.setCard}
                   onPress={() => handleSetPress(setList)}
                 >
-                  <Image
-                    source={{ uri: getCoverImageUrl(setList.coverUrl, setList.id, setList.venue) }}
-                    style={styles.setCover}
-                  />
+                  {getCoverImageUrl(setList.coverUrl) ? (
+                    <Image
+                      source={{ uri: getCoverImageUrl(setList.coverUrl)! }}
+                      style={styles.setCover}
+                    />
+                  ) : (
+                    <View style={[styles.setCover, { backgroundColor: Colors.dark.surface }]} />
+                  )}
                   <View style={styles.setInfo}>
                     <Text style={styles.setArtist}>{setList.artist}</Text>
                     <Text style={styles.setName} numberOfLines={1}>{setList.name}</Text>
