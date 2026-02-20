@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, Users } from 'lucide-react-native';
@@ -90,7 +90,7 @@ export default function FollowersListScreen() {
             <ActivityIndicator size="large" color={Colors.dark.primary} />
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={followers}
             renderItem={renderFollower}
             keyExtractor={(item) => item.id}
@@ -107,6 +107,7 @@ export default function FollowersListScreen() {
             onEndReachedThreshold={0.5}
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmpty}
+            estimatedItemSize={64}
           />
         )}
       </SafeAreaView>

@@ -125,33 +125,43 @@ export function useFollowers(userId: string) {
 export function useLikeSet(setId: string) {
   const { user } = useAuth();
   const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (user && setId) {
       socialService.hasLikedSet(user.id, setId).then(setIsLiked);
     }
+    if (setId) {
+      socialService.getSetLikesCount(setId).then(({ count }) => setLikeCount(count));
+    }
   }, [user, setId]);
 
   const toggleLike = useCallback(async () => {
     if (!user) return;
 
+    // Optimistic update
+    const wasLiked = isLiked;
+    setIsLiked(!wasLiked);
+    setLikeCount(prev => wasLiked ? Math.max(0, prev - 1) : prev + 1);
+
     setIsLoading(true);
     try {
-      if (isLiked) {
+      if (wasLiked) {
         await socialService.unlikeSet(user.id, setId);
-        setIsLiked(false);
       } else {
         await socialService.likeSet(user.id, setId);
-        setIsLiked(true);
       }
     } catch (error) {
+      // Revert on error
+      setIsLiked(wasLiked);
+      setLikeCount(prev => wasLiked ? prev + 1 : Math.max(0, prev - 1));
       if (__DEV__) console.error('Like error:', error);
     }
     setIsLoading(false);
   }, [user, setId, isLiked]);
 
-  return { isLiked, isLoading, toggleLike };
+  return { isLiked, likeCount, isLoading, toggleLike };
 }
 
 export function useLikedSets() {

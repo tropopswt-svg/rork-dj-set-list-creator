@@ -2,6 +2,7 @@
 // Get session details, end session, add tracks to session
 
 import { createClient } from '@supabase/supabase-js';
+import { cleanTrackTitleUnreleased } from '../_lib/track-utils.js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -172,19 +173,27 @@ export default async function handler(req, res) {
         if (tracks.length > 0) {
           const setTracks = tracks
             .sort((a, b) => a.position - b.position)
-            .map((t, index) => ({
-              set_id: newSet.id,
-              artist_name: t.artist,
-              track_title: t.title,
-              position: index + 1,
-              is_id: false,
-              spotify_data: t.spotify_url ? JSON.stringify({
-                external_urls: { spotify: t.spotify_url },
-                album: t.album ? { name: t.album } : undefined,
-                name: t.title,
-                artists: [{ name: t.artist }],
-              }) : null,
-            }));
+            .map((t, index) => {
+              const { title: cleanTitle, isUnreleased } = cleanTrackTitleUnreleased(t.title);
+              const row = {
+                set_id: newSet.id,
+                artist_name: t.artist,
+                track_title: cleanTitle,
+                position: index + 1,
+                is_id: false,
+                spotify_data: t.spotify_url ? JSON.stringify({
+                  external_urls: { spotify: t.spotify_url },
+                  album: t.album ? { name: t.album } : undefined,
+                  name: t.title,
+                  artists: [{ name: t.artist }],
+                }) : null,
+              };
+              if (isUnreleased) {
+                row.is_unreleased = true;
+                row.unreleased_source = 'comment_hint';
+              }
+              return row;
+            });
 
           const { error: insertError } = await supabase
             .from('set_tracks')

@@ -139,6 +139,19 @@ export default async function handler(req, res) {
       }
     }
 
+    // Fetch artist genres if set is linked to an artist
+    let artistGenres = [];
+    if (set.dj_id) {
+      const { data: artistData } = await supabase
+        .from('artists')
+        .select('genres')
+        .eq('id', set.dj_id)
+        .single();
+      if (artistData?.genres?.length) {
+        artistGenres = artistData.genres;
+      }
+    }
+
     // Count gaps (ID tracks)
     const gapCount = setTracks?.filter(t => t.is_id)?.length || 0;
     const hasGaps = gapCount > 0;
@@ -236,6 +249,7 @@ export default async function handler(req, res) {
       gapCount,
       description: set.description,
       genre: set.genre,
+      artistGenres,
       // Analysis flags
       youtubeAnalyzed: set.youtube_analyzed || false,
       soundcloudAnalyzed: set.soundcloud_analyzed || false,

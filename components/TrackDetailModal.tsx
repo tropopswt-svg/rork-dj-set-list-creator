@@ -148,7 +148,7 @@ export default function TrackDetailModal({
       return { label: 'Unidentified', color: Colors.dark.primary, icon: AlertCircle };
     }
     if (track.isUnreleased) {
-      return { label: 'Unreleased', color: '#D4A017', icon: AlertCircle };
+      return { label: 'Unreleased', color: '#FFD700', icon: AlertCircle };
     }
     if (isSpotifyVerified) {
       return { label: 'Verified on Spotify', color: '#1DB954', icon: Shield };
@@ -179,9 +179,11 @@ export default function TrackDetailModal({
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Track Info */}
             <View style={styles.trackInfo}>
-              <Image 
-                source={{ uri: track.coverUrl }} 
+              <Image
+                source={{ uri: track.coverUrl }}
                 style={styles.cover}
+                placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                transition={250}
               />
               <View style={styles.trackDetails}>
                 <Text style={styles.title} numberOfLines={2}>{track.title}</Text>
@@ -193,7 +195,20 @@ export default function TrackDetailModal({
                 </Pressable>
 
                 {/* Status Badge */}
-                <View style={[styles.statusBadge, { backgroundColor: `${statusBadge.color}20` }]}>
+                <View style={[
+                  styles.statusBadge,
+                  { backgroundColor: `${statusBadge.color}20` },
+                  track.isUnreleased && {
+                    backgroundColor: 'rgba(10, 10, 10, 0.6)',
+                    borderWidth: 1,
+                    borderColor: 'rgba(255, 215, 0, 0.3)',
+                    borderTopColor: 'rgba(255, 223, 120, 0.5)',
+                    shadowColor: '#FFD700',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.25,
+                    shadowRadius: 6,
+                  },
+                ]}>
                   <StatusIcon size={12} color={statusBadge.color} />
                   <Text style={[styles.statusText, { color: statusBadge.color }]}>
                     {statusBadge.label}
@@ -369,6 +384,8 @@ export default function TrackDetailModal({
                       <Image
                         source={{ uri: set.coverUrl }}
                         style={styles.featuredSetCover}
+                        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                        transition={250}
                       />
                     ) : (
                       <View style={[styles.featuredSetCover, { backgroundColor: Colors.dark.surface, justifyContent: 'center', alignItems: 'center' }]}>

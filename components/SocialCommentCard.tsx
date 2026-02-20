@@ -47,7 +47,7 @@ export default function SocialCommentCard({ comment, onAddTrack }: SocialComment
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Image source={{ uri: comment.avatarUrl }} style={styles.avatar} />
+        <Image source={{ uri: comment.avatarUrl }} style={styles.avatar} placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }} transition={250} />
         <View style={styles.userInfo}>
           <View style={styles.usernameRow}>
             <Text style={styles.username}>@{comment.username}</Text>
@@ -63,7 +63,7 @@ export default function SocialCommentCard({ comment, onAddTrack }: SocialComment
       
       {comment.suggestedTrack && (
         <View style={styles.trackSuggestion}>
-          <Image source={{ uri: comment.suggestedTrack.coverUrl }} style={styles.trackCover} />
+          <Image source={{ uri: comment.suggestedTrack.coverUrl }} style={styles.trackCover} placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} transition={250} />
           <View style={styles.trackInfo}>
             <View style={styles.trackLabel}>
               <Music size={12} color={Colors.dark.primary} />

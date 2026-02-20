@@ -67,6 +67,8 @@ function CommentItem({
         <Image
           source={{ uri: comment.user?.avatar_url || 'https://via.placeholder.com/40' }}
           style={styles.commentAvatar}
+          placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+          transition={250}
         />
       </Pressable>
 
@@ -133,6 +135,8 @@ function CommentItem({
                   <Image
                     source={{ uri: reply.user?.avatar_url || 'https://via.placeholder.com/32' }}
                     style={styles.replyAvatar}
+                    placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                    transition={250}
                   />
                 </Pressable>
                 <View style={styles.replyContent}>
@@ -249,6 +253,8 @@ export default function CommentsSection({ setId }: CommentsSectionProps) {
               <Image
                 source={{ uri: profile?.avatar_url || 'https://via.placeholder.com/36' }}
                 style={styles.inputAvatar}
+                placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                transition={250}
               />
               <TextInput
                 style={styles.input}

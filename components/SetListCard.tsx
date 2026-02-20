@@ -75,6 +75,8 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
             style={styles.largeCover}
             onError={handleImageError}
             cachePolicy="memory-disk"
+            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            transition={250}
           />
         ) : (
           <View style={[styles.largeCover, { backgroundColor: Colors.dark.surface }]} />
@@ -131,6 +133,8 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
             style={styles.cover}
             onError={handleImageError}
             cachePolicy="memory-disk"
+            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            transition={250}
           />
         ) : (
           <View style={[styles.cover, { backgroundColor: Colors.dark.surface }]} />

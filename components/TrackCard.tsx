@@ -220,7 +220,7 @@ export default function TrackCard({
   if (compact) {
     return (
       <Pressable style={styles.compactContainer} onPress={handlePress}>
-        <Image source={{ uri: track.coverUrl }} style={styles.compactCover} />
+        <Image source={{ uri: track.coverUrl }} style={styles.compactCover} placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} transition={250} />
         <View style={styles.compactInfo}>
           <Text style={styles.compactTitle} numberOfLines={1}>{track.title}</Text>
           <Text style={styles.compactArtist} numberOfLines={1}>{track.artist}</Text>
@@ -275,7 +275,7 @@ export default function TrackCard({
         {showIndex !== undefined && !showTimestamp && (
           <Text style={styles.index}>{showIndex}</Text>
         )}
-        <Image source={{ uri: track.coverUrl }} style={[styles.cover, isUnidentified && styles.unidentifiedCover]} />
+        <Image source={{ uri: track.coverUrl }} style={[styles.cover, isUnidentified && styles.unidentifiedCover]} placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} transition={250} />
         <View style={styles.info}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, isUnidentified && styles.unidentifiedTitle]} numberOfLines={1}>
@@ -306,15 +306,21 @@ export default function TrackCard({
             {renderVerificationBadge()}
             {/* Release status badges */}
             {showUnreleasedBadge && (
-              <View style={styles.unreleasedBadge}>
-                <Sparkles size={9} color="#D4A017" />
-                <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+              <View style={styles.unreleasedBadge3d}>
+                <View style={styles.unreleasedBadgeShadow} />
+                <View style={styles.unreleasedBadgeFace}>
+                  <Sparkles size={9} color="#FFD700" />
+                  <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+                </View>
               </View>
             )}
             {showPartialIdBadge && (
-              <View style={styles.unreleasedBadge}>
-                <Sparkles size={9} color="#D4A017" />
-                <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+              <View style={styles.unreleasedBadge3d}>
+                <View style={styles.unreleasedBadgeShadow} />
+                <View style={styles.unreleasedBadgeFace}>
+                  <Sparkles size={9} color="#FFD700" />
+                  <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+                </View>
               </View>
             )}
             {/* Spotify verified badge — track matched to Spotify */}
@@ -421,7 +427,7 @@ export default function TrackCard({
             </View>
             
             <View style={styles.modalTrackInfo}>
-              <Image source={{ uri: track.coverUrl }} style={styles.modalTrackCover} />
+              <Image source={{ uri: track.coverUrl }} style={styles.modalTrackCover} placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} transition={250} />
               <View style={styles.modalTrackDetails}>
                 <Text style={styles.modalTrackTitle} numberOfLines={1}>{track.title}</Text>
                 <Text style={styles.modalTrackArtist} numberOfLines={1}>{track.artist}</Text>
@@ -439,6 +445,8 @@ export default function TrackCard({
                     <Image
                       source={{ uri: set.coverUrl }}
                       style={styles.featuredSetCover}
+                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                      transition={250}
                     />
                   ) : (
                     <View style={[styles.featuredSetCover, { backgroundColor: Colors.dark.surface, justifyContent: 'center', alignItems: 'center' }]}>
@@ -468,16 +476,30 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(245, 240, 232, 0.85)',
     borderRadius: 12,
     padding: 10,
     marginBottom: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderTopColor: 'rgba(255, 255, 255, 0.7)',
+    borderBottomColor: 'rgba(232, 226, 217, 0.6)',
+    shadowColor: 'rgba(45, 42, 38, 0.15)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 3,
   },
   unidentifiedContainer: {
-    backgroundColor: 'rgba(205, 106, 111, 0.08)',
+    backgroundColor: 'rgba(10, 10, 10, 0.3)',
     borderWidth: 1,
-    borderColor: 'rgba(205, 106, 111, 0.2)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(255,255,255,0.15)',
     borderStyle: 'dashed',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
   timestampBadge: {
     backgroundColor: Colors.dark.primary,
@@ -592,21 +614,45 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#22C55E',
   },
-  unreleasedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  unreleasedBadge3d: {
+    position: 'relative' as const,
+    paddingBottom: 2,
+  },
+  unreleasedBadgeShadow: {
+    position: 'absolute' as const,
+    top: 2,
+    left: 1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 7,
+    backgroundColor: 'rgba(180, 130, 0, 0.4)',
+  },
+  unreleasedBadgeFace: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 3,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: 'rgba(212, 160, 23, 0.15)',
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    backgroundColor: 'rgba(10, 10, 10, 0.6)',
     borderWidth: 1,
-    borderColor: 'rgba(212, 160, 23, 0.3)',
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderTopColor: 'rgba(255, 223, 120, 0.5)',
+    borderBottomColor: 'rgba(255, 215, 0, 0.15)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   unreleasedBadgeText: {
     fontSize: 9,
-    fontWeight: '600' as const,
-    color: '#D4A017',
+    fontWeight: '800' as const,
+    color: '#FFD700',
+    letterSpacing: 0.4,
+    textShadowColor: 'rgba(255, 215, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
   releasedBadge: {
     flexDirection: 'row',
@@ -645,7 +691,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 3,
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(240, 235, 227, 0.7)',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
@@ -681,33 +727,50 @@ const styles = StyleSheet.create({
   },
   upvoteButton: {
     padding: 8,
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(10, 10, 10, 0.55)',
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
   },
   idThisButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+    backgroundColor: 'rgba(10, 10, 10, 0.6)',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
   },
   idThisButtonText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.dark.primary,
+    color: '#FFFFFF',
   },
   identifyButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#C41E3A',
+    backgroundColor: 'rgba(10, 10, 10, 0.65)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   identifyButtonText: {
     fontSize: 12,
@@ -718,10 +781,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(10, 10, 10, 0.65)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 3,
   },
   listenButtonText: {
     fontSize: 12,
@@ -740,7 +811,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#6B0F1E',
+    backgroundColor: 'rgba(196, 30, 58, 0.3)',
   },
   questionBadgeFace: {
     position: 'absolute',
@@ -749,16 +820,16 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#C41E3A',
-    borderTopWidth: 1.5,
+    backgroundColor: 'rgba(196, 30, 58, 0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
     borderTopColor: 'rgba(255, 255, 255, 0.35)',
-    borderBottomWidth: 1.5,
-    borderBottomColor: '#8B1225',
+    borderBottomColor: 'rgba(196, 30, 58, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.5,
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
     shadowRadius: 5,
     elevation: 6,
   },
@@ -771,7 +842,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 1,
   },
   unidentifiedTimestamp: {
-    backgroundColor: 'rgba(205, 106, 111, 0.3)',
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
   },
   unidentifiedCover: {
     opacity: 0.5,
@@ -792,7 +863,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   slimTimestamp: {
-    backgroundColor: 'rgba(205, 106, 111, 0.15)',
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
@@ -801,7 +872,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   slimTimestampText: {
-    color: 'rgba(205, 106, 111, 0.6)',
+    color: 'rgba(196, 30, 58, 0.5)',
     fontSize: 11,
     fontWeight: '600' as const,
     fontVariant: ['tabular-nums'],
@@ -809,11 +880,11 @@ const styles = StyleSheet.create({
   slimDash: {
     width: 16,
     height: 1,
-    backgroundColor: 'rgba(205, 106, 111, 0.25)',
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
     marginRight: 8,
   },
   slimTitle: {
-    color: 'rgba(205, 106, 111, 0.5)',
+    color: 'rgba(196, 30, 58, 0.45)',
     fontSize: 12,
     fontStyle: 'italic',
   },

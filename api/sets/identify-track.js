@@ -1,5 +1,6 @@
 // API endpoint to identify an unknown track
 import { createClient } from '@supabase/supabase-js';
+import { cleanTrackTitleUnreleased } from '../_lib/track-utils.js';
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -39,16 +40,22 @@ export default async function handler(req, res) {
     }
 
     // Update the track with the identification
+    const { title: cleanTitle, isUnreleased } = cleanTrackTitleUnreleased(title);
+    const updateData = {
+      artist_name: artist,
+      track_title: cleanTitle,
+      is_id: false,
+      source: 'user',
+      contributed_by: contributedBy || 'Community',
+      updated_at: new Date().toISOString(),
+    };
+    if (isUnreleased) {
+      updateData.is_unreleased = true;
+      updateData.unreleased_source = 'comment_hint';
+    }
     const { data: updatedTrack, error: updateError } = await supabase
       .from('set_tracks')
-      .update({
-        artist_name: artist,
-        track_title: title,
-        is_id: false,
-        source: 'user',
-        contributed_by: contributedBy || 'Community',
-        updated_at: new Date().toISOString(),
-      })
+      .update(updateData)
       .eq('id', trackId)
       .eq('set_id', setId)
       .select()

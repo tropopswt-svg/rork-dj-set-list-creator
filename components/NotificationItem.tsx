@@ -119,6 +119,8 @@ export default function NotificationItem({
           source={{ uri: avatarUrl }}
           style={styles.avatar}
           contentFit="cover"
+          placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+          transition={250}
         />
         <View style={[styles.iconBadge, { backgroundColor: iconColor }]}>
           <IconComponent size={12} color="#fff" />

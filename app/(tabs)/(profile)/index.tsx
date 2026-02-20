@@ -5,14 +5,14 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Modal,
-  FlatList,
   ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Settings, Award, Clock, CheckCircle, AlertCircle, X, ChevronRight, Music, Users, LogIn, User } from 'lucide-react-native';
+import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import TrackdLogo from '@/components/TrackdLogo';
@@ -37,16 +37,68 @@ const formatTimestamp = (seconds: number) => {
 
 type ContributionFilter = 'all' | 'verified' | 'pending' | 'points';
 
+// ── Glass Card wrapper ──────────────────────────────────────────────────
+// Reusable frosted glass container with 3D depth
+function GlassCard({ children, style, intensity = 25 }: {
+  children: React.ReactNode;
+  style?: any;
+  intensity?: number;
+}) {
+  return (
+    <View style={[glassStyles.card, style]}>
+      {/* 3D shadow */}
+      <View style={glassStyles.cardShadow} />
+      {/* Glass face */}
+      <View style={glassStyles.cardFace}>
+        <BlurView intensity={intensity} tint="light" style={StyleSheet.absoluteFill} />
+        <View style={[StyleSheet.absoluteFill, glassStyles.cardTint]} />
+        <View style={glassStyles.cardLightEdge} />
+        {children}
+      </View>
+    </View>
+  );
+}
+
+const glassStyles = StyleSheet.create({
+  card: { position: 'relative' },
+  cardShadow: {
+    position: 'absolute',
+    top: 4,
+    left: 2,
+    right: 2,
+    bottom: -2,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+  cardFace: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+  },
+  cardTint: {
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  cardLightEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 12,
+    right: 12,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 1,
+    zIndex: 2,
+  },
+});
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { sets } = useSets();
   const { isAuthenticated, isLoading, profile } = useAuth();
   const [contributionFilter, setContributionFilter] = useState<ContributionFilter>('all');
-  const [genreModalVisible, setGenreModalVisible] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState<string | null>(null);
   const { contributions: rawContributions, isLoading: contribLoading } = useContributions();
 
-  // Transform Supabase contributions to UserContribution format
   const mappedContributions = useMemo(() => {
     if (!rawContributions || rawContributions.length === 0) return [];
     return rawContributions.map((c: any) => ({
@@ -62,7 +114,6 @@ export default function ProfileScreen() {
     }));
   }, [rawContributions]);
 
-  // Use authenticated profile data if available, otherwise mock data
   const user = useMemo(() => {
     if (isAuthenticated && profile) {
       const pending = mappedContributions.filter((c: any) => c.status === 'pending').length;
@@ -81,10 +132,7 @@ export default function ProfileScreen() {
         followingCount: profile.following_count || 0,
       };
     }
-    return {
-      ...mockCurrentUser,
-      avatarUrl: null,
-    };
+    return { ...mockCurrentUser, avatarUrl: null };
   }, [isAuthenticated, profile, mappedContributions]);
 
   const filteredContributions = useMemo(() => {
@@ -93,24 +141,13 @@ export default function ProfileScreen() {
     return (user.contributions || []).filter((c: any) => c.status === contributionFilter);
   }, [user.contributions, contributionFilter]);
 
-  const setsByGenre = useMemo(() => {
-    if (!selectedGenre) return [];
-    const genreLower = selectedGenre.toLowerCase();
-    return sets.filter(set =>
-      set.name.toLowerCase().includes(genreLower) ||
-      set.artist.toLowerCase().includes(genreLower) ||
-      set.venue?.toLowerCase().includes(genreLower)
-    );
-  }, [sets, selectedGenre]);
-
   const handleGenrePress = (genre: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSelectedGenre(genre);
-    setGenreModalVisible(true);
+    router.push(`/(tabs)/(discover)/genre/${encodeURIComponent(genre)}`);
   };
 
   const handleStatPress = (filter: ContributionFilter) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setContributionFilter(filter);
   };
 
@@ -125,31 +162,22 @@ export default function ProfileScreen() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'verified':
-        return Colors.dark.success;
-      case 'pending':
-        return Colors.dark.warning;
-      case 'rejected':
-        return Colors.dark.error;
-      default:
-        return Colors.dark.textMuted;
+      case 'verified': return '#2E7D32';
+      case 'pending': return '#ED6C02';
+      case 'rejected': return '#D32F2F';
+      default: return Colors.dark.textMuted;
     }
   };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'verified':
-        return <CheckCircle size={14} color={Colors.dark.success} />;
-      case 'pending':
-        return <Clock size={14} color={Colors.dark.warning} />;
-      case 'rejected':
-        return <AlertCircle size={14} color={Colors.dark.error} />;
-      default:
-        return null;
+      case 'verified': return <CheckCircle size={14} color="#2E7D32" />;
+      case 'pending': return <Clock size={14} color="#ED6C02" />;
+      case 'rejected': return <AlertCircle size={14} color="#D32F2F" />;
+      default: return null;
     }
   };
 
-  // Loading state
   if (isLoading) {
     return (
       <View style={styles.container}>
@@ -163,7 +191,6 @@ export default function ProfileScreen() {
   }
 
   // Not authenticated - show login prompt
-  // TODO: Re-enable auth wall after testing
   if (false && !isAuthenticated) {
     return (
       <View style={styles.container}>
@@ -207,257 +234,225 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.container}>
+      {/* ── Ambient glass background ── */}
+      <View style={styles.glassBackground} pointerEvents="none">
+        <View style={[styles.glassOrb, styles.glassOrb1]} />
+        <View style={[styles.glassOrb, styles.glassOrb2]} />
+        <View style={[styles.glassOrb, styles.glassOrb3]} />
+        <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
+      </View>
+
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        {/* ── Header ── */}
         <View style={styles.headerBar}>
           <View style={styles.headerSpacer} />
           <TrackdLogo size="medium" />
-          <Pressable style={styles.settingsButton} onPress={() => router.push('/(tabs)/(profile)/settings')}>
-            <Settings size={22} color={Colors.dark.text} />
+          <Pressable
+            style={styles.settingsButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/(tabs)/(profile)/settings');
+            }}
+          >
+            <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
+            <Settings size={20} color={Colors.dark.text} />
           </Pressable>
         </View>
+
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          {user.avatarUrl ? (
-            <Image source={{ uri: user.avatarUrl }} style={styles.avatar} />
-          ) : (
-            <View style={[styles.avatar, styles.avatarPlaceholder]}>
-              <User size={32} color="rgba(255,255,255,0.5)" />
+          {/* ── Avatar + Identity ── */}
+          <View style={styles.profileHeader}>
+            {/* 3D Glass avatar ring */}
+            <View style={styles.avatarContainer}>
+              <View style={styles.avatarGlow} />
+              <View style={styles.avatarRing}>
+                <LinearGradient
+                  colors={['#C41E3A', '#D64458', '#E8A0AA', '#C41E3A']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </View>
+              <View style={styles.avatarInner}>
+                {user.avatarUrl ? (
+                  <Image
+                    source={{ uri: user.avatarUrl }}
+                    style={styles.avatar}
+                    placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                    transition={250}
+                  />
+                ) : (
+                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <User size={36} color="rgba(255,255,255,0.5)" />
+                  </View>
+                )}
+              </View>
             </View>
-          )}
-          <Text style={styles.displayName}>{user.displayName}</Text>
-          <Text style={styles.username}>@{user.username}</Text>
-          {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
-          {/* Followers/Following Row */}
-          <View style={styles.followStatsRow}>
-            <Pressable
-              style={styles.followStat}
-              onPress={() => {
-                Haptics.selectionAsync();
-                if (profile?.id) {
-                  router.push(`/(tabs)/(social)/followers/${profile.id}`);
-                }
-              }}
-            >
-              <Text style={styles.followStatNumber}>{user.followersCount}</Text>
-              <Text style={styles.followStatLabel}>Followers</Text>
-            </Pressable>
-            <View style={styles.followStatDivider} />
-            <Pressable
-              style={styles.followStat}
-              onPress={() => {
-                Haptics.selectionAsync();
-                if (profile?.id) {
-                  router.push(`/(tabs)/(social)/following/${profile.id}`);
-                }
-              }}
-            >
-              <Text style={styles.followStatNumber}>{user.followingCount}</Text>
-              <Text style={styles.followStatLabel}>Following</Text>
-            </Pressable>
-          </View>
+            <Text style={styles.displayName}>{user.displayName}</Text>
+            <Text style={styles.username}>@{user.username}</Text>
+            {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
 
-          {user.favoriteGenres && user.favoriteGenres.length > 0 && (
-            <View style={styles.genresRow}>
-              {user.favoriteGenres.map((genre: string, index: number) => (
-                <Pressable
-                  key={index}
-                  style={({ pressed }) => [
-                    styles.genreTag,
-                    pressed && styles.genreTagPressed
-                  ]}
-                  onPress={() => handleGenrePress(genre)}
-                >
-                  <Text style={styles.genreText}>{genre}</Text>
-                  <ChevronRight size={12} color={Colors.dark.textSecondary} />
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-
-        <View style={styles.statsContainer}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.statCard,
-              contributionFilter === 'points' && styles.statCardActive,
-              pressed && styles.statCardPressed
-            ]}
-            onPress={() => handleStatPress(contributionFilter === 'points' ? 'all' : 'points')}
-          >
-            <View style={styles.statIconWrapper}>
-              <Award size={20} color={Colors.dark.primary} />
-            </View>
-            <Text style={styles.statValue}>{user.totalPoints}</Text>
-            <Text style={styles.statLabel}>Points</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.statCard,
-              contributionFilter === 'verified' && styles.statCardActive,
-              pressed && styles.statCardPressed
-            ]}
-            onPress={() => handleStatPress(contributionFilter === 'verified' ? 'all' : 'verified')}
-          >
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(46, 204, 113, 0.15)' }]}>
-              <CheckCircle size={20} color={Colors.dark.success} />
-            </View>
-            <Text style={styles.statValue}>{user.verifiedTracks}</Text>
-            <Text style={styles.statLabel}>Verified</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [
-              styles.statCard,
-              contributionFilter === 'pending' && styles.statCardActive,
-              pressed && styles.statCardPressed
-            ]}
-            onPress={() => handleStatPress(contributionFilter === 'pending' ? 'all' : 'pending')}
-          >
-            <View style={[styles.statIconWrapper, { backgroundColor: 'rgba(241, 196, 15, 0.15)' }]}>
-              <Clock size={20} color={Colors.dark.warning} />
-            </View>
-            <Text style={styles.statValue}>{user.pendingTracks}</Text>
-            <Text style={styles.statLabel}>Pending</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <View>
-              <Text style={styles.sectionTitle}>{getFilterLabel()}</Text>
-              <Text style={styles.sectionSubtitle}>
-                {contributionFilter === 'all'
-                  ? `Member since ${formatDate(user.joinedAt)}`
-                  : `${filteredContributions.length} ${contributionFilter === 'points' ? 'submissions with points' : contributionFilter + ' submissions'}`
-                }
-              </Text>
-            </View>
-            {contributionFilter !== 'all' && (
+            {/* ── Glass follower pills ── */}
+            <View style={styles.followRow}>
               <Pressable
-                style={styles.clearFilterButton}
-                onPress={() => setContributionFilter('all')}
+                style={styles.followPill}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  if (profile?.id) router.push(`/(tabs)/(social)/followers/${profile.id}`);
+                }}
               >
-                <Text style={styles.clearFilterText}>Clear</Text>
+                <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.followPillTint]} />
+                <View style={styles.followPillLightEdge} />
+                <Text style={styles.followNumber}>{user.followersCount}</Text>
+                <Text style={styles.followLabel}>Followers</Text>
               </Pressable>
+
+              <View style={styles.followDivider} />
+
+              <Pressable
+                style={styles.followPill}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  if (profile?.id) router.push(`/(tabs)/(social)/following/${profile.id}`);
+                }}
+              >
+                <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.followPillTint]} />
+                <View style={styles.followPillLightEdge} />
+                <Text style={styles.followNumber}>{user.followingCount}</Text>
+                <Text style={styles.followLabel}>Following</Text>
+              </Pressable>
+            </View>
+
+            {/* ── Glass genre tags ── */}
+            {user.favoriteGenres && user.favoriteGenres.length > 0 && (
+              <View style={styles.genresRow}>
+                {user.favoriteGenres.map((genre: string, index: number) => (
+                  <Pressable
+                    key={index}
+                    style={({ pressed }) => [styles.genreTag, pressed && styles.genreTagPressed]}
+                    onPress={() => handleGenrePress(genre)}
+                  >
+                    <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.35)' }]} />
+                    <Text style={styles.genreText}>{genre}</Text>
+                    <ChevronRight size={11} color={Colors.dark.textSecondary} />
+                  </Pressable>
+                ))}
+              </View>
             )}
           </View>
 
-          {filteredContributions.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {contributionFilter === 'all' ? 'No contributions yet' : `No ${contributionFilter} submissions`}
-              </Text>
-              <Text style={styles.emptySubtext}>
-                {contributionFilter === 'all'
-                  ? 'Start adding tracks to sets to earn points!'
-                  : 'Check back later or try a different filter'
-                }
-              </Text>
+          {/* ── Compact Stat Pills ── */}
+          <View style={styles.statsRow}>
+            <Pressable
+              onPress={() => handleStatPress(contributionFilter === 'points' ? 'all' : 'points')}
+              style={[styles.statPill, contributionFilter === 'points' && styles.statPillActive]}
+            >
+              <Award size={13} color={Colors.dark.primary} />
+              <Text style={styles.statValue}>{user.totalPoints}</Text>
+              <Text style={styles.statLabel}>pts</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleStatPress(contributionFilter === 'verified' ? 'all' : 'verified')}
+              style={[styles.statPill, contributionFilter === 'verified' && styles.statPillActive]}
+            >
+              <CheckCircle size={13} color="#2E7D32" />
+              <Text style={styles.statValue}>{user.verifiedTracks}</Text>
+              <Text style={styles.statLabel}>verified</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => handleStatPress(contributionFilter === 'pending' ? 'all' : 'pending')}
+              style={[styles.statPill, contributionFilter === 'pending' && styles.statPillActive]}
+            >
+              <Clock size={13} color="#ED6C02" />
+              <Text style={styles.statValue}>{user.pendingTracks}</Text>
+              <Text style={styles.statLabel}>pending</Text>
+            </Pressable>
+          </View>
+
+          {/* ── Contributions Section ── */}
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <View>
+                <Text style={styles.sectionTitle}>{getFilterLabel()}</Text>
+                <Text style={styles.sectionSubtitle}>
+                  {contributionFilter === 'all'
+                    ? `Member since ${formatDate(user.joinedAt)}`
+                    : `${filteredContributions.length} ${contributionFilter === 'points' ? 'with points' : contributionFilter}`
+                  }
+                </Text>
+              </View>
+              {contributionFilter !== 'all' && (
+                <Pressable
+                  style={styles.clearFilterPill}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setContributionFilter('all');
+                  }}
+                >
+                  <BlurView intensity={15} tint="light" style={StyleSheet.absoluteFill} />
+                  <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
+                  <Text style={styles.clearFilterText}>Clear</Text>
+                </Pressable>
+              )}
             </View>
-          ) : (
-            <View style={styles.contributionsList}>
-              {filteredContributions.map((contribution: any) => (
-                <View key={contribution.id} style={styles.contributionCard}>
-                  <View style={styles.contributionHeader}>
-                    <View style={styles.contributionStatus}>
-                      {getStatusIcon(contribution.status)}
-                      <Text
-                        style={[
-                          styles.statusText,
-                          { color: getStatusColor(contribution.status) },
-                        ]}
-                      >
-                        {contribution.status}
-                      </Text>
-                    </View>
-                    {contribution.points > 0 && (
-                      <View style={styles.pointsBadge}>
-                        <Text style={styles.pointsText}>+{contribution.points}</Text>
-                      </View>
-                    )}
-                  </View>
-                  <Text style={styles.trackTitle}>
-                    {contribution.trackTitle}
+
+            {filteredContributions.length === 0 ? (
+              <GlassCard>
+                <View style={styles.emptyState}>
+                  <Sparkles size={28} color={Colors.dark.textMuted} />
+                  <Text style={styles.emptyText}>
+                    {contributionFilter === 'all' ? 'No contributions yet' : `No ${contributionFilter} submissions`}
                   </Text>
-                  <Text style={styles.trackArtist}>
-                    {contribution.trackArtist}
-                  </Text>
-                  <View style={styles.contributionMeta}>
-                    <Text style={styles.setName} numberOfLines={1}>
-                      {contribution.setName}
-                    </Text>
-                    <Text style={styles.timestamp}>
-                      @ {formatTimestamp(contribution.timestamp)}
-                    </Text>
-                  </View>
-                  <Text style={styles.addedDate}>
-                    Added {formatDate(contribution.addedAt)}
+                  <Text style={styles.emptySubtext}>
+                    {contributionFilter === 'all'
+                      ? 'Start adding tracks to sets to earn points!'
+                      : 'Check back later or try a different filter'
+                    }
                   </Text>
                 </View>
-              ))}
-            </View>
-          )}
-        </View>
-        </ScrollView>
-
-        <Modal
-          visible={genreModalVisible}
-          animationType="slide"
-          presentationStyle="pageSheet"
-          onRequestClose={() => setGenreModalVisible(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{selectedGenre} Sets</Text>
-              <Pressable
-                style={styles.modalCloseButton}
-                onPress={() => setGenreModalVisible(false)}
-              >
-                <X size={24} color={Colors.dark.text} />
-              </Pressable>
-            </View>
-
-            {setsByGenre.length === 0 ? (
-              <View style={styles.modalEmptyState}>
-                <Music size={48} color={Colors.dark.textMuted} />
-                <Text style={styles.modalEmptyText}>No sets found for {selectedGenre}</Text>
-                <Text style={styles.modalEmptySubtext}>Try exploring the Discover tab for more sets</Text>
-              </View>
+              </GlassCard>
             ) : (
-              <FlatList
-                data={setsByGenre}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.modalList}
-                renderItem={({ item }) => (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.genreSetCard,
-                      pressed && styles.genreSetCardPressed
-                    ]}
-                    onPress={() => {
-                      setGenreModalVisible(false);
-                      router.push(`/(tabs)/(discover)/${item.id}`);
-                    }}
-                  >
-                    <Image
-                      source={{ uri: item.coverUrl }}
-                      style={styles.genreSetImage}
-                      contentFit="cover"
-                    />
-                    <View style={styles.genreSetInfo}>
-                      <Text style={styles.genreSetName} numberOfLines={1}>{item.name}</Text>
-                      <Text style={styles.genreSetArtist}>{item.artist}</Text>
-                      <Text style={styles.genreSetMeta}>
-                        {item.tracks.length} tracks • {item.venue || 'Unknown venue'}
-                      </Text>
+              <View style={styles.contributionsList}>
+                {filteredContributions.map((contribution: any) => (
+                  <GlassCard key={contribution.id}>
+                    <View style={styles.contributionContent}>
+                      <View style={styles.contributionHeader}>
+                        <View style={styles.contributionStatus}>
+                          {getStatusIcon(contribution.status)}
+                          <Text style={[styles.statusText, { color: getStatusColor(contribution.status) }]}>
+                            {contribution.status}
+                          </Text>
+                        </View>
+                        {contribution.points > 0 && (
+                          <View style={styles.pointsBadge}>
+                            <Text style={styles.pointsText}>+{contribution.points}</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={styles.trackTitle}>{contribution.trackTitle}</Text>
+                      <Text style={styles.trackArtist}>{contribution.trackArtist}</Text>
+                      <View style={styles.contributionMeta}>
+                        <Text style={styles.setName} numberOfLines={1}>{contribution.setName}</Text>
+                        <View style={styles.timestampPill}>
+                          <Text style={styles.timestampText}>@ {formatTimestamp(contribution.timestamp)}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.addedDate}>Added {formatDate(contribution.addedAt)}</Text>
                     </View>
-                    <ChevronRight size={20} color={Colors.dark.textMuted} />
-                  </Pressable>
-                )}
-              />
+                  </GlassCard>
+                ))}
+              </View>
             )}
           </View>
-        </Modal>
+        </ScrollView>
+
       </SafeAreaView>
     </View>
   );
@@ -466,7 +461,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#F0EDE8',
   },
   safeArea: {
     flex: 1,
@@ -476,6 +471,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+
+  // ── Ambient glass background ──
+  glassBackground: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  glassOrb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  glassOrb1: {
+    width: 280,
+    height: 280,
+    top: -60,
+    right: -40,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+  },
+  glassOrb2: {
+    width: 220,
+    height: 220,
+    top: 300,
+    left: -60,
+    backgroundColor: 'rgba(160, 50, 180, 0.08)',
+  },
+  glassOrb3: {
+    width: 180,
+    height: 180,
+    bottom: 120,
+    right: -30,
+    backgroundColor: 'rgba(50, 100, 200, 0.06)',
+  },
+
+  // ── Header ──
   headerBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -485,39 +513,31 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   headerSpacer: {
-    width: 38, // Match settingsButton width for centering
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.dark.text,
-    letterSpacing: -0.3,
+    width: 40,
   },
   settingsButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.dark.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 3,
   },
+
+  // ── Login prompt ──
   loginPromptContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: 32,
     gap: 16,
-  },
-  loginIconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.dark.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
   },
   loginLogoWrapper: {
     marginBottom: 16,
@@ -538,7 +558,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.dark.primary,
     paddingVertical: 14,
     paddingHorizontal: 48,
-    borderRadius: 12,
+    borderRadius: 16,
     marginTop: 8,
     width: '100%',
     alignItems: 'center',
@@ -559,71 +579,139 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.dark.primary,
   },
+
   scrollContent: {
     paddingBottom: 100,
   },
-  header: {
+
+  // ── Profile Header ──
+  profileHeader: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
     paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+  },
+
+  // ── 3D Glass Avatar ──
+  avatarContainer: {
+    width: 108,
+    height: 108,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  avatarGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 16,
+  },
+  avatarRing: {
+    position: 'absolute',
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    overflow: 'hidden',
+  },
+  avatarInner: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#F0EDE8',
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    marginBottom: 12,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
+    width: '100%',
+    height: '100%',
+    borderRadius: 50,
   },
   avatarPlaceholder: {
-    backgroundColor: '#1A1A1A',
+    backgroundColor: '#2D2A26',
     alignItems: 'center',
     justifyContent: 'center',
   },
   displayName: {
-    fontSize: 22,
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: '800',
     color: Colors.dark.text,
-    marginBottom: 4,
+    letterSpacing: -0.5,
+    marginBottom: 2,
   },
   username: {
     fontSize: 15,
     color: Colors.dark.textMuted,
+    fontWeight: '500',
     marginBottom: 8,
   },
   bio: {
     fontSize: 14,
     color: Colors.dark.textSecondary,
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 16,
     paddingHorizontal: 24,
+    lineHeight: 20,
   },
-  followStatsRow: {
+
+  // ── Glass Follower Pills ──
+  followRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 16,
-    gap: 24,
+    gap: 12,
   },
-  followStat: {
+  followPill: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  followStatNumber: {
-    fontSize: 18,
-    fontWeight: '700',
+  followPillTint: {
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+  followPillLightEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 8,
+    right: 8,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 1,
+    zIndex: 2,
+  },
+  followNumber: {
+    fontSize: 20,
+    fontWeight: '800',
     color: Colors.dark.text,
+    letterSpacing: -0.3,
   },
-  followStatLabel: {
-    fontSize: 12,
+  followLabel: {
+    fontSize: 11,
     color: Colors.dark.textMuted,
-    marginTop: 2,
+    fontWeight: '600',
+    marginTop: 1,
   },
-  followStatDivider: {
+  followDivider: {
     width: 1,
-    height: 24,
-    backgroundColor: Colors.dark.border,
+    height: 28,
+    backgroundColor: 'rgba(0,0,0,0.08)',
   },
+
+  // ── Glass Genre Tags ──
   genresRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -631,123 +719,124 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   genreTag: {
-    backgroundColor: Colors.dark.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderRadius: 14,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   genreTagPressed: {
-    backgroundColor: Colors.dark.surfaceLight,
-    borderColor: Colors.dark.primary,
+    borderColor: 'rgba(196, 30, 58, 0.3)',
   },
   genreText: {
     fontSize: 12,
     color: Colors.dark.textSecondary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
-  statsContainer: {
+
+  // ── 3D Glass Stat Cards ──
+  statsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    gap: 12,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  statCardActive: {
-    borderColor: Colors.dark.primary,
-    backgroundColor: 'rgba(255, 107, 53, 0.08)',
-  },
-  statCardPressed: {
-    opacity: 0.8,
-  },
-  statIconWrapper: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    paddingHorizontal: 16,
+    gap: 8,
+    marginBottom: 20,
+  },
+  statPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  statPillActive: {
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
   },
   statValue: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     color: Colors.dark.text,
+    letterSpacing: -0.3,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: Colors.dark.textMuted,
-    marginTop: 2,
+    fontWeight: '600',
   },
+
+  // ── Contributions Section ──
   section: {
-    padding: 16,
+    paddingHorizontal: 16,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  clearFilterButton: {
-    backgroundColor: Colors.dark.surface,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  clearFilterText: {
-    fontSize: 12,
-    color: Colors.dark.primary,
-    fontWeight: '600',
+    marginBottom: 14,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontWeight: '800',
     color: Colors.dark.text,
-    marginBottom: 4,
+    letterSpacing: -0.3,
+    marginBottom: 2,
   },
   sectionSubtitle: {
     fontSize: 13,
     color: Colors.dark.textMuted,
-    marginTop: 2,
+    fontWeight: '500',
   },
+  clearFilterPill: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+  },
+  clearFilterText: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    fontWeight: '700',
+  },
+
+  // ── Empty state ──
   emptyState: {
     alignItems: 'center',
     padding: 32,
+    gap: 8,
   },
   emptyText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.dark.textSecondary,
-    marginBottom: 4,
   },
   emptySubtext: {
     fontSize: 14,
     color: Colors.dark.textMuted,
     textAlign: 'center',
   },
+
+  // ── Glass Contribution Cards ──
   contributionsList: {
-    gap: 12,
+    gap: 10,
   },
-  contributionCard: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
+  contributionContent: {
     padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
   },
   contributionHeader: {
     flexDirection: 'row',
@@ -762,133 +851,60 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
     textTransform: 'capitalize',
   },
   pointsBadge: {
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.15)',
   },
   pointsText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '800',
     color: Colors.dark.primary,
   },
   trackTitle: {
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
     color: Colors.dark.text,
     marginBottom: 2,
   },
   trackArtist: {
     fontSize: 14,
     color: Colors.dark.textSecondary,
+    fontWeight: '500',
     marginBottom: 8,
   },
   contributionMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   setName: {
     flex: 1,
     fontSize: 12,
     color: Colors.dark.textMuted,
+    fontWeight: '500',
   },
-  timestamp: {
+  timestampPill: {
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  timestampText: {
     fontSize: 12,
     color: Colors.dark.primary,
-    fontWeight: '500',
+    fontWeight: '600',
   },
   addedDate: {
     fontSize: 11,
     color: Colors.dark.textMuted,
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: Colors.dark.background,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.dark.text,
-  },
-  modalCloseButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: Colors.dark.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalList: {
-    padding: 16,
-  },
-  modalEmptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 40,
-  },
-  modalEmptyText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
-    marginTop: 16,
-  },
-  modalEmptySubtext: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  genreSetCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-  },
-  genreSetCardPressed: {
-    backgroundColor: Colors.dark.surfaceLight,
-  },
-  genreSetImage: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-  },
-  genreSetInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  genreSetName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.dark.text,
-    marginBottom: 2,
-  },
-  genreSetArtist: {
-    fontSize: 13,
-    color: Colors.dark.primary,
-    marginBottom: 2,
-  },
-  genreSetMeta: {
-    fontSize: 12,
-    color: Colors.dark.textMuted,
-  },
+
 });

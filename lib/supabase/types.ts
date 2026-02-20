@@ -23,13 +23,18 @@ export interface DbArtist {
   // Stats
   tracks_count: number;
   sets_count: number;
-  followers_count?: number;
+  followers_count: number;
+
+  // Enrichment
+  spotify_artist_id: string | null;
+  popularity: number | null;
+  enriched_at: string | null;
 
   // Verification
   verified: boolean;
   verified_at: string | null;
   verified_by: string | null;
-  
+
   // Timestamps
   created_at: string;
   updated_at: string;
@@ -73,10 +78,17 @@ export interface DbTrack {
   duration_seconds: number | null;
   bpm: number | null;
   key: string | null;
-  
+
+  // Enrichment
+  artwork_url: string | null;
+  spotify_preview_url: string | null;
+  popularity: number | null;
+  album_name: string | null;
+  enriched_at: string | null;
+
   // Stats
   times_played: number;
-  
+
   // Verification
   verified: boolean;
   verified_at: string | null;
@@ -114,7 +126,8 @@ export interface DbSet {
   duration_seconds: number | null;
   tracks_count: number;
   cover_url: string | null;
-  
+  enriched_at: string | null;
+
   created_at: string;
   updated_at: string;
 }

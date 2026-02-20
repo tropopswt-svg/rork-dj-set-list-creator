@@ -19,7 +19,10 @@ export {
   getArtistSets,
   normalizeText,
   generateSlug,
+  getGenresWithCounts,
+  getSetsByGenre,
 } from './artistService';
+export type { GenreInfo } from './artistService';
 
 // Track service
 export {

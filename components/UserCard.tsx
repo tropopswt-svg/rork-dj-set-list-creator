@@ -65,6 +65,8 @@ export default function UserCard({
           source={{ uri: user.avatar_url || 'https://via.placeholder.com/44' }}
           style={styles.compactAvatar}
           contentFit="cover"
+          placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+          transition={250}
         />
         <View style={styles.compactInfo}>
           <Text style={styles.compactName} numberOfLines={1}>
@@ -104,6 +106,8 @@ export default function UserCard({
         source={{ uri: user.avatar_url || 'https://via.placeholder.com/56' }}
         style={styles.avatar}
         contentFit="cover"
+        placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+        transition={250}
       />
 
       <View style={styles.info}>

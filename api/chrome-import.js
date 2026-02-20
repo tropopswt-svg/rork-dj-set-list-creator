@@ -156,17 +156,36 @@ module.exports = async function handler(req, res) {
                       tracksWithoutTimestamps++;
                     }
 
+                    // Detect and strip unreleased indicators from title
+                    let cleanTitle = track.title;
+                    const unreleasedRx = /\bunreleased\b|\bforthcoming\b|\bdubplate\b|\bwhite\s*label\b|\(dub\s*\??\)|\(VIP\)/i;
+                    const titleHasIndicator = unreleasedRx.test(cleanTitle || '');
+                    const isUnreleased = track.is_unreleased || titleHasIndicator;
+                    if (titleHasIndicator && cleanTitle) {
+                      cleanTitle = cleanTitle
+                        .replace(/\s*\(?\s*unreleased\s*\??\s*\)?\s*/gi, ' ')
+                        .replace(/\s*\(?\s*forthcoming\s*\)?\s*/gi, ' ')
+                        .replace(/\s*\(\s*dub\s*\??\s*\)\s*/gi, ' ')
+                        .replace(/\s*\(?\s*dubplate\s*\)?\s*/gi, ' ')
+                        .replace(/\s*\(?\s*white\s*label\s*\)?\s*/gi, ' ')
+                        .replace(/\s*\(\s*VIP\s*\)\s*/gi, ' ')
+                        .replace(/\s+/g, ' ').trim()
+                        .replace(/\(\s*$/, '').trim();
+                    }
+
                     await supabase
                       .from('set_tracks')
                       .insert({
                         set_id: newSet.id,
-                        track_title: track.title,
+                        track_title: cleanTitle,
                         artist_name: track.artist,
                         timestamp_seconds: track.timestamp_seconds || 0,
                         position: track.position || 0,
                         is_id: track.title?.toLowerCase() === 'id' || track.is_unreleased || false,
-                        is_timed: hasTimestamp, // Track whether this has a real timestamp
+                        is_timed: hasTimestamp,
                         source: '1001tracklists',
+                        is_unreleased: isUnreleased,
+                        unreleased_source: isUnreleased ? 'comment_hint' : null,
                       });
                   } catch (e) {
                     // Ignore individual track link errors

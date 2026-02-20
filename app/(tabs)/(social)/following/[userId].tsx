@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
@@ -214,7 +214,7 @@ export default function FollowingListScreen() {
             <ActivityIndicator size="large" color={Colors.dark.primary} />
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={filteredData}
             renderItem={renderItem}
             keyExtractor={(item) => item.id}
@@ -231,6 +231,7 @@ export default function FollowingListScreen() {
             onEndReachedThreshold={0.5}
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmpty}
+            estimatedItemSize={64}
           />
         )}
       </SafeAreaView>

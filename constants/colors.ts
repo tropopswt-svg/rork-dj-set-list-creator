@@ -1,4 +1,12 @@
 // Circoloco Red: #C41E3A
+
+// Default blurhash placeholders for expo-image
+// Generated from representative dark/warm tones for music cover art
+export const BLURHASH = {
+  coverDark: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4',  // warm dark — album/set covers
+  avatarDark: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ',  // neutral dark — profile avatars
+};
+
 export default {
   light: {
     background: '#F5F0E8',

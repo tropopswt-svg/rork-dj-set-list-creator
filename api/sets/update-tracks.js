@@ -1,5 +1,6 @@
 // API endpoint to update set tracks with timestamps from YouTube/SoundCloud scraping
 import { createClient } from '@supabase/supabase-js';
+import { cleanTrackTitleUnreleased } from '../_lib/track-utils.js';
 
 // Use service role key for server-side write operations (bypasses RLS)
 function getSupabaseClient() {
@@ -164,18 +165,24 @@ export default async function handler(req, res) {
         if (timestamp > 0) {
           const position = existingTracks.length + newTracksAdded + 1;
 
+          const { title: cleanScrapedTitle, isUnreleased: scrapedUnreleased } = cleanTrackTitleUnreleased(scrapedTrack.title || 'Unknown');
+          const insertData = {
+            set_id: setId,
+            artist_name: scrapedTrack.artist || 'Unknown',
+            track_title: cleanScrapedTitle,
+            position: position,
+            timestamp_seconds: timestamp,
+            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
+            source: source || 'youtube',
+            is_id: false,
+          };
+          if (scrapedUnreleased) {
+            insertData.is_unreleased = true;
+            insertData.unreleased_source = 'comment_hint';
+          }
           const { error: insertError } = await supabase
             .from('set_tracks')
-            .insert({
-              set_id: setId,
-              artist_name: scrapedTrack.artist || 'Unknown',
-              track_title: scrapedTrack.title || 'Unknown',
-              position: position,
-              timestamp_seconds: timestamp,
-              timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
-              source: source || 'youtube',
-              is_id: false,
-            });
+            .insert(insertData);
 
           if (!insertError) {
             newTracksAdded++;

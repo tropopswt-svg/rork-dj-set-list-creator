@@ -1,5 +1,6 @@
 // API endpoint to normalize venue names, artist names, and deduplicate data in the database
 import { createClient } from '@supabase/supabase-js';
+import { cleanTrackTitleUnreleased } from './_lib/track-utils.js';
 
 // Use service role key for write operations
 function getSupabaseClient() {
@@ -252,7 +253,7 @@ export default async function handler(req, res) {
     if (action === 'normalize-tracks' || action === 'all') {
       const { data: tracks, error } = await supabase
         .from('set_tracks')
-        .select('id, artist_name, track_title')
+        .select('id, artist_name, track_title, is_unreleased')
         .not('artist_name', 'is', null);
 
       if (error) throw error;
@@ -260,13 +261,20 @@ export default async function handler(req, res) {
       const trackChanges = [];
       for (const track of tracks || []) {
         const normalizedArtist = normalizeArtistName(track.artist_name);
-        const normalizedTitle = track.track_title ? track.track_title.trim().replace(/\s{2,}/g, ' ') : track.track_title;
+        // Normalize whitespace AND strip unreleased indicators from titles
+        let normalizedTitle = track.track_title ? track.track_title.trim().replace(/\s{2,}/g, ' ') : track.track_title;
+        const { title: cleanedTitle, isUnreleased } = cleanTrackTitleUnreleased(normalizedTitle);
+        normalizedTitle = cleanedTitle;
 
-        if (normalizedArtist !== track.artist_name || normalizedTitle !== track.track_title) {
-          const update = {};
-          if (normalizedArtist !== track.artist_name) update.artist_name = normalizedArtist;
-          if (normalizedTitle !== track.track_title) update.track_title = normalizedTitle;
+        const update = {};
+        if (normalizedArtist !== track.artist_name) update.artist_name = normalizedArtist;
+        if (normalizedTitle !== track.track_title) update.track_title = normalizedTitle;
+        if (isUnreleased && !track.is_unreleased) {
+          update.is_unreleased = true;
+          update.unreleased_source = 'comment_hint';
+        }
 
+        if (Object.keys(update).length > 0) {
           trackChanges.push({
             id: track.id,
             oldArtist: track.artist_name,

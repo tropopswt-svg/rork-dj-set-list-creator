@@ -250,6 +250,7 @@ export default function TabLayout() {
   // Gate certain tabs for unauthenticated users
   // TODO: Re-enable auth gate after testing
   const handleTabPress = (tabName: string, e: any) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     // Auth gate disabled for testing
     // const gatedTabs = ['(profile)', '(social)'];
     // if (gatedTabs.includes(tabName) && !isAuthenticated) {
@@ -290,12 +291,18 @@ export default function TabLayout() {
           title: 'Discover',
           tabBarIcon: ({ color, size }) => <Disc3 size={size} color={color} />,
         }}
+        listeners={{
+          tabPress: (e) => handleTabPress('(discover)', e),
+        }}
       />
       <Tabs.Screen
         name="(feed)"
         options={{
           title: 'Feed',
           tabBarIcon: ({ color, size }) => <Rss size={size} color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => handleTabPress('(feed)', e),
         }}
       />
       <Tabs.Screen

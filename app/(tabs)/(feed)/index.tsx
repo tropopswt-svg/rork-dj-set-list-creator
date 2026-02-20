@@ -901,6 +901,7 @@ export default function FeedScreen() {
   // Map category to API sort param
   const categoryToSort = (cat: FeedCategory): string => {
     switch (cat) {
+      case 'for_you': return 'for_you';
       case 'new': return 'new';
       case 'popular': return 'popular';
       case 'deep_cuts': return 'deep_cuts';
@@ -908,10 +909,10 @@ export default function FeedScreen() {
     }
   };
 
-  // Load sets for the active category
+  // Load sets for the active category (re-fetch on login/logout for personalization)
   useEffect(() => {
     loadCategorySets(activeCategory);
-  }, [activeCategory]);
+  }, [activeCategory, user?.id]);
 
   // Load sets from database for followed artists (for_you)
   useEffect(() => {
@@ -923,7 +924,12 @@ export default function FeedScreen() {
   const loadCategorySets = async (category: FeedCategory) => {
     try {
       const sort = categoryToSort(category);
-      const response = await fetch(`${FEED_API_BASE_URL}/api/sets?limit=20&sort=${sort}`);
+      let url = `${FEED_API_BASE_URL}/api/sets?limit=20&sort=${sort}`;
+      // Pass user_id for personalized For You scoring
+      if (sort === 'for_you' && user?.id) {
+        url += `&user_id=${encodeURIComponent(user.id)}`;
+      }
+      const response = await fetch(url);
       const data = await response.json();
       if (data.success && data.sets) {
         setRecentDbSets(data.sets);

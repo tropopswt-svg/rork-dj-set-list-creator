@@ -76,7 +76,7 @@ export default function SimilarSets({ setId }: SimilarSetsProps) {
   const renderItem = ({ item }: { item: SimilarSet }) => (
     <Pressable style={styles.card} onPress={() => handlePress(item.id)}>
       {getCoverImageUrl(item.coverUrl) ? (
-        <Image source={{ uri: getCoverImageUrl(item.coverUrl)! }} style={styles.cardImage} contentFit="cover" />
+        <Image source={{ uri: getCoverImageUrl(item.coverUrl)! }} style={styles.cardImage} contentFit="cover" placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }} transition={250} />
       ) : (
         <View style={[styles.cardImage, { backgroundColor: Colors.dark.surface }]} />
       )}

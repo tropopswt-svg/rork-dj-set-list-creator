@@ -90,6 +90,8 @@ export default function UserProfileScreen() {
           <Image
             source={{ uri: profile.avatar_url || undefined }}
             style={styles.avatar}
+            placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+            transition={250}
           />
 
           <View style={styles.headerInfo}>
@@ -167,6 +169,8 @@ export default function UserProfileScreen() {
                   <Image
                     source={{ uri: follower.avatar_url || undefined }}
                     style={styles.mutualAvatarImage}
+                    placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                    transition={250}
                   />
                 </View>
               ))}
@@ -298,6 +302,8 @@ export default function UserProfileScreen() {
                   <Image
                     source={{ uri: like.set?.cover_url || undefined }}
                     style={styles.likedSetCover}
+                    placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                    transition={250}
                   />
                   <View style={styles.likedSetInfo}>
                     <Text style={styles.likedSetName} numberOfLines={1}>

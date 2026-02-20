@@ -1,5 +1,6 @@
 // API endpoint to match a URL against existing sets and fill in gaps
 import { createClient } from '@supabase/supabase-js';
+import { cleanTrackTitleUnreleased } from './_lib/track-utils.js';
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -179,14 +180,20 @@ export default async function handler(req, res) {
 
             if (idTrack) {
               // Update the ID track with real info
+              const { title: cleanTitle, isUnreleased } = cleanTrackTitleUnreleased(identified.title);
+              const updateData = {
+                track_id: trackId,
+                artist_name: identified.artist,
+                track_title: cleanTitle,
+                is_id: false,
+              };
+              if (isUnreleased) {
+                updateData.is_unreleased = true;
+                updateData.unreleased_source = 'comment_hint';
+              }
               const { error: updateError } = await supabase
                 .from('set_tracks')
-                .update({
-                  track_id: trackId,
-                  artist_name: identified.artist,
-                  track_title: identified.title,
-                  is_id: false,
-                })
+                .update(updateData)
                 .eq('id', idTrack.id);
 
               if (!updateError) {
@@ -211,16 +218,22 @@ export default async function handler(req, res) {
               );
 
               if (!existsAtPosition) {
-                await supabase.from('set_tracks').insert({
+                const { title: cleanInsertTitle, isUnreleased: insertUnreleased } = cleanTrackTitleUnreleased(identified.title);
+                const insertData = {
                   set_id: existingSet.id,
                   track_id: trackId,
                   artist_name: identified.artist,
-                  track_title: identified.title,
+                  track_title: cleanInsertTitle,
                   position: position,
                   timestamp_seconds: identified.timestamp_seconds,
                   timestamp_str: identified.timestamp_str || null,
                   is_id: false,
-                });
+                };
+                if (insertUnreleased) {
+                  insertData.is_unreleased = true;
+                  insertData.unreleased_source = 'comment_hint';
+                }
+                await supabase.from('set_tracks').insert(insertData);
                 results.tracksAdded++;
               }
             }

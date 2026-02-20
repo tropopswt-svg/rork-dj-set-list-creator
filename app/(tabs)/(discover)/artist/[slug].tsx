@@ -143,6 +143,8 @@ export default function ArtistProfileScreen() {
                   source={{ uri: artist.image_url }}
                   style={styles.avatar}
                   contentFit="cover"
+                  placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                  transition={250}
                 />
               ) : (
                 <View style={styles.avatarPlaceholder}>
@@ -164,6 +166,21 @@ export default function ArtistProfileScreen() {
               <View style={styles.countryRow}>
                 <MapPin size={14} color="rgba(255,255,255,0.6)" />
                 <Text style={styles.countryText}>{artist.country}</Text>
+              </View>
+            )}
+
+            {/* Genre Chips */}
+            {artist.genres && artist.genres.length > 0 && (
+              <View style={styles.genreChips}>
+                {artist.genres.slice(0, 5).map((genre: string) => (
+                  <Pressable
+                    key={genre}
+                    style={styles.genreChip}
+                    onPress={() => router.push(`/(tabs)/(discover)/genre/${encodeURIComponent(genre)}`)}
+                  >
+                    <Text style={styles.genreChipText}>{genre}</Text>
+                  </Pressable>
+                ))}
               </View>
             )}
 
@@ -288,8 +305,11 @@ export default function ArtistProfileScreen() {
                         )}
                       </View>
                       {track.is_unreleased && !isId && (
-                        <View style={styles.unreleasedBadge}>
-                          <Text style={styles.unreleasedText}>Unreleased</Text>
+                        <View style={styles.unreleasedBadge3d}>
+                          <View style={styles.unreleasedBadgeShadow} />
+                          <View style={styles.unreleasedBadgeFace}>
+                            <Text style={styles.unreleasedText}>Unreleased</Text>
+                          </View>
                         </View>
                       )}
                       {isId && featuredSets.length > 0 ? (
@@ -341,6 +361,8 @@ export default function ArtistProfileScreen() {
                         source={{ uri: set.cover_url || (set.youtube_url ? `https://img.youtube.com/vi/${set.youtube_url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)?.[1]}/mqdefault.jpg` : undefined) }}
                         style={styles.setCover}
                         contentFit="cover"
+                        placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                        transition={250}
                       />
                     )}
                     <View style={styles.setInfo}>
@@ -488,6 +510,26 @@ const styles = StyleSheet.create({
   countryText: {
     fontSize: 14,
     color: 'rgba(255,255,255,0.7)',
+  },
+  genreChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  genreChip: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  genreChipText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.85)',
   },
   statsRow: {
     flexDirection: 'row',
@@ -697,17 +739,43 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.dark.primary,
   },
-  unreleasedBadge: {
-    backgroundColor: 'rgba(212, 160, 23, 0.15)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
+  unreleasedBadge3d: {
+    position: 'relative' as const,
+    paddingBottom: 2,
     marginRight: 8,
+  },
+  unreleasedBadgeShadow: {
+    position: 'absolute' as const,
+    top: 2,
+    left: 1,
+    right: -1,
+    bottom: -1,
+    borderRadius: 7,
+    backgroundColor: 'rgba(180, 130, 0, 0.4)',
+  },
+  unreleasedBadgeFace: {
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 7,
+    backgroundColor: 'rgba(10, 10, 10, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    borderTopColor: 'rgba(255, 223, 120, 0.5)',
+    borderBottomColor: 'rgba(255, 215, 0, 0.15)',
+    shadowColor: '#FFD700',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
   unreleasedText: {
     fontSize: 10,
-    fontWeight: '600',
-    color: '#D4A017',
+    fontWeight: '800',
+    color: '#FFD700',
+    letterSpacing: 0.4,
+    textShadowColor: 'rgba(255, 215, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 3,
   },
   playsBadge: {
     flexDirection: 'row',

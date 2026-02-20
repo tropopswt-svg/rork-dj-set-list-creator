@@ -243,6 +243,16 @@ async function extractSetData(page, sourceUrl) {
                               trackName?.toLowerCase().includes('unreleased') ||
                               trackName?.toLowerCase() === 'id';
 
+          // Strip unreleased indicators from track title
+          if (isUnreleased && trackName) {
+            trackName = trackName
+              .replace(/\s*\(?\s*unreleased\s*\??\s*\)?\s*/gi, ' ')
+              .replace(/\s*\(?\s*forthcoming\s*\)?\s*/gi, ' ')
+              .replace(/\s+/g, ' ')
+              .replace(/\(\s*$/, '')
+              .trim();
+          }
+
           if (trackName || trackArtist) {
             result.tracks.push({
               title: trackName || 'Unknown',

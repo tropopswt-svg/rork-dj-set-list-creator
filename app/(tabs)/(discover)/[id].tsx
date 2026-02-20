@@ -1432,28 +1432,49 @@ export default function SetDetailScreen() {
           </View>
 
           <View style={styles.statsSection}>
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.15)' }]}>
-                <Sparkles size={14} color="#00D4AA" />
+            <View style={styles.statCardOuter}>
+              <View style={styles.statCardShadow} />
+              <View style={styles.statCard}>
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
+                <View style={styles.statCardContent}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
+                    <Sparkles size={14} color="#00D4AA" />
+                  </View>
+                  <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
+                  <Text style={styles.statLabel}>trakd</Text>
+                </View>
               </View>
-              <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
-              <Text style={styles.statLabel}>trakd</Text>
             </View>
 
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.15)' }]}>
-                <CheckCircle size={14} color="#22C55E" />
+            <View style={styles.statCardOuter}>
+              <View style={styles.statCardShadow} />
+              <View style={styles.statCard}>
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
+                <View style={styles.statCardContent}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
+                    <CheckCircle size={14} color="#22C55E" />
+                  </View>
+                  <Text style={styles.statValue}>{verifiedCount}</Text>
+                  <Text style={styles.statLabel}>Verified</Text>
+                </View>
               </View>
-              <Text style={styles.statValue}>{verifiedCount}</Text>
-              <Text style={styles.statLabel}>Verified</Text>
             </View>
 
-            <View style={styles.statCard}>
-              <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.15)' }]}>
-                <Users size={14} color="#8B5CF6" />
+            <View style={styles.statCardOuter}>
+              <View style={styles.statCardShadow} />
+              <View style={styles.statCard}>
+                <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
+                <View style={styles.statCardContent}>
+                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.2)' }]}>
+                    <Users size={14} color="#8B5CF6" />
+                  </View>
+                  <Text style={styles.statValue}>{communityCount}</Text>
+                  <Text style={styles.statLabel}>Comm.</Text>
+                </View>
               </View>
-              <Text style={styles.statValue}>{communityCount}</Text>
-              <Text style={styles.statLabel}>Comm.</Text>
             </View>
 
             {/* Released / ID Status Card */}
@@ -1468,35 +1489,42 @@ export default function SetDetailScreen() {
               const unreleasedCount = unreleasedTracks.length;
 
               return (
-                <View style={styles.statCardWide}>
-                  <View style={styles.releaseStatusRow}>
-                    <View style={styles.releaseStatusItem}>
-                      <CheckCircle size={10} color="#22C55E" />
-                      <Text style={styles.releaseStatusValue}>{releasedCount}</Text>
-                      <Text style={styles.releaseStatusLabel}>Rel</Text>
+                <View style={[styles.statCardOuter, { flex: 1.2, minWidth: 85 }]}>
+                  <View style={styles.statCardShadow} />
+                  <View style={styles.statCardWide}>
+                    <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
+                    <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
+                    <View style={styles.statCardContent}>
+                      <View style={styles.releaseStatusRow}>
+                        <View style={styles.releaseStatusItem}>
+                          <CheckCircle size={10} color="#22C55E" />
+                          <Text style={styles.releaseStatusValue}>{releasedCount}</Text>
+                          <Text style={styles.releaseStatusLabel}>Rel</Text>
+                        </View>
+                        <View style={styles.releaseStatusDivider} />
+                        <View style={styles.releaseStatusItem}>
+                          <Sparkles size={10} color="#C41E3A" />
+                          <Text style={styles.releaseStatusValue}>{unreleasedCount}</Text>
+                          <Text style={styles.releaseStatusLabel}>ID</Text>
+                        </View>
+                      </View>
+                      <View style={styles.releaseStatusBarContainer}>
+                        <View
+                          style={[
+                            styles.releaseStatusBar,
+                            styles.releaseStatusBarReleased,
+                            { flex: releasedCount || 0.1 }
+                          ]}
+                        />
+                        <View
+                          style={[
+                            styles.releaseStatusBar,
+                            styles.releaseStatusBarUnreleased,
+                            { flex: unreleasedCount || 0.1 }
+                          ]}
+                        />
+                      </View>
                     </View>
-                    <View style={styles.releaseStatusDivider} />
-                    <View style={styles.releaseStatusItem}>
-                      <Sparkles size={10} color="#C41E3A" />
-                      <Text style={styles.releaseStatusValue}>{unreleasedCount}</Text>
-                      <Text style={styles.releaseStatusLabel}>ID</Text>
-                    </View>
-                  </View>
-                  <View style={styles.releaseStatusBarContainer}>
-                    <View
-                      style={[
-                        styles.releaseStatusBar,
-                        styles.releaseStatusBarReleased,
-                        { flex: releasedCount || 0.1 }
-                      ]}
-                    />
-                    <View
-                      style={[
-                        styles.releaseStatusBar,
-                        styles.releaseStatusBarUnreleased,
-                        { flex: unreleasedCount || 0.1 }
-                      ]}
-                    />
                   </View>
                 </View>
               );
@@ -2405,21 +2433,34 @@ const styles = StyleSheet.create({
     gap: 6,
     marginBottom: 16,
   },
-  statCard: {
+  statCardOuter: {
     flex: 1,
-    backgroundColor: 'rgba(10, 10, 10, 0.7)',
+    position: 'relative',
+  },
+  statCardShadow: {
+    position: 'absolute',
+    top: 3,
+    left: 2,
+    right: 2,
+    bottom: -1,
     borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  statCard: {
+    borderRadius: 10,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderTopColor: 'rgba(255,255,255,0.3)',
+  },
+  statCardTint: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  statCardContent: {
     padding: 8,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.2)',
-    borderBottomColor: 'rgba(0,0,0,0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+    width: '100%',
   },
   statIconContainer: {
     width: 26,
@@ -2434,29 +2475,25 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#FFFFFF',
     marginBottom: 1,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   statLabel: {
     fontSize: 8,
-    color: 'rgba(255,255,255,0.55)',
+    color: 'rgba(255,255,255,0.7)',
     textTransform: 'uppercase',
     letterSpacing: 0.2,
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   statCardWide: {
-    flex: 1.2,
-    minWidth: 85,
-    backgroundColor: 'rgba(10, 10, 10, 0.7)',
     borderRadius: 10,
-    padding: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.2)',
-    borderBottomColor: 'rgba(0,0,0,0.2)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 3,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderTopColor: 'rgba(255,255,255,0.3)',
   },
   releaseStatusRow: {
     flexDirection: 'row',

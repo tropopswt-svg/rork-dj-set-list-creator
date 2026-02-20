@@ -1,11 +1,10 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions, InteractionManager } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions, InteractionManager } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Search, Link2, TrendingUp, Clock, SlidersHorizontal, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings, Heart, Bookmark, Play, Share2, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import SetFeedCard from '@/components/SetFeedCard';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
 import TrackdLogo from '@/components/TrackdLogo';
 import ImportSetModal from '@/components/ImportSetModal';
@@ -19,6 +18,9 @@ import { normalizeVenueName, normalizeArtistName } from '@/lib/venueNormalizatio
 // Tab bar height from _layout.tsx — in React Navigation v7 (Expo Router 6),
 // the tab bar is absolutely positioned and overlaps scroll content
 const TAB_BAR_HEIGHT = 85;
+
+// Create outside component to avoid re-creation on every render
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown as typeof FlatList;
 // Initial estimate of header area (logo ~76 + search ~62 + filters ~58 = ~196)
 const HEADER_AREA_ESTIMATE = 196;
 
@@ -171,7 +173,7 @@ export default function DiscoverScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const scrollY = useRef(new Animated.Value(0)).current;
-  const scrollViewRef = useRef<ScrollView>(null);
+  const flatListRef = useRef<FlatList<SetList>>(null);
   const lastCenteredIndex = useRef(-1);
   const lastHapticTime = useRef(0);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
@@ -185,7 +187,7 @@ export default function DiscoverScreen() {
     identified: 'all',
     eventId: null,
   });
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const selectedIndexRef = useRef(0);
 
   // Auto-scroll feature - starts after 20 seconds of inactivity
   const AUTO_SCROLL_DELAY = 20000; // 20 seconds before auto-scroll starts
@@ -564,7 +566,7 @@ export default function DiscoverScreen() {
 
       if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
         lastCenteredIndex.current = centeredIndex;
-        setSelectedIndex(centeredIndex);
+        selectedIndexRef.current = centeredIndex;
 
         // Haptic feedback only during user drag
         if (isUserDragging.current) {
@@ -627,13 +629,12 @@ export default function DiscoverScreen() {
 
   // Check if a set has been trakd (analyzed via YouTube/SoundCloud)
   const isSetIdentified = (set: SetList): boolean => {
-    // Check if set has YouTube or SoundCloud sources
+    // A set is "trakd" if it has a YouTube or SoundCloud source AND has tracks
     const hasAnalyzableSource = set.sourceLinks?.some(
       link => link.platform === 'youtube' || link.platform === 'soundcloud'
     );
-    // Check if it's been AI processed or has tracks with timestamps
-    const hasBeenAnalyzed = set.aiProcessed || (set.tracksIdentified && set.tracksIdentified > 0);
-    return !!(hasAnalyzableSource && hasBeenAnalyzed);
+    const hasTracks = (set.trackCount || set.tracks?.length || 0) > 0;
+    return !!(hasAnalyzableSource && hasTracks);
   };
 
   // Check if a set needs a source (no YouTube or SoundCloud)
@@ -709,36 +710,30 @@ export default function DiscoverScreen() {
   const initialScrollOffset = middleIndex * CARD_HEIGHT;
 
   // Set scroll position to middle when data loads
-  const filteredSetKey = useMemo(() => filteredSets.map(s => s.id).join(','), [filteredSets]);
+  const filteredSetKey = useMemo(() => {
+    const len = filteredSets.length;
+    return `${len}-${filteredSets[0]?.id || ''}-${filteredSets[len - 1]?.id || ''}`;
+  }, [filteredSets]);
 
   const isInitialLoad = useRef(true);
 
   useEffect(() => {
-    if (filteredSets.length > 0 && scrollViewRef.current) {
-      const task = InteractionManager.runAfterInteractions(() => {
-        if (isInitialLoad.current) {
-          scrollViewRef.current?.scrollTo({ y: initialScrollOffset, animated: false });
-          isInitialLoad.current = false;
-        } else {
-          scrollViewRef.current?.scrollTo({ y: 0, animated: false });
-        }
-      });
-      return () => task.cancel();
+    if (isInitialLoad.current && filteredSets.length > 0) {
+      isInitialLoad.current = false;
     }
   }, [filteredSetKey]);
 
   // Auto-scroll: scroll to next set
   const scrollToNextSet = useCallback(() => {
-    if (!scrollViewRef.current || filteredSets.length === 0) return;
+    if (!flatListRef.current || filteredSets.length === 0) return;
 
-    const nextIndex = (selectedIndex + 1) % filteredSets.length;
-    const targetOffset = nextIndex * CARD_HEIGHT;
+    const nextIndex = (selectedIndexRef.current + 1) % filteredSets.length;
 
-    scrollViewRef.current.scrollTo({
-      y: targetOffset,
+    flatListRef.current.scrollToIndex({
+      index: nextIndex,
       animated: true,
     });
-  }, [selectedIndex, filteredSets.length]);
+  }, [filteredSets.length]);
 
   // Start auto-scroll mode
   const startAutoScroll = useCallback(() => {
@@ -849,6 +844,56 @@ export default function DiscoverScreen() {
     return options.filter(opt => opt.toLowerCase().includes(search));
   };
 
+  // Stable callbacks for FlatList renderItem (avoids new function refs each render)
+  const handleSetPress = useCallback((setId: string) => {
+    router.push(`/(tabs)/(discover)/${setId}`);
+  }, [router]);
+
+  const handleArtistNavPress = useCallback((artist: string) => {
+    const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
+    router.push(`/(tabs)/(discover)/artist/${slug}`);
+  }, [router]);
+
+  const getItemLayout = useCallback((_data: any, index: number) => ({
+    length: CARD_HEIGHT,
+    offset: CARD_HEIGHT * index,
+    index,
+  }), []);
+
+  const renderSetCard = useCallback(({ item, index }: { item: SetList; index: number }) => (
+    <AnimatedSetCard
+      setList={item}
+      index={index}
+      scrollY={scrollY}
+      centerOffset={0}
+      onPress={() => handleSetPress(item.id)}
+      onLongPress={() => handleSetLongPress(item)}
+      onArtistPress={handleArtistNavPress}
+      onEventPress={handleEventFilter}
+    />
+  ), [scrollY, handleSetPress, handleSetLongPress, handleArtistNavPress, handleEventFilter]);
+
+  const keyExtractor = useCallback((item: SetList) => item.id, []);
+
+  const listEmptyComponent = useMemo(() => (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Search size={32} color={Colors.dark.textMuted} />
+      </View>
+      <Text style={styles.emptyTitle}>No sets found</Text>
+      <Text style={styles.emptySubtitle}>
+        Try a different search or import a new set
+      </Text>
+    </View>
+  ), []);
+
+  const listLoadingComponent = useMemo(() => (
+    <View style={styles.loadingState}>
+      <ActivityIndicator size="large" color={Colors.dark.primary} />
+      <Text style={styles.loadingText}>Loading sets...</Text>
+    </View>
+  ), []);
+
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -945,28 +990,41 @@ export default function DiscoverScreen() {
         {/* Filter Dropdown */}
         {showFilterDropdown && (
           <View style={styles.filterDropdown}>
-            {/* trakd filter toggle */}
-            <Pressable
-              style={[
-                styles.trakdToggleBtn,
-                selectedFilters.identified === 'identified' && styles.trakdToggleBtnActive,
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setSelectedFilters(prev => ({
-                  ...prev,
-                  identified: prev.identified === 'identified' ? 'all' : 'identified',
-                }));
-              }}
-            >
-              <Text style={[
-                styles.trakdToggleText,
-                selectedFilters.identified === 'identified' && styles.trakdToggleTextActive,
-              ]}>trakd</Text>
-              {selectedFilters.identified === 'identified' && (
-                <X size={12} color="rgba(255, 248, 231, 0.8)" />
-              )}
-            </Pressable>
+            {/* trakd + Genres row */}
+            <View style={styles.topToggleRow}>
+              <Pressable
+                style={[
+                  styles.trakdToggleBtn,
+                  selectedFilters.identified === 'identified' && styles.trakdToggleBtnActive,
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setSelectedFilters(prev => ({
+                    ...prev,
+                    identified: prev.identified === 'identified' ? 'all' : 'identified',
+                  }));
+                }}
+              >
+                <Text style={[
+                  styles.trakdToggleText,
+                  selectedFilters.identified === 'identified' && styles.trakdToggleTextActive,
+                ]}>trakd</Text>
+                {selectedFilters.identified === 'identified' && (
+                  <X size={12} color="rgba(255, 248, 231, 0.8)" />
+                )}
+              </Pressable>
+
+              <Pressable
+                style={styles.genresToggleBtn}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push('/(tabs)/(discover)/genres');
+                }}
+              >
+                <Tag size={14} color={Colors.dark.primary} />
+                <Text style={styles.genresToggleText}>Genres</Text>
+              </Pressable>
+            </View>
 
             {/* Filter section buttons */}
             <View style={styles.filterSectionButtons}>
@@ -1071,79 +1129,58 @@ export default function DiscoverScreen() {
         )}
         </View>
 
-        <Animated.ScrollView
-          ref={scrollViewRef as any}
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingTop: scrollPaddingTop, paddingBottom: scrollPaddingBottom }]}
-          showsVerticalScrollIndicator={false}
-          contentInsetAdjustmentBehavior="never"
-          automaticallyAdjustContentInsets={false}
-          scrollEventThrottle={16}
-          decelerationRate="fast"
-          snapToInterval={CARD_HEIGHT}
-          snapToAlignment="start"
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
-          )}
-          onScrollBeginDrag={() => {
-            isUserDragging.current = true;
-            resetInactivityTimer();
-          }}
-          onScrollEndDrag={() => {
-            isUserDragging.current = false;
-          }}
-          onMomentumScrollEnd={() => {
-            isUserDragging.current = false;
-          }}
-          onTouchStart={resetInactivityTimer}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={Colors.dark.primary}
-            />
-          }
-        >
-          {isLoading ? (
-            <View style={styles.loadingState}>
-              <ActivityIndicator size="large" color={Colors.dark.primary} />
-              <Text style={styles.loadingText}>Loading sets...</Text>
-            </View>
-          ) : (
-            <>
-              {filteredSets.map((setList, index) => (
-                <AnimatedSetCard
-                  key={setList.id}
-                  setList={setList}
-                  index={index}
-                  scrollY={scrollY}
-                  centerOffset={0}
-                  isSelected={index === selectedIndex}
-                  onPress={() => router.push(`/(tabs)/(discover)/${setList.id}`)}
-                  onLongPress={() => handleSetLongPress(setList)}
-                  onArtistPress={(artist) => {
-                    const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
-                    router.push(`/(tabs)/(discover)/artist/${slug}`);
-                  }}
-                  onEventPress={handleEventFilter}
-                />
-              ))}
-
-              {filteredSets.length === 0 && (
-                <View style={styles.emptyState}>
-                  <View style={styles.emptyIcon}>
-                    <Search size={32} color={Colors.dark.textMuted} />
-                  </View>
-                  <Text style={styles.emptyTitle}>No sets found</Text>
-                  <Text style={styles.emptySubtitle}>
-                    Try a different search or import a new set
-                  </Text>
-                </View>
-              )}
-            </>
-          )}
-        </Animated.ScrollView>
+        {isLoading ? (
+          <View style={[styles.scrollView, { justifyContent: 'center', alignItems: 'center' }]}>
+            {listLoadingComponent}
+          </View>
+        ) : (
+          <AnimatedFlatList
+            ref={flatListRef as any}
+            data={filteredSets}
+            renderItem={renderSetCard}
+            keyExtractor={keyExtractor}
+            getItemLayout={getItemLayout}
+            style={styles.scrollView}
+            contentContainerStyle={[styles.scrollContent, { paddingTop: scrollPaddingTop, paddingBottom: scrollPaddingBottom }]}
+            showsVerticalScrollIndicator={false}
+            contentInsetAdjustmentBehavior="never"
+            automaticallyAdjustContentInsets={false}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            snapToInterval={CARD_HEIGHT}
+            snapToAlignment="start"
+            initialScrollIndex={filteredSets.length > 0 ? middleIndex : undefined}
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: true }
+            )}
+            onScrollBeginDrag={() => {
+              isUserDragging.current = true;
+              resetInactivityTimer();
+            }}
+            onScrollEndDrag={() => {
+              isUserDragging.current = false;
+            }}
+            onMomentumScrollEnd={() => {
+              isUserDragging.current = false;
+            }}
+            onTouchStart={resetInactivityTimer}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={Colors.dark.primary}
+              />
+            }
+            ListEmptyComponent={listEmptyComponent}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={10}
+            windowSize={7}
+            onScrollToIndexFailed={(info) => {
+              flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+            }}
+          />
+        )}
 
         <ImportSetModal
           visible={showImportModal}
@@ -1663,42 +1700,63 @@ const styles = StyleSheet.create({
   needsSourceToggleTextActive: {
     color: '#fff',
   },
+  topToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
   trakdToggleBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 11,
-    marginBottom: 10,
     borderRadius: 10,
-    backgroundColor: 'rgba(212, 175, 55, 0.06)',
+    backgroundColor: 'rgba(184, 134, 11, 0.08)',
     borderWidth: 1.5,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: 'rgba(184, 134, 11, 0.25)',
+  },
+  genresToggleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+  },
+  genresToggleText: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+    color: Colors.dark.primary,
+    letterSpacing: 0.3,
   },
   trakdToggleBtnActive: {
-    backgroundColor: 'rgba(218, 180, 50, 0.82)',
+    backgroundColor: '#B8860B',
     borderWidth: 1.5,
-    borderColor: 'rgba(255, 230, 120, 0.7)',
-    borderTopColor: 'rgba(255, 240, 160, 0.85)',
-    borderLeftColor: 'rgba(255, 235, 140, 0.65)',
-    borderBottomColor: 'rgba(160, 120, 10, 0.35)',
-    borderRightColor: 'rgba(180, 140, 20, 0.3)',
-    shadowColor: '#D4AF37',
+    borderColor: 'rgba(255, 223, 120, 0.5)',
+    borderTopColor: 'rgba(255, 235, 150, 0.6)',
+    borderBottomColor: '#8B6508',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35,
-    shadowRadius: 6,
+    shadowOpacity: 0.4,
+    shadowRadius: 5,
     elevation: 5,
   },
   trakdToggleText: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: '#C9A830',
+    color: '#B8860B',
     letterSpacing: 0.3,
   },
   trakdToggleTextActive: {
-    color: '#FFFDE7',
-    textShadowColor: 'rgba(120, 85, 0, 0.6)',
-    textShadowOffset: { width: 0, height: 0.5 },
+    color: '#FFF8E1',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
   filterSectionButtons: {

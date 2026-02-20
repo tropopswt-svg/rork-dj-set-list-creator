@@ -87,6 +87,8 @@ export default function ArtistAvatar({ imageUrl, name, size = 40, artistId }: Ar
           { width: size, height: size, borderRadius: size / 2 },
         ]}
         contentFit="cover"
+        placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+        transition={250}
       />
     );
   }

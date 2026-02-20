@@ -648,3 +648,80 @@ export async function getArtistGenres(): Promise<string[]> {
 
   return uniqueGenres;
 }
+
+// ============================================
+// Genre Browsing
+// ============================================
+
+export interface GenreInfo {
+  genre: string;
+  artistCount: number;
+}
+
+/**
+ * Get all genres with artist counts, sorted by count descending
+ */
+export async function getGenresWithCounts(): Promise<GenreInfo[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  const { data, error } = await supabase
+    .from('artists')
+    .select('genres')
+    .not('genres', 'is', null);
+
+  if (error) {
+    if (__DEV__) console.error('[ArtistService] Error fetching genres with counts:', error);
+    return [];
+  }
+
+  // Count occurrences of each genre
+  const genreCounts = new Map<string, number>();
+  for (const artist of data) {
+    for (const genre of (artist.genres || [])) {
+      genreCounts.set(genre, (genreCounts.get(genre) || 0) + 1);
+    }
+  }
+
+  // Convert to array and sort by count descending
+  return Array.from(genreCounts.entries())
+    .map(([genre, artistCount]) => ({ genre, artistCount }))
+    .sort((a, b) => b.artistCount - a.artistCount);
+}
+
+/**
+ * Get sets by genre — finds artists with the genre, then queries their sets
+ */
+export async function getSetsByGenre(
+  genre: string,
+  limit: number = 50,
+  offset: number = 0
+): Promise<{ data: any[]; count: number }> {
+  if (!isSupabaseConfigured()) return { data: [], count: 0 };
+
+  // Step 1: Get artist IDs for this genre
+  const { data: genreArtists } = await browseArtists({
+    genre: genre.toLowerCase(),
+    limit: 500,
+  });
+
+  if (!genreArtists || genreArtists.length === 0) {
+    return { data: [], count: 0 };
+  }
+
+  const artistIds = genreArtists.map(a => a.id);
+
+  // Step 2: Query sets for these artists
+  const { data: sets, error, count } = await supabase
+    .from('sets')
+    .select('id, title, dj_name, dj_id, venue, event_date, track_count, cover_url, youtube_url', { count: 'exact' })
+    .in('dj_id', artistIds)
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .range(offset, offset + limit - 1);
+
+  if (error) {
+    if (__DEV__) console.error('[ArtistService] Error fetching sets by genre:', error);
+    return { data: [], count: 0 };
+  }
+
+  return { data: sets || [], count: count || 0 };
+}

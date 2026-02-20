@@ -12,7 +12,7 @@ export function getFallbackImage(_id: string): null {
   return null;
 }
 
-/** @deprecated — returns null. Use getCoverImageUrl instead. */
-export function getVenueImage(_venueName: string): null {
+/** @deprecated — returns null. No stock images. */
+export function getVenueImage(_venueName: string | null | undefined): null {
   return null;
 }

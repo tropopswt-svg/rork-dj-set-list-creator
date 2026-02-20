@@ -95,6 +95,8 @@ export default function LibraryScreen() {
                     <Image
                       source={{ uri: getCoverImageUrl(setList.coverUrl)! }}
                       style={styles.setCover}
+                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                      transition={250}
                     />
                   ) : (
                     <View style={[styles.setCover, { backgroundColor: Colors.dark.surface }]} />

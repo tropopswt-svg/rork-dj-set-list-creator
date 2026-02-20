@@ -10,6 +10,7 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
@@ -216,6 +217,8 @@ export default function VenuesScreen() {
                     source={{ uri: item.imageUrl }}
                     style={styles.popularImage}
                     contentFit="cover"
+                    placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                    transition={250}
                   />
                 ) : (
                   <View style={[styles.popularImage, styles.popularImagePlaceholder]}>
@@ -359,7 +362,7 @@ export default function VenuesScreen() {
             <ActivityIndicator size="large" color={Colors.dark.primary} />
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={venues}
             keyExtractor={(item) => item.name}
             renderItem={({ item }) => (
@@ -379,6 +382,7 @@ export default function VenuesScreen() {
             ListHeaderComponent={renderHeader}
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmpty}
+            estimatedItemSize={72}
           />
         )}
       </SafeAreaView>

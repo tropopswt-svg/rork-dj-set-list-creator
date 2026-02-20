@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   Pressable,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
 import { ArrowLeft, CheckCheck, Bell } from 'lucide-react-native';
@@ -100,7 +100,7 @@ export default function NotificationsScreen() {
             <ActivityIndicator size="large" color={Colors.dark.primary} />
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={notifications}
             renderItem={renderNotification}
             keyExtractor={(item) => item.id}
@@ -117,6 +117,7 @@ export default function NotificationsScreen() {
             onEndReachedThreshold={0.5}
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmpty}
+            estimatedItemSize={80}
           />
         )}
 

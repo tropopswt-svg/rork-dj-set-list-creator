@@ -145,6 +145,57 @@ export async function searchTrackOnSoundCloud(clientId, artist, title) {
 }
 
 /**
+ * Search SoundCloud for an artist (user) profile.
+ * Returns { username, permalink_url, avatar_url, followers_count } or null.
+ */
+export async function searchArtistOnSoundCloud(clientId, artistName) {
+  if (!clientId || !artistName) return null;
+
+  try {
+    const query = encodeURIComponent(artistName);
+    const response = await fetch(
+      `${SOUNDCLOUD_API_V2}/search/users?q=${query}&client_id=${clientId}&limit=5`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const users = data.collection || [];
+
+    for (const user of users) {
+      const username = user.username || '';
+
+      const nameMatch =
+        normalize(username) === normalize(artistName) ||
+        normalize(username).includes(normalize(artistName)) ||
+        normalize(artistName).includes(normalize(username));
+
+      if (nameMatch) {
+        // Upgrade avatar to high-res (t500x500)
+        const avatarUrl = user.avatar_url
+          ? user.avatar_url.replace('-large', '-t500x500')
+          : null;
+
+        return {
+          username: user.username,
+          permalink_url: user.permalink_url || `https://soundcloud.com/${user.permalink}`,
+          avatar_url: avatarUrl,
+          followers_count: user.followers_count || 0,
+          track_count: user.track_count || 0,
+          description: user.description || null,
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('[SoundCloud] Artist search error:', error.message);
+    return null;
+  }
+}
+
+/**
  * Fetch artwork for a SoundCloud URL via oEmbed.
  * Used for set-level cover fallback.
  */

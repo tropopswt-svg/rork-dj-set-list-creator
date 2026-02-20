@@ -458,11 +458,25 @@ async function getUrls(source: string): Promise<string[]> {
   return [];
 }
 
+// Load URLs from scraper config
+function loadUrlsFromConfig(): string[] {
+  const configPath = path.join(PROJECT_ROOT, 'scripts', 'scraper-config.json');
+  if (!fs.existsSync(configPath)) return [];
+
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    const profiles: string[] = config.soundcloud?.profiles || [];
+    return profiles.map(p => `https://soundcloud.com/${p}`);
+  } catch {
+    return [];
+  }
+}
+
 // Main
 async function main() {
   const args = process.argv.slice(2);
 
-  if (args.length === 0 || args.includes('--help')) {
+  if (args.includes('--help')) {
     console.log(`
 Batch Unreleased Track Scraper
 
@@ -470,6 +484,7 @@ Usage:
   bun scripts/batch-scrape-unreleased.ts urls.txt          # From file
   bun scripts/batch-scrape-unreleased.ts --interactive     # Paste URLs
   bun scripts/batch-scrape-unreleased.ts --url "URL1" --url "URL2"
+  bun scripts/batch-scrape-unreleased.ts --from-config     # Use profiles from scraper-config.json
 
 Supports:
   - Profile URLs: https://soundcloud.com/username
@@ -505,7 +520,10 @@ Example urls.txt:
   // Get URLs
   let urls: string[] = [];
 
-  if (args.includes('--interactive')) {
+  if (args.includes('--from-config')) {
+    urls = loadUrlsFromConfig();
+    console.log(`Loaded ${urls.length} profiles from scraper-config.json`);
+  } else if (args.includes('--interactive')) {
     urls = await getUrls('--interactive');
   } else if (args.includes('--url')) {
     // Extract all --url values
@@ -514,8 +532,14 @@ Example urls.txt:
         urls.push(args[i + 1]);
       }
     }
-  } else {
+  } else if (args.length > 0 && !args[0].startsWith('--')) {
     urls = await getUrls(args[0]);
+  } else {
+    // Default: load from config
+    urls = loadUrlsFromConfig();
+    if (urls.length > 0) {
+      console.log(`No source specified — loading ${urls.length} profiles from scraper-config.json`);
+    }
   }
 
   if (urls.length === 0) {

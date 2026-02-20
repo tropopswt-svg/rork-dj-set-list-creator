@@ -11,6 +11,7 @@ import {
   Modal,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Stack, useRouter } from 'expo-router';
@@ -20,15 +21,12 @@ import {
   X,
   Filter,
   ChevronDown,
-  Music,
-  Users,
   CheckCircle,
   Headphones,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFollowArtist } from '@/hooks/useSocial';
 import { useRecommendedArtists } from '@/hooks/useRecommendations';
 import {
   browseArtists,
@@ -38,75 +36,7 @@ import {
   type ArtistSortOption,
 } from '@/lib/supabase/artistService';
 import type { DbArtist } from '@/lib/supabase/types';
-import ArtistAvatar from '@/components/ArtistAvatar';
-
-// Artist card component
-function ArtistCard({ artist, onPress }: { artist: DbArtist; onPress: () => void }) {
-  const { user } = useAuth();
-  const { isFollowing, isLoading, toggleFollow } = useFollowArtist(artist.id);
-
-  const handleFollow = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    toggleFollow();
-  };
-
-  return (
-    <Pressable style={styles.artistCard} onPress={onPress}>
-      <ArtistAvatar
-        imageUrl={artist.image_url}
-        name={artist.name}
-        size={56}
-        artistId={artist.id}
-      />
-
-      <View style={styles.artistInfo}>
-        <View style={styles.artistNameRow}>
-          <Text style={styles.artistName} numberOfLines={1}>
-            {artist.name}
-          </Text>
-          {artist.verified && (
-            <CheckCircle size={14} color={Colors.dark.primary} fill={Colors.dark.primary} />
-          )}
-        </View>
-
-        {artist.genres && artist.genres.length > 0 && (
-          <Text style={styles.artistGenres} numberOfLines={1}>
-            {artist.genres.slice(0, 2).join(' • ')}
-          </Text>
-        )}
-
-        <View style={styles.artistStats}>
-          <View style={styles.statItem}>
-            <Music size={12} color={Colors.dark.textMuted} />
-            <Text style={styles.statText}>{artist.tracks_count || 0}</Text>
-          </View>
-          {(artist.followers_count ?? 0) > 0 && (
-            <View style={styles.statItem}>
-              <Users size={12} color={Colors.dark.textMuted} />
-              <Text style={styles.statText}>{artist.followers_count}</Text>
-            </View>
-          )}
-        </View>
-      </View>
-
-      {user && (
-        <Pressable
-          style={[styles.followButton, isFollowing && styles.followingButton]}
-          onPress={handleFollow}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator size="small" color={isFollowing ? Colors.dark.primary : '#fff'} />
-          ) : (
-            <Text style={[styles.followButtonText, isFollowing && styles.followingButtonText]}>
-              {isFollowing ? 'Following' : 'Follow'}
-            </Text>
-          )}
-        </Pressable>
-      )}
-    </Pressable>
-  );
-}
+import ArtistCard from '@/components/ArtistCard';
 
 type SortOption = {
   label: string;
@@ -264,6 +194,8 @@ export default function ArtistsScreen() {
                   source={{ uri: item.artist_image_url || undefined }}
                   style={styles.recommendedImage}
                   contentFit="cover"
+                  placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+                  transition={250}
                 />
                 <Text style={styles.recommendedName} numberOfLines={1}>
                   {item.artist_name}
@@ -445,7 +377,7 @@ export default function ArtistsScreen() {
             <ActivityIndicator size="large" color={Colors.dark.primary} />
           </View>
         ) : (
-          <FlatList
+          <FlashList
             data={artists}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
@@ -465,6 +397,7 @@ export default function ArtistsScreen() {
             ListHeaderComponent={renderHeader}
             ListFooterComponent={renderFooter}
             ListEmptyComponent={renderEmpty}
+            estimatedItemSize={72}
           />
         )}
 

@@ -199,17 +199,23 @@ function parseTrackInfo(text: string): { title: string; artist: string; isUnrele
   cleaned = cleaned.replace(/\d{1,2}:\d{2}(:\d{2})?\s*/g, '').trim();
 
   // Extract unreleased status from the text
-  const isUnreleased = /unreleased|forthcoming|upcoming/i.test(cleaned);
+  const isUnreleased = /unreleased|forthcoming|upcoming|dubplate|white\s*label/i.test(cleaned);
 
   // Clean up extra descriptors from the text for parsing
+  // Strip ALL unreleased indicator variants so they don't end up in the title
   let cleanedForParsing = cleaned
-    .replace(/\s*\(unreleased\)\s*/gi, ' ')
-    .replace(/\s*unreleased\s*/gi, ' ')
+    .replace(/\s*\(?\s*unreleased\s*\??\s*\)?\s*/gi, ' ')
+    .replace(/\s*\(?\s*forthcoming\s*\)?\s*/gi, ' ')
+    .replace(/\s*\(\s*dub\s*\??\s*\)\s*/gi, ' ')
+    .replace(/\s*\(?\s*dubplate\s*\)?\s*/gi, ' ')
+    .replace(/\s*\(?\s*white\s*label\s*\)?\s*/gi, ' ')
+    .replace(/\s*\(\s*VIP\s*\)\s*/gi, ' ')
     .replace(/\s*TRACK OF THE SET\s*/gi, ' ')
     .replace(/\s*🤯+\s*/g, ' ')
     .replace(/\s*🔥+\s*/g, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .replace(/\(\s*$/, '').replace(/^\s*\)/, '').trim();
 
   // Common single words that are not track titles or artist names
   const commonWords = new Set([
@@ -391,7 +397,7 @@ export function parseComments(comments: YouTubeComment[]): ParsedTrack[] {
             seenTracks.add(key);
 
             // Check for unreleased indicator (from parseTrackInfo or text)
-            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
+            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming|dubplate|white\s*label/i.test(afterText);
             // Check for remix info in brackets
             const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
@@ -438,7 +444,7 @@ export function parseComments(comments: YouTubeComment[]): ParsedTrack[] {
           if (!seenTracks.has(key)) {
             seenTracks.add(key);
 
-            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
+            const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming|dubplate|white\s*label/i.test(afterText);
             const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
             tracks.push({
@@ -525,7 +531,7 @@ export function parseDescription(description: string): ParsedTrack[] {
         if (!seenTracks.has(key)) {
           seenTracks.add(key);
 
-          const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming/i.test(afterText);
+          const isUnreleased = trackInfo.isUnreleased || /unreleased|forthcoming|upcoming|dubplate|white\s*label/i.test(afterText);
           const remixMatch = afterText.match(/\[([^\]]*remix[^\]]*)\]/i);
 
           tracks.push({

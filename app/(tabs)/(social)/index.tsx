@@ -16,19 +16,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Polyline } from 'react-native-svg';
+import Svg, { Polyline, Line, Rect, Defs, LinearGradient as SvgGradient, Stop, Circle, Path } from 'react-native-svg';
 import {
   Heart,
   Music,
-  Clock,
   Bookmark,
   ChevronRight,
   Disc,
-  Disc3,
   User,
   Flame,
-  TrendingUp,
-  Sparkles,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -156,39 +152,66 @@ function PressableCard({
   );
 }
 
-// ─── Glass Stat Card ────────────────────────────────────────
+// ─── Glass Stat Card (Liquid Glass) ─────────────────────────
 function GlassStatCard({
   icon: Icon,
   label,
   value,
   color,
-  gradientColors,
 }: {
   icon: any;
   label: string;
   value: number;
   color: string;
-  gradientColors: [string, string];
 }) {
   return (
     <PressableCard style={styles.glassStatCard}>
-      <LinearGradient
-        colors={gradientColors}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.glassStatGradient}
-      >
+      <BlurView intensity={60} tint="light" style={styles.glassStatBlur}>
+        {/* Top refraction edge */}
+        <View style={styles.glassStatEdgeTop} />
         <View style={styles.glassStatInner}>
-          <View style={[styles.glassStatIcon, { backgroundColor: `${color}20` }]}>
+          <View style={[styles.glassStatIcon, { backgroundColor: `${color}15` }]}>
             <Icon size={18} color={color} />
           </View>
           <AnimatedCounter value={value} color={Colors.dark.text} />
           <Text style={styles.glassStatLabel}>{label}</Text>
         </View>
-        {/* Highlight edge */}
-        <View style={styles.glassHighlight} />
-      </LinearGradient>
+        {/* Bottom refraction */}
+        <View style={styles.glassStatEdgeBottom} />
+      </BlurView>
     </PressableCard>
+  );
+}
+
+// ─── Wood Grain SVG Pattern ─────────────────────────────────
+function WoodGrain({ width, height }: { width: number; height: number }) {
+  // Generate subtle wood grain lines
+  const lines = [];
+  for (let i = 0; i < 12; i++) {
+    const y = (i / 12) * height + Math.sin(i * 1.3) * 4;
+    const opacity = 0.04 + (i % 3) * 0.02;
+    lines.push(
+      <Line
+        key={`grain-${i}`}
+        x1={0}
+        y1={y}
+        x2={width}
+        y2={y + Math.sin(i * 0.7) * 6}
+        stroke="#6B4226"
+        strokeWidth={1 + (i % 2) * 0.5}
+        opacity={opacity}
+      />
+    );
+  }
+  // Add a couple knot-like circles
+  lines.push(
+    <Rect key="knot-1" x={width * 0.7} y={height * 0.3} width={8} height={4} rx={2} fill="#6B4226" opacity={0.06} />,
+    <Rect key="knot-2" x={width * 0.2} y={height * 0.7} width={6} height={3} rx={1.5} fill="#6B4226" opacity={0.05} />,
+  );
+  return (
+    <Svg width={width} height={height} style={{ position: 'absolute', top: 0, left: 0 }}>
+      {lines}
+    </Svg>
   );
 }
 
@@ -274,7 +297,7 @@ function CrateStack({
     }).start(() => setIsOpen(false));
   };
 
-  const RECORD_SIZE = (SCREEN_WIDTH - 48 - 12) / 2; // 2 columns, 16px padding + 12px gap
+  const RECORD_SIZE = (SCREEN_WIDTH - 64 - 12) / 2; // 2 columns with wood-wall insets
 
   const renderCrateRecord = ({ item, index }: { item: any; index: number }) => {
     const set = item.set;
@@ -319,6 +342,8 @@ function CrateStack({
             source={{ uri: coverUrl }}
             style={[styles.crateModalRecordImage, { width: RECORD_SIZE - 2, height: RECORD_SIZE - 2 }]}
             contentFit="cover"
+            placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+            transition={250}
           />
           <View style={styles.crateModalRecordVinylHole} />
           <Text style={styles.crateModalRecordTitle} numberOfLines={1}>
@@ -335,59 +360,69 @@ function CrateStack({
   return (
     <View style={styles.crateContainer}>
       <View style={styles.crateHeader}>
-        <Disc3 size={18} color={Colors.dark.primary} />
         <Text style={styles.crateTitle}>Your Crate</Text>
         <Text style={styles.crateCount}>{sets.length} sets</Text>
       </View>
 
-      {/* Collapsed crate preview */}
+      {/* Collapsed crate preview — liquid glass */}
       <PressableCard style={styles.crateStack} onPress={openCrate}>
-        <View style={styles.crateVisual}>
-          {covers.map((savedSet, i) => {
-            const set = savedSet.set;
-            if (!set) return null;
-            const offset = i * 14;
-            const rotation = (i - 2) * 3;
-            const zIndex = covers.length - i;
-            const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
+        <BlurView intensity={60} tint="light" style={styles.crateStackGlass}>
+          {/* Glass refraction edges */}
+          <View style={styles.crateGlassEdgeTop} />
+          <View style={styles.crateGlassEdgeBottom} />
 
-            return (
-              <View
-                key={savedSet.id || i}
-                style={[
-                  styles.crateRecord,
-                  {
-                    zIndex,
-                    transform: [
-                      { translateX: offset - 28 },
-                      { rotate: `${rotation}deg` },
-                    ],
-                  },
-                ]}
-              >
-                <Image
-                  source={{ uri: coverUrl }}
-                  style={styles.crateRecordImage}
-                  contentFit="cover"
-                />
-                <View style={styles.vinylHole} />
+          {/* Content row */}
+          <View style={styles.crateStackContent}>
+            <View style={styles.crateVisual}>
+              {covers.map((savedSet, i) => {
+                const set = savedSet.set;
+                if (!set) return null;
+                const offset = i * 14;
+                const rotation = (i - 2) * 3;
+                const zIndex = covers.length - i;
+                const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
+
+                return (
+                  <View
+                    key={savedSet.id || i}
+                    style={[
+                      styles.crateRecord,
+                      {
+                        zIndex,
+                        transform: [
+                          { translateX: offset - 28 },
+                          { rotate: `${rotation}deg` },
+                        ],
+                      },
+                    ]}
+                  >
+                    <Image
+                      source={{ uri: coverUrl }}
+                      style={styles.crateRecordImage}
+                      contentFit="cover"
+                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                      transition={250}
+                    />
+                    <View style={styles.vinylHole} />
+                  </View>
+                );
+              })}
+            </View>
+
+            <View style={styles.crateInfo}>
+              <Text style={styles.crateInfoTitle}>
+                {covers[0]?.set?.name || 'Your Collection'}
+              </Text>
+              <Text style={styles.crateInfoSub}>
+                {covers[0]?.set?.artist_name}
+              </Text>
+              <View style={styles.crateBrowse}>
+                <Text style={styles.crateBrowseText}>Browse Crate</Text>
+                <ChevronRight size={14} color={Colors.dark.primary} />
               </View>
-            );
-          })}
-        </View>
-
-        <View style={styles.crateInfo}>
-          <Text style={styles.crateInfoTitle}>
-            {covers[0]?.set?.name || 'Your Collection'}
-          </Text>
-          <Text style={styles.crateInfoSub}>
-            {covers[0]?.set?.artist_name}
-          </Text>
-          <View style={styles.crateBrowse}>
-            <Text style={styles.crateBrowseText}>Browse Crate</Text>
-            <ChevronRight size={14} color={Colors.dark.primary} />
+            </View>
           </View>
-        </View>
+        </BlurView>
       </PressableCard>
 
       {/* ─── Full-screen Animated Crate Modal ─── */}
@@ -443,19 +478,52 @@ function CrateStack({
                 colors={['#D4A574', '#B8864E', '#A0713A']}
                 style={styles.crateModalLidGradient}
               >
+                <WoodGrain width={SCREEN_WIDTH} height={60} />
                 <View style={styles.crateModalLidPlank} />
                 <View style={styles.crateModalLidPlank} />
                 <View style={styles.crateModalLidPlank} />
                 <View style={styles.crateModalLidHandle}>
                   <View style={styles.crateModalLidHandleBar} />
                 </View>
+                {/* Nail dots on lid */}
+                <View style={[styles.crateNail, { position: 'absolute', top: 10, left: 16 }]} />
+                <View style={[styles.crateNail, { position: 'absolute', top: 10, right: 16 }]} />
+                <View style={[styles.crateNail, { position: 'absolute', bottom: 10, left: 16 }]} />
+                <View style={[styles.crateNail, { position: 'absolute', bottom: 10, right: 16 }]} />
               </LinearGradient>
             </Animated.View>
+
+            {/* Wood walls — left and right side rails */}
+            <View style={styles.crateWallLeft}>
+              <LinearGradient
+                colors={['#C49660', '#A67842', '#8B6332']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.crateWallGradient}
+              />
+            </View>
+            <View style={styles.crateWallRight}>
+              <LinearGradient
+                colors={['#C49660', '#A67842', '#8B6332']}
+                start={{ x: 1, y: 0 }}
+                end={{ x: 0, y: 1 }}
+                style={styles.crateWallGradient}
+              />
+            </View>
+
+            {/* Wood bottom */}
+            <View style={styles.crateBottom}>
+              <LinearGradient
+                colors={['#B8864E', '#A0713A', '#8B6332']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.crateBottomGradient}
+              />
+            </View>
 
             {/* Header bar */}
             <View style={styles.crateModalHeader}>
               <View style={styles.crateModalHeaderLeft}>
-                <Disc3 size={20} color={Colors.dark.primary} />
                 <Text style={styles.crateModalTitle}>Your Crate</Text>
               </View>
               <Pressable style={styles.crateModalClose} onPress={closeCrate}>
@@ -484,12 +552,31 @@ function CrateStack({
   );
 }
 
-// ─── Activity Sparkline ─────────────────────────────────────
+// ─── Activity Sparkline (Liquid Glass) ──────────────────────
 function ActivitySparkline({ contributions }: { contributions: any[] }) {
-  // Build last 7 days activity
   const days = 7;
   const now = new Date();
   const counts: number[] = [];
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Subtle pulse on the glow
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ])
+    ).start();
+    // Shimmer sweep across the glass
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, { toValue: 1, duration: 2500, useNativeDriver: true, delay: 2000 }),
+        Animated.timing(shimmerAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+        Animated.delay(4000),
+      ])
+    ).start();
+  }, []);
 
   for (let i = days - 1; i >= 0; i--) {
     const dayStart = new Date(now);
@@ -497,7 +584,6 @@ function ActivitySparkline({ contributions }: { contributions: any[] }) {
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart);
     dayEnd.setHours(23, 59, 59, 999);
-
     const count = contributions.filter((c) => {
       const d = new Date(c.created_at);
       return d >= dayStart && d <= dayEnd;
@@ -507,10 +593,11 @@ function ActivitySparkline({ contributions }: { contributions: any[] }) {
 
   const maxCount = Math.max(...counts, 1);
   const svgWidth = SCREEN_WIDTH - 64;
-  const svgHeight = 40;
-  const padding = 4;
+  const svgHeight = 48;
+  const padding = 8;
 
-  const points = counts
+  // Build smooth line points
+  const linePoints = counts
     .map((count, i) => {
       const x = padding + (i / (days - 1)) * (svgWidth - padding * 2);
       const y = svgHeight - padding - (count / maxCount) * (svgHeight - padding * 2);
@@ -518,10 +605,19 @@ function ActivitySparkline({ contributions }: { contributions: any[] }) {
     })
     .join(' ');
 
+  // Build filled area path (line + close to bottom)
+  const areaPoints = counts.map((count, i) => {
+    const x = padding + (i / (days - 1)) * (svgWidth - padding * 2);
+    const y = svgHeight - padding - (count / maxCount) * (svgHeight - padding * 2);
+    return { x, y };
+  });
+  const firstX = areaPoints[0].x;
+  const lastX = areaPoints[areaPoints.length - 1].x;
+  const areaPath = `M${areaPoints.map(p => `${p.x},${p.y}`).join(' L')} L${lastX},${svgHeight} L${firstX},${svgHeight} Z`;
+
   const totalThisWeek = counts.reduce((a, b) => a + b, 0);
+  const orderedLabels: string[] = [];
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-  const todayIndex = now.getDay();
-  const orderedLabels = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(now);
     d.setDate(d.getDate() - i);
@@ -529,93 +625,386 @@ function ActivitySparkline({ contributions }: { contributions: any[] }) {
   }
 
   return (
-    <View style={styles.sparklineContainer}>
-      <View style={styles.sparklineHeader}>
-        <View style={styles.sparklineTitleRow}>
-          <Flame size={16} color="#FF6B35" />
-          <Text style={styles.sparklineTitle}>This Week</Text>
-        </View>
-        <View style={styles.sparklineStat}>
-          <Text style={styles.sparklineStatValue}>{totalThisWeek}</Text>
-          <Text style={styles.sparklineStatLabel}>IDs</Text>
-        </View>
-      </View>
-      <View style={styles.sparklineSvg}>
-        <Svg width={svgWidth} height={svgHeight}>
-          <Polyline
-            points={points}
-            fill="none"
-            stroke={Colors.dark.primary}
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Svg>
-      </View>
-      {/* Day dots */}
-      <View style={styles.sparklineDays}>
-        {counts.map((count, i) => (
-          <View key={i} style={styles.sparklineDayItem}>
-            <View
-              style={[
-                styles.sparklineDot,
-                count > 0 && styles.sparklineDotActive,
-                count > 0 && { backgroundColor: Colors.dark.primary },
-              ]}
-            />
-            <Text style={styles.sparklineDayLabel}>{orderedLabels[i]}</Text>
+    <View style={styles.sparklineOuter}>
+      {/* Outer glow */}
+      <Animated.View
+        style={[
+          styles.sparklineGlow,
+          {
+            opacity: pulseAnim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.3, 0.6],
+            }),
+          },
+        ]}
+      />
+
+      {/* Glass container */}
+      <BlurView intensity={65} tint="light" style={styles.sparklineGlass}>
+        {/* Inner refraction edge — top highlight */}
+        <View style={styles.sparklineEdgeTop} />
+        {/* Inner refraction edge — bottom subtle */}
+        <View style={styles.sparklineEdgeBottom} />
+
+        {/* Shimmer sweep */}
+        <Animated.View
+          style={[
+            styles.sparklineShimmer,
+            {
+              transform: [{
+                translateX: shimmerAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-SCREEN_WIDTH, SCREEN_WIDTH],
+                }),
+              }],
+              opacity: shimmerAnim.interpolate({
+                inputRange: [0, 0.3, 0.7, 1],
+                outputRange: [0, 0.4, 0.4, 0],
+              }),
+            },
+          ]}
+        />
+
+        {/* Header */}
+        <View style={styles.sparklineHeader}>
+          <View style={styles.sparklineTitleRow}>
+            <Flame size={15} color="#FF6B35" />
+            <Text style={styles.sparklineTitle}>This Week</Text>
           </View>
-        ))}
-      </View>
+          <View style={styles.sparklineStat}>
+            <Text style={styles.sparklineStatValue}>{totalThisWeek}</Text>
+            <Text style={styles.sparklineStatLabel}>IDs</Text>
+          </View>
+        </View>
+
+        {/* Chart */}
+        <View style={styles.sparklineSvg}>
+          <Svg width={svgWidth} height={svgHeight}>
+            <Defs>
+              <SvgGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor={Colors.dark.primary} stopOpacity="0.25" />
+                <Stop offset="1" stopColor={Colors.dark.primary} stopOpacity="0.02" />
+              </SvgGradient>
+              <SvgGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                <Stop offset="0" stopColor={Colors.dark.primary} stopOpacity="0.6" />
+                <Stop offset="0.5" stopColor={Colors.dark.primary} stopOpacity="1" />
+                <Stop offset="1" stopColor={Colors.dark.primary} stopOpacity="0.6" />
+              </SvgGradient>
+            </Defs>
+            {/* Filled area under line */}
+            <Path d={areaPath} fill="url(#areaFill)" />
+            {/* Main line */}
+            <Polyline
+              points={linePoints}
+              fill="none"
+              stroke="url(#lineGrad)"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            {/* Data point dots */}
+            {areaPoints.map((p, i) => (
+              <Circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r={counts[i] > 0 ? 4 : 2.5}
+                fill={counts[i] > 0 ? Colors.dark.primary : 'rgba(0,0,0,0.1)'}
+                stroke={counts[i] > 0 ? 'rgba(255,255,255,0.8)' : 'transparent'}
+                strokeWidth={counts[i] > 0 ? 1.5 : 0}
+              />
+            ))}
+          </Svg>
+        </View>
+
+        {/* Day labels */}
+        <View style={styles.sparklineDays}>
+          {counts.map((count, i) => (
+            <View key={i} style={styles.sparklineDayItem}>
+              <Text
+                style={[
+                  styles.sparklineDayLabel,
+                  count > 0 && styles.sparklineDayLabelActive,
+                ]}
+              >
+                {orderedLabels[i]}
+              </Text>
+            </View>
+          ))}
+        </View>
+      </BlurView>
     </View>
   );
 }
 
-// ─── Identified Track Card (Enhanced) ───────────────────────
-function IdentifiedTrackCard({
-  contribution,
-  onPress,
-}: {
-  contribution: any;
-  onPress: () => void;
-}) {
+// ─── Accent colors that cycle per card index ────────────────
+const TRACK_ACCENTS = [
+  { bg: '#C41E3A', glow: 'rgba(196,30,58,0.35)', gradient: ['#C41E3A', '#8B1528'] as [string, string] },
+  { bg: '#FF6B35', glow: 'rgba(255,107,53,0.35)', gradient: ['#FF6B35', '#CC4400'] as [string, string] },
+  { bg: '#6C5CE7', glow: 'rgba(108,92,231,0.35)', gradient: ['#6C5CE7', '#4834B0'] as [string, string] },
+  { bg: '#00B894', glow: 'rgba(0,184,148,0.35)', gradient: ['#00B894', '#008060'] as [string, string] },
+  { bg: '#E17055', glow: 'rgba(225,112,85,0.35)', gradient: ['#E17055', '#B84830'] as [string, string] },
+  { bg: '#0984E3', glow: 'rgba(9,132,227,0.35)', gradient: ['#0984E3', '#0660A8'] as [string, string] },
+];
+
+// ─── Waveform Bars ──────────────────────────────────────────
+function WaveformBars({ color, count = 7 }: { color: string; count?: number }) {
+  const bars = useRef(
+    Array.from({ length: count }, () => new Animated.Value(0.3 + Math.random() * 0.5))
+  ).current;
+
+  useEffect(() => {
+    const animations = bars.map((bar, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(bar, {
+            toValue: 0.25 + Math.random() * 0.75,
+            duration: 280 + i * 70,
+            useNativeDriver: true,
+          }),
+          Animated.timing(bar, {
+            toValue: 0.1 + Math.random() * 0.35,
+            duration: 220 + i * 50,
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    );
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, []);
+
   return (
-    <PressableCard style={styles.trackCard} onPress={onPress}>
-      <View style={styles.trackCardHeader}>
-        <LinearGradient
-          colors={[`${Colors.dark.primary}30`, `${Colors.dark.primary}10`]}
-          style={styles.trackIconGradient}
-        >
-          <Music size={14} color={Colors.dark.primary} />
-        </LinearGradient>
-        <Text style={styles.trackTimestamp}>
-          {contribution.timestamp_seconds
-            ? formatTimestamp(contribution.timestamp_seconds)
-            : '--:--'}
-        </Text>
-      </View>
-      <Text style={styles.trackTitle} numberOfLines={2}>
-        {contribution.track_title || 'Unknown Track'}
-      </Text>
-      <Text style={styles.trackArtist} numberOfLines={1}>
-        {contribution.track_artist || 'Unknown Artist'}
-      </Text>
-      {contribution.set && (
-        <View style={styles.trackSetInfo}>
-          <Disc size={10} color={Colors.dark.textMuted} />
-          <Text style={styles.trackSetName} numberOfLines={1}>
-            {contribution.set.name}
-          </Text>
-        </View>
-      )}
-      <Text style={styles.trackDate}>
-        {formatTimeAgo(contribution.created_at)}
-      </Text>
-    </PressableCard>
+    <View style={styles.waveformContainer}>
+      {bars.map((bar, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            styles.waveformBar,
+            {
+              backgroundColor: color,
+              transform: [{ scaleY: bar }],
+            },
+          ]}
+        />
+      ))}
+    </View>
   );
 }
 
-// ─── Saved Set Card (Enhanced) ──────────────────────────────
+// ─── Identified Track Card (Insane UX) ──────────────────────
+function IdentifiedTrackCard({
+  contribution,
+  onPress,
+  index,
+}: {
+  contribution: any;
+  onPress: () => void;
+  index: number;
+}) {
+  const accent = TRACK_ACCENTS[index % TRACK_ACCENTS.length];
+  const entranceAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+  const pressRotateY = useRef(new Animated.Value(0)).current;
+  const glowPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Staggered entrance
+    Animated.spring(entranceAnim, {
+      toValue: 1,
+      tension: 50,
+      friction: 7,
+      useNativeDriver: true,
+      delay: index * 100,
+    }).start();
+
+    // Shimmer sweep
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 2000,
+          useNativeDriver: true,
+          delay: 1000 + index * 300,
+        }),
+        Animated.timing(shimmerAnim, {
+          toValue: 0,
+          duration: 0,
+          useNativeDriver: true,
+        }),
+        Animated.delay(3000),
+      ])
+    ).start();
+
+    // Glow pulse
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, {
+          toValue: 1,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowPulse, {
+          toValue: 0,
+          duration: 1500,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const handlePressIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.parallel([
+      Animated.spring(pressScale, {
+        toValue: 0.92,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.spring(pressRotateY, {
+        toValue: 1,
+        tension: 300,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.parallel([
+      Animated.spring(pressScale, {
+        toValue: 1,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.spring(pressRotateY, {
+        toValue: 0,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View
+        style={[
+          styles.trackCard,
+          {
+            transform: [
+              {
+                translateY: entranceAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [60, 0],
+                }),
+              },
+              {
+                scale: Animated.multiply(
+                  entranceAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.7, 1],
+                  }),
+                  pressScale
+                ),
+              },
+              { perspective: 800 },
+              {
+                rotateY: pressRotateY.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', '-6deg'],
+                }),
+              },
+            ],
+            opacity: entranceAnim,
+          },
+        ]}
+      >
+        {/* Glow border */}
+        <Animated.View
+          style={[
+            styles.trackCardGlow,
+            {
+              shadowColor: accent.bg,
+              shadowOpacity: glowPulse.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.15, 0.4],
+              }),
+            },
+          ]}
+        />
+
+        {/* Accent strip at top */}
+        <LinearGradient
+          colors={accent.gradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={styles.trackCardAccentStrip}
+        />
+
+        {/* Shimmer overlay */}
+        <Animated.View
+          style={[
+            styles.trackCardShimmer,
+            {
+              transform: [
+                {
+                  translateX: shimmerAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-180, 180],
+                  }),
+                },
+              ],
+              opacity: shimmerAnim.interpolate({
+                inputRange: [0, 0.3, 0.7, 1],
+                outputRange: [0, 0.6, 0.6, 0],
+              }),
+            },
+          ]}
+        />
+
+        {/* Compact timestamp + waveform row */}
+        <View style={styles.trackCardTop}>
+          <View style={[styles.trackTimePill, { backgroundColor: `${accent.bg}12` }]}>
+            <Text style={[styles.trackTimeText, { color: accent.bg }]}>
+              {contribution.timestamp_seconds
+                ? formatTimestamp(contribution.timestamp_seconds)
+                : '--:--'}
+            </Text>
+            <View style={styles.trackTimeDivider} />
+            <WaveformBars color={accent.bg} count={5} />
+          </View>
+          <Text style={styles.trackDate}>
+            {formatTimeAgo(contribution.created_at)}
+          </Text>
+        </View>
+
+        {/* Track info — big & bold */}
+        <Text style={styles.trackTitle} numberOfLines={2}>
+          {contribution.track_title || 'Unknown Track'}
+        </Text>
+        <Text style={[styles.trackArtist, { color: accent.bg }]} numberOfLines={1}>
+          {contribution.track_artist || 'Unknown Artist'}
+        </Text>
+
+        {/* Set name — prominent */}
+        {contribution.set && (
+          <View style={styles.trackSetRow}>
+            <Disc size={11} color={Colors.dark.textMuted} />
+            <Text style={styles.trackSetName} numberOfLines={1}>
+              {contribution.set.name}
+            </Text>
+          </View>
+        )}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+// ─── Saved Set Card (Liquid Glass) ──────────────────────────
 function SavedSetCard({
   savedSet,
   onPress,
@@ -628,25 +1017,28 @@ function SavedSetCard({
 
   return (
     <PressableCard style={styles.savedSetCard} onPress={onPress}>
-      <Image
-        source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
-        style={styles.savedSetImage}
-        contentFit="cover"
-      />
-      <View style={styles.savedSetInfo}>
-        <Text style={styles.savedSetName} numberOfLines={1}>
-          {set.name}
-        </Text>
-        <Text style={styles.savedSetArtist} numberOfLines={1}>
-          {set.artist_name}
-        </Text>
-        <View style={styles.savedSetMeta}>
+      <BlurView intensity={55} tint="light" style={styles.savedSetGlass}>
+        <View style={styles.savedSetGlassEdge} />
+        <Image
+          source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
+          style={styles.savedSetImage}
+          contentFit="cover"
+          placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+          transition={250}
+        />
+        <View style={styles.savedSetInfo}>
+          <Text style={styles.savedSetName} numberOfLines={1}>
+            {set.name}
+          </Text>
+          <Text style={styles.savedSetArtist} numberOfLines={1}>
+            {set.artist_name}
+          </Text>
           <Text style={styles.savedSetDate}>
-            Saved {formatTimeAgo(savedSet.created_at)}
+            {formatTimeAgo(savedSet.created_at)}
           </Text>
         </View>
-      </View>
-      <ChevronRight size={20} color={Colors.dark.textMuted} />
+        <ChevronRight size={18} color={Colors.dark.textMuted} />
+      </BlurView>
     </PressableCard>
   );
 }
@@ -786,7 +1178,9 @@ export default function MyStuffScreen() {
               router.push('/(tabs)/(profile)');
             }}
           >
-            <User size={22} color={Colors.dark.text} />
+            <BlurView intensity={55} tint="light" style={styles.headerButtonGlass}>
+              <User size={20} color={Colors.dark.text} />
+            </BlurView>
           </Pressable>
         </View>
 
@@ -802,31 +1196,6 @@ export default function MyStuffScreen() {
             />
           }
         >
-          {/* ─── Glass Stats ─── */}
-          <View style={styles.statsSection}>
-            <GlassStatCard
-              icon={Music}
-              label="Track'd"
-              value={identifiedTracks.length}
-              color={Colors.dark.primary}
-              gradientColors={['#FFFFFF', '#FFF5F7']}
-            />
-            <GlassStatCard
-              icon={Bookmark}
-              label="Saved"
-              value={savedSets.length}
-              color={Colors.dark.success}
-              gradientColors={['#FFFFFF', '#F0FFF4']}
-            />
-            <GlassStatCard
-              icon={Heart}
-              label="Liked"
-              value={likedSets.length}
-              color={Colors.dark.error}
-              gradientColors={['#FFFFFF', '#FFF5F5']}
-            />
-          </View>
-
           {/* ─── Activity Sparkline ─── */}
           {identifiedTracks.length > 0 && (
             <View style={styles.section}>
@@ -845,7 +1214,6 @@ export default function MyStuffScreen() {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
-                <Sparkles size={16} color={Colors.dark.primary} />
                 <Text style={styles.sectionTitle}>Your IDs</Text>
               </View>
               {identifiedTracks.length > 0 && (
@@ -876,10 +1244,11 @@ export default function MyStuffScreen() {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.tracksContainer}
               >
-                {identifiedTracks.slice(0, 10).map((contribution) => (
+                {identifiedTracks.slice(0, 10).map((contribution, i) => (
                   <IdentifiedTrackCard
                     key={contribution.id}
                     contribution={contribution}
+                    index={i}
                     onPress={() => {
                       if (contribution.set?.id) {
                         navigateToSet(contribution.set.id);
@@ -894,60 +1263,6 @@ export default function MyStuffScreen() {
                   </PressableCard>
                 )}
               </ScrollView>
-            )}
-          </View>
-
-          {/* ─── Saved Sets ─── */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleRow}>
-                <Bookmark size={16} color={Colors.dark.success} />
-                <Text style={styles.sectionTitle}>Saved Sets</Text>
-              </View>
-              {savedSets.length > 0 && (
-                <View style={styles.sectionCountPill}>
-                  <Text style={styles.sectionCountText}>
-                    {savedSets.length}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {savedLoading ? (
-              <ActivityIndicator
-                color={Colors.dark.primary}
-                style={styles.sectionLoader}
-              />
-            ) : savedSets.length === 0 ? (
-              <View style={styles.emptySection}>
-                <Bookmark size={28} color={Colors.dark.textMuted} />
-                <Text style={styles.emptyTitle}>No saved sets</Text>
-                <Text style={styles.emptyText}>
-                  Save sets while browsing to find them here later
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.savedSetsList}>
-                {savedSets.slice(0, 5).map((savedSet) => (
-                  <SavedSetCard
-                    key={savedSet.id}
-                    savedSet={savedSet}
-                    onPress={() => {
-                      if (savedSet.set?.id) {
-                        navigateToSet(savedSet.set.id);
-                      }
-                    }}
-                  />
-                ))}
-                {savedSets.length > 5 && (
-                  <Pressable style={styles.seeAllButton}>
-                    <Text style={styles.seeAllButtonText}>
-                      See All Saved Sets
-                    </Text>
-                    <ChevronRight size={16} color={Colors.dark.primary} />
-                  </Pressable>
-                )}
-              </View>
             )}
           </View>
 
@@ -1040,19 +1355,25 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
   headerButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: Colors.dark.surface,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: 'rgba(0,0,0,0.12)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  headerButtonGlass: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.75)',
   },
   scrollView: {
     flex: 1,
@@ -1106,7 +1427,7 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
   },
 
-  // ─── Glass Stat Cards ───
+  // ─── Glass Stat Cards (Liquid Glass) ───
   statsSection: {
     flexDirection: 'row',
     paddingHorizontal: 16,
@@ -1116,21 +1437,42 @@ const styles = StyleSheet.create({
   },
   glassStatCard: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowColor: 'rgba(0,0,0,0.12)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 5,
   },
-  glassStatGradient: {
-    borderRadius: 16,
+  glassStatBlur: {
+    borderRadius: 20,
     padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.8)',
-    position: 'relative',
     overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    position: 'relative',
+  },
+  glassStatEdgeTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  glassStatEdgeBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
   },
   glassStatInner: {
     alignItems: 'center',
@@ -1138,22 +1480,16 @@ const styles = StyleSheet.create({
   glassStatIcon: {
     width: 36,
     height: 36,
-    borderRadius: 12,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
-  },
-  glassHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   statValue: {
     fontSize: 24,
-    fontWeight: '800',
+    fontWeight: '900',
     letterSpacing: -0.5,
   },
   glassStatLabel: {
@@ -1165,25 +1501,72 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ─── Activity Sparkline ───
-  sparklineContainer: {
+  // ─── Activity Sparkline (Liquid Glass) ───
+  sparklineOuter: {
     marginHorizontal: 16,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    position: 'relative',
+  },
+  sparklineGlow: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 28,
+    backgroundColor: 'transparent',
+    shadowColor: 'rgba(255,255,255,1)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 24,
+    elevation: 0,
+  },
+  sparklineGlass: {
+    borderRadius: 24,
+    padding: 18,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    shadowColor: 'rgba(0,0,0,0.14)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 28,
+    elevation: 6,
+  },
+  sparklineEdgeTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  sparklineEdgeBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1.5,
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  sparklineShimmer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 80,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    transform: [{ skewX: '-20deg' }],
   },
   sparklineHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   sparklineTitleRow: {
     flexDirection: 'row',
@@ -1201,9 +1584,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   sparklineStatValue: {
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
     color: Colors.dark.primary,
+    letterSpacing: -0.5,
   },
   sparklineStatLabel: {
     fontSize: 11,
@@ -1211,7 +1595,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   sparklineSvg: {
-    marginBottom: 8,
+    marginBottom: 10,
   },
   sparklineDays: {
     flexDirection: 'row',
@@ -1220,26 +1604,18 @@ const styles = StyleSheet.create({
   },
   sparklineDayItem: {
     alignItems: 'center',
-    gap: 4,
-  },
-  sparklineDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.dark.border,
-  },
-  sparklineDotActive: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
   },
   sparklineDayLabel: {
-    fontSize: 10,
-    color: Colors.dark.textMuted,
-    fontWeight: '500',
+    fontSize: 11,
+    color: 'rgba(0,0,0,0.3)',
+    fontWeight: '600',
+  },
+  sparklineDayLabelActive: {
+    color: Colors.dark.text,
+    fontWeight: '700',
   },
 
-  // ─── Crate Stack ───
+  // ─── Crate Stack (Liquid Glass) ───
   crateContainer: {
     paddingHorizontal: 16,
   },
@@ -1261,18 +1637,47 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   crateStack: {
-    flexDirection: 'row',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 6,
+    borderRadius: 24,
     overflow: 'hidden',
+    shadowColor: 'rgba(0,0,0,0.14)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 28,
+    elevation: 6,
+  },
+  crateStackGlass: {
+    borderRadius: 24,
+    padding: 18,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    position: 'relative',
+  },
+  crateGlassEdgeTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    zIndex: 2,
+  },
+  crateGlassEdgeBottom: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 1.5,
+    backgroundColor: 'rgba(0,0,0,0.07)',
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+    zIndex: 2,
+  },
+  crateStackContent: {
+    flexDirection: 'row',
   },
   crateVisual: {
     width: 120,
@@ -1287,10 +1692,10 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 12,
     overflow: 'hidden',
-    shadowColor: '#000',
+    shadowColor: 'rgba(0,0,0,0.2)',
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
+    shadowOpacity: 1,
+    shadowRadius: 8,
     elevation: 4,
   },
   crateRecordImage: {
@@ -1305,20 +1710,11 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     marginTop: -6,
     marginLeft: -6,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.3)',
-  },
-  crateRecordShadow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 20,
-    borderBottomLeftRadius: 12,
-    borderBottomRightRadius: 12,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   crateInfo: {
     flex: 1,
@@ -1341,11 +1737,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: `${Colors.dark.primary}12`,
+    backgroundColor: 'rgba(255,255,255,0.5)',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 10,
+    borderRadius: 12,
     alignSelf: 'flex-start',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   crateBrowseText: {
     fontSize: 13,
@@ -1353,14 +1756,14 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
   },
 
-  // ─── Crate Modal ───
+  // ─── Crate Modal (Wooden Interior) ───
   crateModalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
   },
   crateModalContainer: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#EDE0D0',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     paddingTop: 0,
@@ -1369,7 +1772,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   crateModalLid: {
-    height: 56,
+    height: 60,
     overflow: 'hidden',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
@@ -1380,8 +1783,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
+    paddingHorizontal: 28,
     gap: 8,
+    position: 'relative',
   },
   crateModalLidPlank: {
     flex: 1,
@@ -1393,16 +1797,60 @@ const styles = StyleSheet.create({
   },
   crateModalLidHandle: {
     position: 'absolute',
-    top: 18,
+    top: 20,
     alignSelf: 'center',
   },
   crateModalLidHandleBar: {
-    width: 48,
+    width: 52,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  crateNail: {
+    width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.3)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(80,50,20,0.4)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,220,180,0.3)',
+  },
+  // Side walls in modal — thin wood rails
+  crateWallLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 60,
+    bottom: 0,
+    width: 8,
+    zIndex: 10,
+    overflow: 'hidden',
+  },
+  crateWallRight: {
+    position: 'absolute',
+    right: 0,
+    top: 60,
+    bottom: 0,
+    width: 8,
+    zIndex: 10,
+    overflow: 'hidden',
+  },
+  crateWallGradient: {
+    flex: 1,
+    borderWidth: 0.5,
+    borderColor: 'rgba(139,99,50,0.3)',
+  },
+  crateBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 6,
+    zIndex: 10,
+    overflow: 'hidden',
+  },
+  crateBottomGradient: {
+    flex: 1,
   },
   crateModalHeader: {
     flexDirection: 'row',
@@ -1420,31 +1868,31 @@ const styles = StyleSheet.create({
   crateModalTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: Colors.dark.text,
+    color: '#3A2010',
     letterSpacing: -0.5,
   },
   crateModalClose: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.7)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(139,99,50,0.2)',
   },
   crateModalCloseText: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.dark.primary,
+    color: '#8B5E34',
   },
   crateModalSubtitle: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: '#8B7355',
     paddingHorizontal: 20,
     marginTop: 4,
     marginBottom: 16,
   },
   crateModalGrid: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingBottom: 40,
   },
   crateModalRow: {
@@ -1452,19 +1900,21 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   crateModalRecord: {
-    borderRadius: 16,
+    borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: Colors.dark.surface,
-    shadowColor: '#000',
+    backgroundColor: '#F5EDE0',
+    shadowColor: '#5A3714',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.15,
     shadowRadius: 10,
     elevation: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(139,99,50,0.12)',
   },
   crateModalRecordImage: {
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(139,99,50,0.15)',
   },
   crateModalRecordVinylHole: {
     position: 'absolute',
@@ -1482,14 +1932,14 @@ const styles = StyleSheet.create({
   crateModalRecordTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#3A2010',
     paddingHorizontal: 10,
     paddingTop: 10,
   },
   crateModalRecordArtist: {
     fontSize: 12,
     fontWeight: '500',
-    color: Colors.dark.primary,
+    color: '#8B5E34',
     paddingHorizontal: 10,
     paddingTop: 2,
     paddingBottom: 10,
@@ -1517,10 +1967,17 @@ const styles = StyleSheet.create({
     color: Colors.dark.text,
   },
   sectionCountPill: {
-    backgroundColor: `${Colors.dark.primary}15`,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: 'rgba(0,0,0,0.06)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   sectionCountText: {
     fontSize: 12,
@@ -1535,10 +1992,15 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 32,
     marginHorizontal: 16,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 3,
   },
   emptyTitle: {
     fontSize: 14,
@@ -1554,81 +2016,137 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // ─── Track Cards ───
+  // ─── Track Cards (Liquid Glass + Animated) ───
   tracksContainer: {
     paddingHorizontal: 16,
-    gap: 10,
+    gap: 12,
+    paddingVertical: 4,
   },
   trackCard: {
-    width: 150,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    width: 164,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 22,
+    padding: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    shadowColor: 'rgba(0,0,0,0.12)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    elevation: 5,
+    overflow: 'hidden',
+    position: 'relative',
   },
-  trackCardHeader: {
+  trackCardGlow: {
+    position: 'absolute',
+    top: -2,
+    left: -2,
+    right: -2,
+    bottom: -2,
+    borderRadius: 24,
+    shadowOffset: { width: 0, height: 0 },
+    shadowRadius: 20,
+    elevation: 0,
+  },
+  trackCardAccentStrip: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2.5,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+  },
+  trackCardShimmer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: 60,
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    transform: [{ skewX: '-20deg' }],
+  },
+  trackCardTop: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 12,
   },
-  trackIconGradient: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+  trackTimePill: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  trackTimestamp: {
-    fontSize: 11,
-    color: Colors.dark.textMuted,
-    fontWeight: '600',
+  trackTimeText: {
+    fontSize: 12,
+    fontWeight: '800',
     fontVariant: ['tabular-nums'],
+    letterSpacing: -0.3,
+  },
+  trackTimeDivider: {
+    width: 1,
+    height: 10,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+  },
+  // Waveform bars
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 2,
+    height: 14,
+  },
+  waveformBar: {
+    width: 2.5,
+    height: 14,
+    borderRadius: 1.5,
   },
   trackTitle: {
-    fontSize: 13,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
     color: Colors.dark.text,
     marginBottom: 2,
-    lineHeight: 17,
+    lineHeight: 20,
+    letterSpacing: -0.3,
   },
   trackArtist: {
-    fontSize: 12,
-    color: Colors.dark.primary,
-    fontWeight: '500',
-    marginBottom: 8,
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 10,
   },
-  trackSetInfo: {
+  trackSetRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    marginBottom: 6,
+    gap: 5,
   },
   trackSetName: {
-    fontSize: 10,
+    fontSize: 13,
+    fontWeight: '600',
     color: Colors.dark.textMuted,
     flex: 1,
   },
   trackDate: {
     fontSize: 10,
     color: Colors.dark.textMuted,
+    fontWeight: '500',
   },
   seeAllCard: {
     width: 80,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderRadius: 22,
     padding: 12,
     borderWidth: 1.5,
-    borderColor: Colors.dark.primary,
+    borderColor: 'rgba(255,255,255,0.8)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   seeAllText: {
     fontSize: 12,
@@ -1636,29 +2154,47 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
   },
 
-  // ─── Saved Sets ───
+  // ─── Saved/Liked Sets (Liquid Glass) ───
   savedSetsList: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 10,
   },
   savedSetCard: {
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: 'rgba(0,0,0,0.12)',
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  savedSetGlass: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 14,
+    borderRadius: 20,
     padding: 12,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.8)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    position: 'relative',
+  },
+  savedSetGlassEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
   },
   savedSetImage: {
     width: 52,
     height: 52,
-    borderRadius: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
   savedSetInfo: {
     flex: 1,
@@ -1675,10 +2211,6 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
     fontWeight: '500',
     marginBottom: 4,
-  },
-  savedSetMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   savedSetDate: {
     fontSize: 11,

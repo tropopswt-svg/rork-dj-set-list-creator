@@ -4,7 +4,7 @@
 // Now uses global cache + rate-limit ledger to prevent duplicate API calls and 429 lockouts
 import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistOnSpotify, normalize } from './_lib/spotify-core.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
-import { fetchSoundCloudClientId, searchTrackOnSoundCloud } from './_lib/soundcloud-core.js';
+import { fetchSoundCloudClientId, searchTrackOnSoundCloud, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
 
 const DELAY_MS = 1200; // 1.2s between Spotify API calls
 let soundcloudClientId = null;
@@ -329,12 +329,14 @@ export default async function handler(req, res) {
       for (const [, { name, djId }] of uniqueArtists) {
         if (count >= parseInt(limit)) break;
 
+        let existingArtist = null;
         if (djId) {
-          const { data: existingArtist } = await supabase
+          const { data } = await supabase
             .from('artists')
-            .select('spotify_url, image_url')
+            .select('spotify_url, soundcloud_url, image_url')
             .eq('id', djId)
             .single();
+          existingArtist = data;
 
           if (existingArtist?.spotify_url) { skipped++; count++; continue; }
         }
@@ -377,7 +379,40 @@ export default async function handler(req, res) {
             hasImage: !!spotifyData.image_url,
           });
         } else {
-          notFound++;
+          // Spotify miss — try SoundCloud as fallback for artist profile
+          let scArtist = null;
+          try {
+            if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
+            if (soundcloudClientId) {
+              scArtist = await searchArtistOnSoundCloud(soundcloudClientId, name);
+            }
+          } catch (e) {
+            // SoundCloud fallback is best-effort
+          }
+
+          if (scArtist && djId) {
+            const update = {};
+            if (scArtist.permalink_url && !existingArtist?.soundcloud_url) update.soundcloud_url = scArtist.permalink_url;
+            if (scArtist.avatar_url && !existingArtist?.image_url) update.image_url = scArtist.avatar_url;
+
+            if (Object.keys(update).length > 0) {
+              await supabase
+                .from('artists')
+                .update(update)
+                .eq('id', djId);
+            }
+
+            enriched++;
+            results.push({
+              name,
+              soundcloudName: scArtist.username,
+              soundcloudUrl: scArtist.permalink_url,
+              hasImage: !!scArtist.avatar_url,
+              source: 'soundcloud',
+            });
+          } else {
+            notFound++;
+          }
         }
         count++;
       }
