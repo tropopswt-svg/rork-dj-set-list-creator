@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle, CircleDot, Sparkles, Volume2 } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle, CircleDot, Sparkles, Volume2, Play, Pause } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -20,6 +20,11 @@ interface TrackCardProps {
   onIdentify?: () => void;
   onListen?: () => void; // Play audio preview to help identify
   onIDThis?: () => void; // Open crowd-sourcing modal for unknown track
+  onPlayPreview?: () => void; // Play/pause Deezer/Spotify preview
+  isCurrentlyPlaying?: boolean;
+  isPreviewLoading?: boolean;
+  hasPreview?: boolean;
+  previewFailed?: boolean; // Brief "no preview" feedback
 }
 
 export default function TrackCard({
@@ -35,6 +40,11 @@ export default function TrackCard({
   onIdentify,
   onListen,
   onIDThis,
+  onPlayPreview,
+  isCurrentlyPlaying,
+  isPreviewLoading,
+  hasPreview,
+  previewFailed,
 }: TrackCardProps) {
   const router = useRouter();
   const [showFeaturedModal, setShowFeaturedModal] = useState(false);
@@ -182,7 +192,7 @@ export default function TrackCard({
       return (
         <View style={styles.confirmedContainer}>
           <View style={styles.tdBadge}>
-            <Text style={styles.tdBadgeText}>T'D</Text>
+            <Text style={styles.tdBadgeText}>trakd</Text>
           </View>
           <View style={styles.subIconContainer}>
             {SubIcon}
@@ -254,9 +264,45 @@ export default function TrackCard({
     track.artist.toLowerCase() !== 'unknown' &&
     track.artist.toLowerCase() !== 'unknown artist';
 
+  // Detect "unreleased" baked into artist name (e.g. "unreleased M" → real artist is "M")
+  const unreleasedArtistMatch = !isUnidentified && track.artist
+    ? track.artist.match(/^unreleased\s+(.+)$/i)
+    : null;
+  const realArtist = unreleasedArtistMatch ? unreleasedArtistMatch[1].trim() : null;
+
+  // Clean up malformed track/artist names from scraping
+  const cleanName = (name: string | undefined): string => {
+    if (!name) return '';
+    let cleaned = name;
+    // Strip leading track numbers like "75) " or "12. "
+    cleaned = cleaned.replace(/^\d+\)\s*/, '');
+    cleaned = cleaned.replace(/^\d+\.\s*/, '');
+    // Remove leading close paren
+    cleaned = cleaned.replace(/^\)\s*/, '');
+    // Fix unbalanced parentheses — remove trailing unclosed opens
+    let openCount = 0;
+    for (const ch of cleaned) {
+      if (ch === '(') openCount++;
+      if (ch === ')') openCount--;
+    }
+    if (openCount > 0) {
+      // Remove trailing unclosed open parens
+      for (let k = 0; k < openCount; k++) {
+        const lastOpen = cleaned.lastIndexOf('(');
+        if (lastOpen !== -1) {
+          cleaned = cleaned.substring(0, lastOpen).trim();
+        }
+      }
+    }
+    return cleaned.trim();
+  };
+
+  const displayTitle = cleanName(track.title);
+  const displayArtist = realArtist || cleanName(track.artist);
+
   // Determine if we should show unreleased badge
-  // Show for: explicitly marked unreleased OR partial IDs (we have artist but not title)
-  const showUnreleasedBadge = !isUnidentified && track.isUnreleased;
+  // Show for: explicitly marked unreleased, parsed from artist name, OR partial IDs
+  const showUnreleasedBadge = !isUnidentified && (track.isUnreleased || !!realArtist);
   const showPartialIdBadge = isPartialId;
 
   // Only show "Released" when we have explicit database confirmation
@@ -279,7 +325,7 @@ export default function TrackCard({
         <View style={styles.info}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, isUnidentified && styles.unidentifiedTitle]} numberOfLines={1}>
-              {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : track.title)}
+              {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : displayTitle)}
             </Text>
             {isUnidentified && (
               <View style={styles.questionBadge3d}>
@@ -291,7 +337,7 @@ export default function TrackCard({
             )}
           </View>
           <Text style={[styles.artist, isUnidentified && styles.unidentifiedArtist]} numberOfLines={1}>
-            {isPartialId ? track.artist : (isUnidentified ? 'Help identify this track' : track.artist)}
+            {isPartialId ? track.artist : (isUnidentified ? 'Help identify this track' : displayArtist)}
           </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
@@ -350,6 +396,31 @@ export default function TrackCard({
           </View>
         </View>
         <View style={styles.actions}>
+          {/* Play/pause preview button for identified tracks */}
+          {!isUnidentified && hasPreview && onPlayPreview && (
+            <Pressable
+              style={[
+                styles.previewButton,
+                isCurrentlyPlaying && styles.previewButtonActive,
+                previewFailed && styles.previewButtonFailed,
+              ]}
+              onPress={() => {
+                if (previewFailed) return;
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                onPlayPreview();
+              }}
+            >
+              {isPreviewLoading ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : previewFailed ? (
+                <X size={14} color="rgba(255,255,255,0.5)" />
+              ) : isCurrentlyPlaying ? (
+                <Pause size={14} color="#FFF" />
+              ) : (
+                <Play size={14} color="#FFF" />
+              )}
+            </Pressable>
+          )}
           {/* Show listen button for unidentified tracks when source is available */}
           {isUnidentified && onListen && (
             <Pressable
@@ -585,16 +656,28 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tdBadge: {
-    backgroundColor: '#C41E3A',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
+    backgroundColor: 'rgba(196, 30, 58, 0.55)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
     borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderTopColor: 'rgba(255, 255, 255, 0.4)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.3)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 2,
   },
   tdBadgeText: {
     color: '#FFFFFF',
-    fontSize: 9,
+    fontSize: 7,
     fontWeight: '900',
     letterSpacing: 0.3,
+    textShadowColor: 'rgba(196, 30, 58, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   subIconContainer: {
     marginLeft: 2,
@@ -724,6 +807,29 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+  },
+  previewButton: {
+    padding: 8,
+    backgroundColor: 'rgba(10, 10, 10, 0.55)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  previewButtonActive: {
+    backgroundColor: 'rgba(196, 30, 58, 0.7)',
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+  },
+  previewButtonFailed: {
+    backgroundColor: 'rgba(10, 10, 10, 0.3)',
+    borderColor: 'rgba(255,255,255,0.05)',
+    opacity: 0.6,
   },
   upvoteButton: {
     padding: 8,

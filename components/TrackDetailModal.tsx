@@ -217,22 +217,7 @@ export default function TrackDetailModal({
               </View>
             </View>
 
-            {/* Timestamp & Play Button */}
-            {track.timestamp !== undefined && (
-              <Pressable style={styles.timestampSection} onPress={handlePlayTimestamp}>
-                <View style={styles.timestampInfo}>
-                  <Clock size={16} color={Colors.dark.primary} />
-                  <Text style={styles.timestampLabel}>Timestamp</Text>
-                  <Text style={styles.timestampValue}>{formatTimestamp(track.timestamp)}</Text>
-                </View>
-                <View style={styles.playButton}>
-                  <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
-                  <Text style={styles.playButtonText}>Play at Timestamp</Text>
-                </View>
-              </Pressable>
-            )}
-
-            {/* Spotify Preview Player */}
+            {/* Preview Player — shown for verified tracks with a preview */}
             {track.previewUrl && (
               <Pressable style={styles.previewSection} onPress={playPreview}>
                 <View style={styles.previewLeft}>
@@ -257,6 +242,21 @@ export default function TrackDetailModal({
                   </View>
                 </View>
                 <Text style={styles.previewPowered}>Spotify</Text>
+              </Pressable>
+            )}
+
+            {/* Play at Timestamp — only for tracks without a preview */}
+            {!track.previewUrl && track.timestamp !== undefined && (
+              <Pressable style={styles.timestampSection} onPress={handlePlayTimestamp}>
+                <View style={styles.timestampInfo}>
+                  <Clock size={16} color={Colors.dark.primary} />
+                  <Text style={styles.timestampLabel}>Timestamp</Text>
+                  <Text style={styles.timestampValue}>{formatTimestamp(track.timestamp)}</Text>
+                </View>
+                <View style={styles.playButton}>
+                  <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                  <Text style={styles.playButtonText}>Play at Timestamp</Text>
+                </View>
               </Pressable>
             )}
 

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert } from 'react-native';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert, Platform, Modal } from 'react-native';
+import { useLocalSearchParams, Stack, useRouter, useNavigation } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -29,7 +29,9 @@ import {
   Bookmark,
   BookmarkCheck,
   AlertCircle,
-
+  ChevronUp,
+  ChevronDown,
+  HelpCircle,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -55,6 +57,7 @@ import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/stor
 import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 import { useSets } from '@/contexts/SetsContext';
 import { useUser } from '@/contexts/UserContext';
+import { useAudioPreview } from '@/contexts/AudioPreviewContext';
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -225,6 +228,7 @@ function transformApiSet(apiSet: any): SetList {
     date: new Date(apiSet.date),
     totalDuration: apiSet.totalDuration || 0,
     coverUrl: apiSet.coverUrl || undefined,
+    artistImageUrl: apiSet.artistImageUrl || undefined,
     plays: apiSet.trackCount * 10,
     sourceLinks: apiSet.sourceLinks || [],
     tracks: apiSet.tracks?.map((t: any) => ({
@@ -263,10 +267,13 @@ export default function SetDetailScreen() {
   const router = useRouter();
   const { sets, addSourceToSet, voteOnConflict, getActiveConflicts, addTracksToSet } = useSets();
   const { userId, addPoints } = useUser();
+  const { currentTrackId, isPlaying, isLoading: isPreviewLoading, failedTrackId, playPreview, playDeezerPreview, stop: stopAudio } = useAudioPreview();
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [tracklistCollapsed, setTracklistCollapsed] = useState(false);
   const [showFillGapModal, setShowFillGapModal] = useState(false);
   const [fillGapTimestamp, setFillGapTimestamp] = useState(0);
+  const [gapMenuData, setGapMenuData] = useState<{ timestamp: number; duration: number } | null>(null);
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
@@ -346,6 +353,7 @@ export default function SetDetailScreen() {
             date: new Date(data.set.date),
             totalDuration: data.set.totalDuration || 0,
             coverUrl: data.set.coverUrl || undefined,
+            artistImageUrl: data.set.artistImageUrl || undefined,
             plays: data.set.trackCount * 10,
             sourceLinks: data.set.sourceLinks || [],
             tracks: data.set.tracks?.map((t: any) => ({
@@ -388,6 +396,26 @@ export default function SetDetailScreen() {
     fetchSet();
   }, [id]);
 
+  // Stop audio preview when navigating away from this screen
+  const navigation = useNavigation();
+  useEffect(() => {
+    const unsubBlur = navigation.addListener('blur', () => {
+      stopAudio();
+    });
+    const unsubRemove = navigation.addListener('beforeRemove', () => {
+      stopAudio();
+    });
+    return () => {
+      unsubBlur();
+      unsubRemove();
+    };
+  }, [navigation, stopAudio]);
+
+  // Also stop when the set id changes (navigating to a different set)
+  useEffect(() => {
+    return () => { stopAudio(); };
+  }, [id, stopAudio]);
+
   // Auto-enrich: if the API says there are un-cached tracks, fire enrichment in background
   useEffect(() => {
     if (!needsEnrichment || !id || isEnriching) return;
@@ -416,6 +444,7 @@ export default function SetDetailScreen() {
               date: new Date(refetchData.set.date),
               totalDuration: refetchData.set.totalDuration || 0,
               coverUrl: refetchData.set.coverUrl || undefined,
+              artistImageUrl: refetchData.set.artistImageUrl || undefined,
               plays: refetchData.set.trackCount * 10,
               sourceLinks: refetchData.set.sourceLinks || [],
               tracks: refetchData.set.tracks?.map((t: any) => ({
@@ -582,6 +611,32 @@ export default function SetDetailScreen() {
     | { type: 'conflict'; data: TrackConflict }
     | { type: 'timestamp-conflict'; tracks: Track[]; timestamp: number };
 
+  // Clean up malformed track/artist names from scraping artifacts
+  const cleanTrackName = (name: string | undefined): string => {
+    if (!name) return '';
+    let cleaned = name;
+    // Strip leading track numbers like "75) " or "12. "
+    cleaned = cleaned.replace(/^\d+\)\s*/, '');
+    cleaned = cleaned.replace(/^\d+\.\s*/, '');
+    // Remove leading close paren
+    cleaned = cleaned.replace(/^\)\s*/, '');
+    // Fix unbalanced parentheses — remove trailing unclosed opens
+    let openCount = 0;
+    for (const ch of cleaned) {
+      if (ch === '(') openCount++;
+      if (ch === ')') openCount--;
+    }
+    if (openCount > 0) {
+      for (let k = 0; k < openCount; k++) {
+        const lastOpen = cleaned.lastIndexOf('(');
+        if (lastOpen !== -1) {
+          cleaned = cleaned.substring(0, lastOpen).trim();
+        }
+      }
+    }
+    return cleaned.trim();
+  };
+
   // Smart timestamp conflict detection and tracklist building
   const { tracklistItems, estimatedMissingTracks } = useMemo<{
     tracklistItems: TracklistItem[];
@@ -596,7 +651,11 @@ export default function SetDetailScreen() {
     const normalizeStr = (s: string | undefined): string => {
       if (!s) return '';
       return s.toLowerCase()
+        .replace(/^\d+\)\s*/, '') // Strip leading track numbers like "75) "
+        .replace(/^\d+\.\s*/, '') // Strip "12. " style numbers
+        .replace(/\(mixed\)|\(original mix\)|\(original\)/g, '') // Strip common suffixes
         .replace(/[^a-z0-9]/g, '') // Remove non-alphanumeric
+        .replace(/^(\d{1,3})(?=[a-z])/g, '') // Strip leading digits before letters (track numbers)
         .replace(/feat|ft|featuring/g, '') // Remove featuring indicators
         .trim();
     };
@@ -608,55 +667,90 @@ export default function SetDetailScreen() {
       const artistA = normalizeStr(a.artist);
       const artistB = normalizeStr(b.artist);
 
-      // Exact match
+      // Skip comparison if both are empty
+      if (!titleA && !titleB) return true;
+
+      // Exact match on title+artist
       if (titleA === titleB && artistA === artistB) return true;
 
-      // Title contains the other (e.g., "The One" vs "You are the one")
-      const titleMatch = titleA.includes(titleB) || titleB.includes(titleA);
-      // Artist contains the other (e.g., "Chloe Caillet" vs "Unreleased Chloe Caillet")
-      const artistMatch = artistA.includes(artistB) || artistB.includes(artistA);
+      // Exact title match (even with different artist metadata)
+      if (titleA && titleB && titleA === titleB) return true;
+
+      // Title contains the other
+      const titleMatch = (titleA && titleB) && (titleA.includes(titleB) || titleB.includes(titleA));
+      // Artist contains the other
+      const artistMatch = (artistA && artistB) && (artistA.includes(artistB) || artistB.includes(artistA));
 
       // If both title and artist partially match, likely same track
       if (titleMatch && artistMatch) return true;
 
+      // If titles match and at least one artist is present, likely same track with different artist formatting
+      if (titleMatch && (artistA || artistB)) return true;
+
       // Check for very similar titles with same artist base
       if (artistMatch && (
-        titleA.length > 5 && titleB.length > 5 &&
-        (titleA.includes(titleB.slice(0, 6)) || titleB.includes(titleA.slice(0, 6)))
+        titleA.length > 4 && titleB.length > 4 &&
+        (titleA.includes(titleB.slice(0, 5)) || titleB.includes(titleA.slice(0, 5)))
       )) {
         return true;
       }
 
+      // If titles share a significant prefix (first 60%+ chars match)
+      if (titleA.length > 4 && titleB.length > 4) {
+        const shorter = titleA.length <= titleB.length ? titleA : titleB;
+        const longer = titleA.length > titleB.length ? titleA : titleB;
+        const prefixLen = Math.ceil(shorter.length * 0.6);
+        if (longer.startsWith(shorter.slice(0, prefixLen))) return true;
+      }
+
       // Check for swapped title/artist (common parsing error)
-      const titleInOtherArtist = titleA.length > 5 && artistB.includes(titleA.slice(0, Math.min(8, titleA.length)));
-      const artistInOtherTitle = artistA.length > 5 && titleB.includes(artistA.slice(0, Math.min(8, artistA.length)));
-      const otherTitleInArtist = titleB.length > 5 && artistA.includes(titleB.slice(0, Math.min(8, titleB.length)));
-      const otherArtistInTitle = artistB.length > 5 && titleA.includes(artistB.slice(0, Math.min(8, artistB.length)));
+      const titleInOtherArtist = titleA.length > 4 && artistB.includes(titleA.slice(0, Math.min(6, titleA.length)));
+      const artistInOtherTitle = artistA.length > 4 && titleB.includes(artistA.slice(0, Math.min(6, artistA.length)));
+      const otherTitleInArtist = titleB.length > 4 && artistA.includes(titleB.slice(0, Math.min(6, titleB.length)));
+      const otherArtistInTitle = artistB.length > 4 && titleA.includes(artistB.slice(0, Math.min(6, artistB.length)));
 
       if ((titleInOtherArtist || otherArtistInTitle) && (artistInOtherTitle || otherTitleInArtist)) {
         return true;
       }
 
       // Check if title contains mix/remix info that matches
-      if (titleA.length > titleB.length && titleA.includes(titleB) && titleB.length > 5) return true;
-      if (titleB.length > titleA.length && titleB.includes(titleA) && titleA.length > 5) return true;
+      if (titleA.length > titleB.length && titleA.includes(titleB) && titleB.length > 3) return true;
+      if (titleB.length > titleA.length && titleB.includes(titleA) && titleA.length > 3) return true;
 
-      // Word overlap check for longer titles (Jaccard similarity)
-      if (titleA.length > 10 && titleB.length > 10) {
+      // Word overlap check for titles (Jaccard similarity)
+      if (titleA.length > 6 && titleB.length > 6) {
         const wordsA = new Set(titleA.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
         const wordsB = new Set(titleB.replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 2));
         if (wordsA.size > 0 && wordsB.size > 0) {
           const intersection = [...wordsA].filter(w => wordsB.has(w));
           const smaller = Math.min(wordsA.size, wordsB.size);
-          if (intersection.length / smaller >= 0.6) return true;
+          if (intersection.length / smaller >= 0.5) return true;
         }
       }
+
+      // Cross-field match: one track's artist is basically the other's title
+      // Catches parsing errors where title/artist are swapped (e.g. artist="Another brick in the wall")
+      if (artistB.length > 8 && titleA.includes(artistB)) return true;
+      if (artistA.length > 8 && titleB.includes(artistA)) return true;
+      if (titleA.length > 8 && artistB.includes(titleA)) return true;
+      if (titleB.length > 8 && artistA.includes(titleB)) return true;
 
       // Check if one title appears in the other's combined title+artist
       const combinedA = titleA + artistA;
       const combinedB = titleB + artistB;
-      if (titleA.length > 8 && combinedB.includes(titleA)) return true;
-      if (titleB.length > 8 && combinedA.includes(titleB)) return true;
+      if (titleA.length > 5 && combinedB.includes(titleA)) return true;
+      if (titleB.length > 5 && combinedA.includes(titleB)) return true;
+
+      // Levenshtein-like: if titles differ by very few characters (typos, slight variations)
+      if (titleA.length > 5 && titleB.length > 5 && Math.abs(titleA.length - titleB.length) <= 3) {
+        let matches = 0;
+        const shorter = titleA.length <= titleB.length ? titleA : titleB;
+        const longer = titleA.length > titleB.length ? titleA : titleB;
+        for (let ci = 0; ci < shorter.length; ci++) {
+          if (shorter[ci] === longer[ci]) matches++;
+        }
+        if (matches / longer.length >= 0.8) return true;
+      }
 
       return false;
     };
@@ -741,7 +835,7 @@ export default function SetDetailScreen() {
       const firstTrackTimestamp = tracksWithoutConflicts[0].timestamp || 0;
       // If first track starts after gapThreshold (4.5 min), there's likely missing tracks at the start
       if (firstTrackTimestamp >= gapThreshold) {
-        const estimatedMissing = Math.max(1, Math.round(firstTrackTimestamp / avgTrackDuration));
+        const estimatedMissing = Math.max(1, Math.floor(firstTrackTimestamp / avgTrackDuration));
         missingCount += estimatedMissing;
         gapCounter++;
         items.push({
@@ -793,7 +887,7 @@ export default function SetDetailScreen() {
         const gap = trackTimestamp - lastTimestamp;
         // Only add gap if it's within valid duration bounds
         if (gap >= gapThreshold && (lastTimestamp + avgTrackDuration) <= maxValidTimestamp) {
-          const estimatedMissing = Math.max(1, Math.round((gap - avgTrackDuration) / avgTrackDuration));
+          const estimatedMissing = Math.max(1, Math.floor(gap / avgTrackDuration));
           missingCount += estimatedMissing;
           gapCounter++;
           items.push({
@@ -838,20 +932,32 @@ export default function SetDetailScreen() {
           const topScore = scored[0].score;
           const runnerUpScore = scored[1].score;
 
-          // If top track is significantly better (3+ point gap), just show it
-          if (topScore - runnerUpScore >= 3) {
+          // If top track is better (2+ point gap), just show it — no need for a vote
+          if (topScore - runnerUpScore >= 2) {
             items.push({ type: 'track' as const, data: scored[0].track });
           } else {
-            // Genuine conflict — filter out any low-quality entries before showing
+            // Very close scores — check if tracks are actually different songs
+            // Do a final dedup pass: if all "worthy" tracks are really the same song, just pick the best
             const worthyTracks = scored.filter(s => s.score >= 3).map(s => s.track);
-            if (worthyTracks.length > 1) {
-              items.push({
-                type: 'timestamp-conflict' as const,
-                tracks: worthyTracks,
-                timestamp: Math.min(...worthyTracks.map(t => t.timestamp || 0)),
-              });
-            } else {
+            if (worthyTracks.length <= 1) {
               items.push({ type: 'track' as const, data: scored[0].track });
+            } else {
+              // Final same-song check across all worthy tracks
+              const trulyUnique: Track[] = [worthyTracks[0]];
+              for (let wi = 1; wi < worthyTracks.length; wi++) {
+                const isDup = trulyUnique.some(u => isSameTrack(u, worthyTracks[wi]));
+                if (!isDup) trulyUnique.push(worthyTracks[wi]);
+              }
+              if (trulyUnique.length > 1) {
+                items.push({
+                  type: 'timestamp-conflict' as const,
+                  tracks: trulyUnique,
+                  timestamp: Math.min(...trulyUnique.map(t => t.timestamp || 0)),
+                });
+              } else {
+                // All "conflicts" are the same song — pick the highest scored
+                items.push({ type: 'track' as const, data: scored[0].track });
+              }
             }
           }
         } else {
@@ -889,7 +995,15 @@ export default function SetDetailScreen() {
       return getTimestamp(a) - getTimestamp(b);
     });
 
-    return { tracklistItems: combined, estimatedMissingTracks: missingCount };
+    // Cap the missing count to something reasonable based on set duration
+    // A set can only have so many tracks — roughly 1 per 3 minutes max
+    const maxReasonableTracks = setList?.totalDuration
+      ? Math.floor(setList.totalDuration / 180)
+      : 40; // Default cap for unknown duration
+    const knownTrackCount = combined.filter(c => c.type === 'track' || c.type === 'timestamp-conflict').length;
+    const cappedMissing = Math.min(missingCount, Math.max(0, maxReasonableTracks - knownTrackCount));
+
+    return { tracklistItems: combined, estimatedMissingTracks: cappedMissing };
   }, [sortedTracks, conflicts, isLowQualityTrack]);
 
   const handleSave = useCallback(async () => {
@@ -931,15 +1045,15 @@ export default function SetDetailScreen() {
 
   const getHeaderCoverImage = useCallback((): string | null => {
     if (!setList) return null;
-    if (coverImageError && coverTriedHqFallback) return null;
+    if (coverImageError && coverTriedHqFallback) return setList.artistImageUrl || null;
     if (setList.coverUrl) {
       if (coverImageError && setList.coverUrl.includes('maxresdefault')) {
         if (!coverTriedHqFallback) return setList.coverUrl.replace('maxresdefault', 'hqdefault');
-        return null;
+        return setList.artistImageUrl || null;
       }
       return setList.coverUrl;
     }
-    return null;
+    return setList.artistImageUrl || null;
   }, [setList, coverImageError, coverTriedHqFallback]);
 
   const handleCoverImageError = useCallback(() => {
@@ -973,6 +1087,7 @@ export default function SetDetailScreen() {
                         id: data.set.id, name: data.set.name, artist: data.set.artist,
                         venue: data.set.venue, date: new Date(data.set.date),
                         totalDuration: data.set.totalDuration || 0, coverUrl: data.set.coverUrl || undefined,
+                        artistImageUrl: data.set.artistImageUrl || undefined,
                         plays: data.set.trackCount * 10, sourceLinks: data.set.sourceLinks || [],
                         tracks: data.set.tracks?.map((t: any) => ({
                           id: t.id, title: t.title, artist: t.artist, duration: 0, coverUrl: t.coverUrl || '',
@@ -1699,8 +1814,13 @@ export default function SetDetailScreen() {
                     style={styles.playInAppButton}
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      setShowPlayer(true);
-                      setPlayerMinimized(false);
+                      if (Platform.OS !== 'web') {
+                        // On native, open YouTube app/browser
+                        Linking.openURL(`https://www.youtube.com/watch?v=${videoId}`);
+                      } else {
+                        setShowPlayer(true);
+                        setPlayerMinimized(false);
+                      }
                     }}
                   >
                     <View style={styles.playInAppIcon}>
@@ -1757,15 +1877,19 @@ export default function SetDetailScreen() {
                 style={styles.addTrackButton}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setShowAddModal(true);
+                  setTracklistCollapsed(prev => !prev);
                 }}
               >
-                <Plus size={16} color="#C41E3A" />
-                <Text style={styles.addTrackText}>Add Track</Text>
+                {tracklistCollapsed ? (
+                  <ChevronDown size={16} color="#C41E3A" />
+                ) : (
+                  <ChevronUp size={16} color="#C41E3A" />
+                )}
+                <Text style={styles.addTrackText}>{tracklistCollapsed ? 'Show' : 'Hide'}</Text>
               </Pressable>
             </View>
 
-            {tracklistItems.map((item, index) => {
+            {!tracklistCollapsed && tracklistItems.map((item, index) => {
               if (item.type === 'conflict') {
                 const conflict = item.data;
                 const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
@@ -1798,7 +1922,7 @@ export default function SetDetailScreen() {
                   const s = secs % 60;
                   return `${mins}:${s.toString().padStart(2, '0')}`;
                 };
-                const estimatedTracks = Math.max(1, Math.round(item.duration / 180));
+                const estimatedTracks = Math.max(1, Math.floor(item.duration / 210));
                 const isPickMode = !!pickedTrack;
 
                 return (
@@ -1808,8 +1932,13 @@ export default function SetDetailScreen() {
                       styles.gapIndicator,
                       isPickMode && styles.gapIndicatorDropTarget,
                     ]}
-                    onPress={isPickMode ? () => handlePlaceTrack(item.timestamp) : undefined}
-                    disabled={!isPickMode}
+                    onPress={isPickMode
+                      ? () => handlePlaceTrack(item.timestamp)
+                      : () => {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setGapMenuData({ timestamp: item.timestamp, duration: item.duration });
+                        }
+                    }
                   >
                     <Text style={styles.gapTimestampText}>{formatTime(item.timestamp)}</Text>
                     <View style={[styles.gapLine, isPickMode && styles.gapLineActive]} />
@@ -1822,8 +1951,7 @@ export default function SetDetailScreen() {
                         style={styles.gapAddButton}
                         onPress={() => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setFillGapTimestamp(item.timestamp);
-                          setShowFillGapModal(true);
+                          setGapMenuData({ timestamp: item.timestamp, duration: item.duration });
                         }}
                         hitSlop={8}
                       >
@@ -1863,6 +1991,17 @@ export default function SetDetailScreen() {
                         onListen={isUnidentified && audioSource ? () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setAudioPreviewTrack(votedTrack);
+                        } : undefined}
+                        hasPreview={!isUnidentified && !votedTrack.isUnreleased && (!!votedTrack.previewUrl || !!votedTrack.isReleased)}
+                        isCurrentlyPlaying={currentTrackId === votedTrack.id && isPlaying}
+                        isPreviewLoading={currentTrackId === votedTrack.id && isPreviewLoading}
+                        previewFailed={failedTrackId === votedTrack.id}
+                        onPlayPreview={!isUnidentified && !votedTrack.isUnreleased && (votedTrack.previewUrl || votedTrack.isReleased) ? () => {
+                          if (votedTrack.previewUrl) {
+                            playPreview(votedTrack.id, votedTrack.previewUrl);
+                          } else if (votedTrack.title && votedTrack.artist) {
+                            playDeezerPreview(votedTrack.id, votedTrack.artist, votedTrack.title);
+                          }
                         } : undefined}
                       />
                       <View style={styles.votedTrackBadge}>
@@ -1904,10 +2043,10 @@ export default function SetDetailScreen() {
                           </View>
                           <View style={styles.timestampConflictTrackInfo}>
                             <Text style={styles.timestampConflictTrackTitle} numberOfLines={1}>
-                              {track.title || 'Unknown'}
+                              {cleanTrackName(track.title) || 'Unknown'}
                             </Text>
                             <Text style={styles.timestampConflictTrackArtist} numberOfLines={1}>
-                              {track.artist || 'Unknown Artist'}
+                              {cleanTrackName(track.artist) || 'Unknown Artist'}
                             </Text>
                           </View>
                           <Text style={styles.timestampConflictTrackTime}>
@@ -1940,6 +2079,17 @@ export default function SetDetailScreen() {
                     }}
                     onContributorPress={(username) => setSelectedContributor(username)}
                     slim={isUnidentified}
+                    hasPreview={!isUnidentified && !track.isUnreleased && (!!track.previewUrl || !!track.isReleased)}
+                    isCurrentlyPlaying={currentTrackId === track.id && isPlaying}
+                    isPreviewLoading={currentTrackId === track.id && isPreviewLoading}
+                    previewFailed={failedTrackId === track.id}
+                    onPlayPreview={!isUnidentified && !track.isUnreleased && (track.previewUrl || track.isReleased) ? () => {
+                      if (track.previewUrl) {
+                        playPreview(track.id, track.previewUrl);
+                      } else if (track.title && track.artist) {
+                        playDeezerPreview(track.id, track.artist, track.title);
+                      }
+                    } : undefined}
                   />
                 );
               }
@@ -1947,7 +2097,7 @@ export default function SetDetailScreen() {
               return null;
             })}
             
-            {tracklistItems.length === 0 && unplacedTracks.length === 0 && (
+            {!tracklistCollapsed && tracklistItems.length === 0 && unplacedTracks.length === 0 && (
               <View style={styles.emptyTracks}>
                 <Sparkles size={32} color="#9C968E" />
                 <Text style={styles.emptyText}>No tracks identified yet</Text>
@@ -1964,68 +2114,7 @@ export default function SetDetailScreen() {
               </View>
             )}
 
-            {/* Unplaced Tracks Section - tracks without timestamps */}
-            {unplacedTracks.length > 0 && (
-              <View style={styles.unplacedSection}>
-                <View style={styles.unplacedHeader}>
-                  <View style={styles.unplacedTitleRow}>
-                    <ListMusic size={16} color="#6B6560" />
-                    <Text style={styles.unplacedTitle}>
-                      {tracklistItems.length > 0 ? 'Unplaced Tracks' : 'Track List'}
-                    </Text>
-                  </View>
-                  <Text style={styles.unplacedSubtitle}>
-                    {tracklistItems.length > 0 && estimatedMissingTracks > 0
-                      ? 'Tap a track, then tap a gap to place it'
-                      : tracklistItems.length > 0
-                      ? 'Add a YouTube or SoundCloud source to place these in the timeline'
-                      : 'Add a source to get timestamps'}
-                  </Text>
-                </View>
-                {unplacedTracks.map((track, index) => {
-                  const isPicked = pickedTrack?.id === track.id;
-                  return (
-                    <Pressable
-                      key={track.id}
-                      style={[
-                        styles.unplacedTrackCard,
-                        isPicked && styles.unplacedTrackCardPicked,
-                      ]}
-                      onPress={() => {
-                        if (isPicked) {
-                          setPickedTrack(null);
-                        } else if (estimatedMissingTracks > 0) {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setPickedTrack(track);
-                        } else {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                          setSelectedTrack(track);
-                        }
-                      }}
-                      onLongPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedTrack(track);
-                      }}
-                    >
-                      <View style={styles.unplacedTrackIndex}>
-                        <Text style={styles.unplacedTrackIndexText}>{index + 1}</Text>
-                      </View>
-                      <View style={styles.unplacedTrackInfo}>
-                        <Text style={styles.unplacedTrackTitle} numberOfLines={1}>{track.title}</Text>
-                        <Text style={styles.unplacedTrackArtist} numberOfLines={1}>{track.artist}</Text>
-                      </View>
-                      {isPicked && (
-                        <View style={styles.pickedBadge}>
-                          <Text style={styles.pickedBadgeText}>Selected</Text>
-                        </View>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-
-            {(tracklistItems.length > 0 || unplacedTracks.length > 0) && (
+            {!tracklistCollapsed && (tracklistItems.length > 0 || unplacedTracks.length > 0) && (
               <View style={styles.missingTrackCta}>
                 <Text style={styles.missingTrackText}>Know a track we missed?</Text>
                 <Pressable
@@ -2040,6 +2129,71 @@ export default function SetDetailScreen() {
               </View>
             )}
           </View>
+
+          {/* Unplaced Tracks Section - always visible outside tracklist fold */}
+          {unplacedTracks.length > 0 && (
+            <View style={styles.unplacedSection}>
+              <View style={styles.unplacedHeader}>
+                <View style={styles.unplacedTitleRow}>
+                  <ListMusic size={16} color="#6B6560" />
+                  <Text style={styles.unplacedTitle}>
+                    {tracklistItems.length > 0 ? 'Unplaced Tracks' : 'Track List'}
+                  </Text>
+                </View>
+                <Text style={styles.unplacedSubtitle}>
+                  {tracklistItems.length > 0 && estimatedMissingTracks > 0
+                    ? 'Tap a track, then tap a gap to place it'
+                    : tracklistItems.length > 0
+                    ? 'Add a YouTube or SoundCloud source to place these in the timeline'
+                    : 'Add a source to get timestamps'}
+                </Text>
+              </View>
+              {unplacedTracks.map((track, index) => {
+                const isPicked = pickedTrack?.id === track.id;
+                return (
+                  <Pressable
+                    key={track.id}
+                    style={[
+                      styles.unplacedTrackCard,
+                      isPicked && styles.unplacedTrackCardPicked,
+                    ]}
+                    onPress={() => {
+                      if (isPicked) {
+                        setPickedTrack(null);
+                      } else if (estimatedMissingTracks > 0) {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setPickedTrack(track);
+                        // Expand tracklist so user can see gaps to place the track
+                        if (tracklistCollapsed) {
+                          setTracklistCollapsed(false);
+                        }
+                      } else {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        setSelectedTrack(track);
+                      }
+                    }}
+                    onLongPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setSelectedTrack(track);
+                    }}
+                  >
+                    <View style={styles.unplacedTrackIndex}>
+                      <Text style={styles.unplacedTrackIndexText}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.unplacedTrackInfo}>
+                      <Text style={styles.unplacedTrackTitle} numberOfLines={1}>{track.title}</Text>
+                      <Text style={styles.unplacedTrackArtist} numberOfLines={1}>{track.artist}</Text>
+                    </View>
+                    {isPicked && (
+                      <View style={styles.pickedBadge}>
+                        <Text style={styles.pickedBadgeText}>Selected</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           {/* Comments Section */}
           {/* Similar Sets */}
@@ -2085,6 +2239,86 @@ export default function SetDetailScreen() {
         onSelectTrack={handleFillGapSelectTrack}
         onAddNew={() => setShowAddModal(true)}
       />
+
+      {/* Gap Menu — tapping a gap shows frosted glass track cards for each missing slot */}
+      {gapMenuData !== null && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          transparent
+          onRequestClose={() => setGapMenuData(null)}
+        >
+          <Pressable style={styles.gapMenuOverlay} onPress={() => setGapMenuData(null)}>
+            <View style={styles.gapMenuContent} onStartShouldSetResponder={() => true}>
+              <View style={styles.gapMenuHeader}>
+                <Text style={styles.gapMenuTitle}>
+                  ~{Math.max(1, Math.round(gapMenuData.duration / 180))} Missing Track{Math.max(1, Math.round(gapMenuData.duration / 180)) !== 1 ? 's' : ''}
+                </Text>
+                <Text style={styles.gapMenuSubtitle}>
+                  {(() => { const m1 = Math.floor(gapMenuData.timestamp / 60); const s1 = Math.floor(gapMenuData.timestamp % 60); const end = gapMenuData.timestamp + gapMenuData.duration; const m2 = Math.floor(end / 60); const s2 = Math.floor(end % 60); return `${m1}:${s1.toString().padStart(2, '0')} — ${m2}:${s2.toString().padStart(2, '0')}`; })()}
+                </Text>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {Array.from({ length: Math.max(1, Math.round(gapMenuData.duration / 180)) }, (_, i) => {
+                  const ts = Math.floor(gapMenuData.timestamp + (i * gapMenuData.duration) / Math.max(1, Math.round(gapMenuData.duration / 180)));
+                  const m = Math.floor(ts / 60);
+                  const s = Math.floor(ts % 60);
+                  const timeStr = `${m}:${s.toString().padStart(2, '0')}`;
+                  return (
+                    <View key={`gap-slot-${i}`} style={styles.gapCard}>
+                      <View style={styles.gapCardInner}>
+                        <View style={styles.gapCardCover}>
+                          <HelpCircle size={20} color="rgba(255,255,255,0.2)" />
+                        </View>
+                        <View style={styles.gapCardInfo}>
+                          <Text style={styles.gapCardTitle}>Unknown Track</Text>
+                          <View style={styles.gapCardTimestamp}>
+                            <Clock size={10} color="#C41E3A" />
+                            <Text style={styles.gapCardTime}>{timeStr}</Text>
+                          </View>
+                        </View>
+                        {audioSource && (
+                          <Pressable
+                            style={styles.gapCardPlayBtn}
+                            onPress={() => {
+                              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                              setGapMenuData(null);
+                              if (audioSource.platform === 'youtube') {
+                                const ytLink = (setList?.sourceLinks || []).find(l => l.platform === 'youtube');
+                                if (ytLink) {
+                                  const vid = extractYouTubeId(ytLink.url);
+                                  if (vid) {
+                                    Linking.openURL(`https://www.youtube.com/watch?v=${vid}&t=${ts}s`);
+                                  }
+                                }
+                              } else if (audioSource.platform === 'soundcloud') {
+                                Linking.openURL(audioSource.url);
+                              }
+                            }}
+                          >
+                            <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
+                          </Pressable>
+                        )}
+                        <Pressable
+                          style={styles.gapCardIdBtn}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            setGapMenuData(null);
+                            setFillGapTimestamp(ts);
+                            setShowFillGapModal(true);
+                          }}
+                        >
+                          <Plus size={12} color="#C41E3A" />
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </Pressable>
+        </Modal>
+      )}
 
       <ContributorModal
         visible={selectedContributor !== null}
@@ -2206,20 +2440,26 @@ export default function SetDetailScreen() {
         }}
         onPlayTimestamp={() => {
           if (pendingTimestamp !== null) {
-            // If player is showing, seek to timestamp
-            if (showPlayer) {
+            const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+
+            if (Platform.OS !== 'web' && youtubeLink) {
+              // On native, open YouTube app/browser at the timestamp
+              const videoId = extractYouTubeId(youtubeLink.url);
+              const ts = Math.floor(pendingTimestamp);
+              if (videoId) {
+                Linking.openURL(`https://www.youtube.com/watch?v=${videoId}&t=${ts}s`);
+              }
+            } else if (showPlayer) {
+              // Web: seek existing player to timestamp
               setCurrentTimestamp(pendingTimestamp);
               if (playerMinimized) {
                 setPlayerMinimized(false);
               }
-            } else {
-              // Start the player at the timestamp
-              const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
-              if (youtubeLink) {
-                setCurrentTimestamp(pendingTimestamp);
-                setShowPlayer(true);
-                setPlayerMinimized(false);
-              }
+            } else if (youtubeLink) {
+              // Web: start the embedded player at the timestamp
+              setCurrentTimestamp(pendingTimestamp);
+              setShowPlayer(true);
+              setPlayerMinimized(false);
             }
           }
           setPendingTimestamp(null);
@@ -3234,5 +3474,96 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     fontWeight: '600' as const,
+  },
+  // Gap menu modal
+  gapMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'flex-end',
+  },
+  gapMenuContent: {
+    backgroundColor: '#1A1A1A',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+    maxHeight: '60%',
+  },
+  gapMenuHeader: {
+    marginBottom: 16,
+  },
+  gapMenuTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  gapMenuSubtitle: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 4,
+    fontVariant: ['tabular-nums'] as any,
+  },
+  gapCard: {
+    marginBottom: 10,
+  },
+  gapCardInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 14,
+    padding: 12,
+    gap: 12,
+  },
+  gapCardCover: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gapCardInfo: {
+    flex: 1,
+  },
+  gapCardTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.3)',
+    fontStyle: 'italic',
+  },
+  gapCardTimestamp: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  gapCardTime: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#C41E3A',
+    fontVariant: ['tabular-nums'] as any,
+  },
+  gapCardPlayBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#C41E3A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gapCardIdBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

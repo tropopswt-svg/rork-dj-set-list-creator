@@ -208,7 +208,7 @@ export default async function handler(req, res) {
         // Spotify data — cascade: spotify_data JSONB → joined tracks table
         coverUrl: spotify.album_art_url || linkedTrack.artwork_url || undefined,
         album: spotify.album || undefined,
-        previewUrl: spotify.preview_url || linkedTrack.spotify_preview_url || undefined,
+        previewUrl: spotify.preview_url || spotify.deezer_preview_url || linkedTrack.spotify_preview_url || undefined,
         isrc: spotify.isrc || undefined,
         releaseDate: spotify.release_date || undefined,
         popularity: spotify.popularity || undefined,

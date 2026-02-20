@@ -5,6 +5,7 @@
 import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistOnSpotify, normalize } from './_lib/spotify-core.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
 import { fetchSoundCloudClientId, searchTrackOnSoundCloud, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
+import { searchDeezerPreview } from './_lib/deezer-core.js';
 
 const DELAY_MS = 1200; // 1.2s between Spotify API calls
 let soundcloudClientId = null;
@@ -120,6 +121,17 @@ export default async function handler(req, res) {
         await writeCache(supabase, track.artist_name, track.track_title, !!spotifyData, spotifyData);
 
         if (spotifyData) {
+          // If Spotify found the track but has no preview, try Deezer
+          if (!spotifyData.preview_url) {
+            try {
+              await new Promise(r => setTimeout(r, DELAY_MS));
+              const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+              if (deezer?.previewUrl) {
+                spotifyData.deezer_preview_url = deezer.previewUrl;
+              }
+            } catch {}
+          }
+
           await supabase
             .from('set_tracks')
             .update({ spotify_data: spotifyData, is_unreleased: false })
@@ -144,6 +156,16 @@ export default async function handler(req, res) {
             // SoundCloud fallback is best-effort
           }
 
+          // Try Deezer for preview URL regardless
+          let deezerPreviewUrl = null;
+          try {
+            await new Promise(r => setTimeout(r, DELAY_MS));
+            const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+            if (deezer?.previewUrl) {
+              deezerPreviewUrl = deezer.previewUrl;
+            }
+          } catch {}
+
           if (scArtwork?.artwork_url) {
             // Store SoundCloud artwork in spotify_data format so coverUrl picks it up
             const scData = {
@@ -152,6 +174,7 @@ export default async function handler(req, res) {
               artist: scArtwork.artist || track.artist_name,
               source: 'soundcloud',
               permalink_url: scArtwork.permalink_url,
+              deezer_preview_url: deezerPreviewUrl || undefined,
             };
             await supabase
               .from('set_tracks')
@@ -164,8 +187,27 @@ export default async function handler(req, res) {
               albumArt: true,
               source: 'soundcloud_fallback',
             });
+          } else if (deezerPreviewUrl) {
+            // No Spotify or SoundCloud match, but Deezer has a preview
+            const deezerData = {
+              title: track.track_title,
+              artist: track.artist_name,
+              source: 'deezer',
+              deezer_preview_url: deezerPreviewUrl,
+            };
+            await supabase
+              .from('set_tracks')
+              .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            enriched++;
+            results.push({
+              track: `${track.artist_name} - ${track.track_title}`,
+              spotify: `Deezer preview found`,
+              albumArt: false,
+              source: 'deezer_fallback',
+            });
           } else {
-            // Not found on Spotify or SoundCloud — mark as unreleased
+            // Not found on Spotify, SoundCloud, or Deezer — mark as unreleased
             await supabase
               .from('set_tracks')
               .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
@@ -251,6 +293,17 @@ export default async function handler(req, res) {
         await writeCache(supabase, track.artist_name, track.track_title, !!spotifyData, spotifyData);
 
         if (spotifyData) {
+          // If Spotify found the track but has no preview, try Deezer
+          if (!spotifyData.preview_url) {
+            try {
+              await new Promise(r => setTimeout(r, DELAY_MS));
+              const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+              if (deezer?.previewUrl) {
+                spotifyData.deezer_preview_url = deezer.previewUrl;
+              }
+            } catch {}
+          }
+
           await supabase
             .from('set_tracks')
             .update({ spotify_data: spotifyData, is_unreleased: false })
@@ -268,6 +321,16 @@ export default async function handler(req, res) {
             // Best-effort
           }
 
+          // Try Deezer for preview URL
+          let deezerPreviewUrl = null;
+          try {
+            await new Promise(r => setTimeout(r, DELAY_MS));
+            const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+            if (deezer?.previewUrl) {
+              deezerPreviewUrl = deezer.previewUrl;
+            }
+          } catch {}
+
           if (scArtwork?.artwork_url) {
             const scData = {
               album_art_url: scArtwork.artwork_url,
@@ -275,10 +338,23 @@ export default async function handler(req, res) {
               artist: scArtwork.artist || track.artist_name,
               source: 'soundcloud',
               permalink_url: scArtwork.permalink_url,
+              deezer_preview_url: deezerPreviewUrl || undefined,
             };
             await supabase
               .from('set_tracks')
               .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .eq('id', track.id);
+            enriched++;
+          } else if (deezerPreviewUrl) {
+            const deezerData = {
+              title: track.track_title,
+              artist: track.artist_name,
+              source: 'deezer',
+              deezer_preview_url: deezerPreviewUrl,
+            };
+            await supabase
+              .from('set_tracks')
+              .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
             enriched++;
           } else {

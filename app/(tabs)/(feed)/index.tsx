@@ -5,7 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Music, Heart, MessageCircle, Share2, MapPin, Headphones, Clock, Send, Reply, Trash2, X, Volume2, VolumeX } from 'lucide-react-native';
+import { Music, Heart, MessageCircle, Share2, MapPin, Headphones, Clock, Send, Reply, Trash2, X, Volume2, VolumeX, SkipForward } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useNavigation } from '@react-navigation/native';
 import { Audio } from 'expo-av';
@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useFollowing, useLikeSet, useComments } from '@/hooks/useSocial';
 import { getArtistSets } from '@/lib/supabase/artistService';
 import ArtistAvatar from '@/components/ArtistAvatar';
+import { registerFeedAudioStop, unregisterFeedAudioStop, registerFeedRefresh, unregisterFeedRefresh } from '@/lib/feedAudioController';
 import type { CommentWithUser } from '@/hooks/useSocial';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -53,6 +54,154 @@ function GlassActionButton({ children, onPress, label, isActive, activeColor, di
     </Pressable>
   );
 }
+
+// ── Liquid Glass Skip Button ─────────────────────────────────────────────
+// 3D frosted glass circle centered on each feed card — tapping skips to next preview
+function LiquidGlassSkipButton({ onPress }: { onPress: () => void }) {
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    // Slow continuous shimmer rotation
+    Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 6000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    // Subtle pulse glow
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowAnim, {
+          toValue: 0.6,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.3,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    return () => {
+      shimmerAnim.stopAnimation();
+      glowAnim.stopAnimation();
+    };
+  }, []);
+
+  const shimmerRotate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 0.85,
+      useNativeDriver: true,
+      speed: 50,
+      bounciness: 4,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      speed: 20,
+      bounciness: 10,
+    }).start();
+  };
+
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Bounce animation on tap
+    Animated.sequence([
+      Animated.spring(scaleAnim, { toValue: 1.15, useNativeDriver: true, speed: 50, bounciness: 12 }),
+      Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 8 }),
+    ]).start();
+    onPress();
+  };
+
+  return (
+    <Animated.View style={[lgStyles.container, { transform: [{ scale: scaleAnim }] }]}>
+      {/* Outer glow ring */}
+      <Animated.View style={[lgStyles.glowRing, { opacity: glowAnim }]} />
+      {/* Spinning shimmer accent */}
+      <Animated.View style={[lgStyles.shimmerRing, { transform: [{ rotate: shimmerRotate }] }]} />
+      <Pressable
+        onPress={handlePress}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={lgStyles.pressable}
+      >
+        {/* Glass outline only — no fill */}
+        <View style={lgStyles.glassFace}>
+          <SkipForward size={26} color="rgba(255,255,255,0.75)" fill="rgba(255,255,255,0.08)" />
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+const lgStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: '63%',
+    marginTop: -40, // half of 80
+    zIndex: 15,
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 94,
+    height: 94,
+    borderRadius: 47,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.2)',
+    shadowColor: 'rgba(255,255,255,0.4)',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 14,
+  },
+  shimmerRing: {
+    position: 'absolute',
+    width: 86,
+    height: 86,
+    borderRadius: 43,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderTopColor: 'rgba(255,255,255,0.35)',
+    borderRightColor: 'rgba(255,255,255,0.1)',
+  },
+  pressable: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+  },
+  glassFace: {
+    flex: 1,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+  },
+});
 
 // ── Floating Track Pill ──────────────────────────────────────────────────
 // A single track pill that drifts slowly from left to right
@@ -129,9 +278,9 @@ function FloatingTrackPill({ track, index, laneCount, cardHeight }: {
     };
   }, []);
 
-  // Distribute lanes vertically — avoid top badge area (top 12%) and bottom panel (bottom 28%)
-  const usableTop = cardHeight * 0.14;
-  const usableHeight = cardHeight * 0.55;
+  // Distribute lanes vertically — avoid top area (now-playing bar ~18%) and bottom panel (bottom 28%)
+  const usableTop = cardHeight * 0.20;
+  const usableHeight = cardHeight * 0.50;
   const laneY = usableTop + (index / Math.max(laneCount - 1, 1)) * usableHeight;
 
   const isGold = track.isId === true;
@@ -656,9 +805,170 @@ const csStyles = StyleSheet.create({
   },
 });
 
+// ── Glass Waveform ──────────────────────────────────────────────────────
+// Animated transparent glass waveform bars for the now-playing indicator
+const WAVE_BAR_COUNT = 5;
+function GlassWaveform() {
+  const anims = useRef(
+    Array.from({ length: WAVE_BAR_COUNT }, () => new Animated.Value(0.3))
+  ).current;
+
+  useEffect(() => {
+    const animations = anims.map((anim, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 120),
+          Animated.timing(anim, {
+            toValue: 1,
+            duration: 300 + Math.random() * 200,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+          Animated.timing(anim, {
+            toValue: 0.25 + Math.random() * 0.15,
+            duration: 350 + Math.random() * 250,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: true,
+          }),
+        ])
+      )
+    );
+    animations.forEach(a => a.start());
+    return () => animations.forEach(a => a.stop());
+  }, []);
+
+  return (
+    <View style={waveStyles.container}>
+      {anims.map((anim, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            waveStyles.bar,
+            { transform: [{ scaleY: anim }] },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const waveStyles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2.5,
+    height: 18,
+  },
+  bar: {
+    width: 3,
+    height: 18,
+    borderRadius: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.45)',
+  },
+});
+
+// ── Now Playing Bar (on-card) ────────────────────────────────────────────
+// Ultra-transparent glass outline. Empty until a track loads, then shows
+// waveform + track info. Heart button to save the track.
+function NowPlayingBar({ nowPlaying, isMuted }: { nowPlaying?: { title: string; artist: string } | null; isMuted?: boolean }) {
+  const [liked, setLiked] = useState(false);
+  const heartBounce = useRef(new Animated.Value(1)).current;
+  const isPlaying = !!nowPlaying && !isMuted;
+
+  // Reset liked state when track changes
+  const lastTrack = useRef(nowPlaying?.title);
+  if (nowPlaying?.title !== lastTrack.current) {
+    lastTrack.current = nowPlaying?.title;
+    if (liked) setLiked(false);
+  }
+
+  const handleSave = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLiked(prev => !prev);
+    Animated.sequence([
+      Animated.spring(heartBounce, { toValue: 1.4, useNativeDriver: true, speed: 50, bounciness: 12 }),
+      Animated.spring(heartBounce, { toValue: 1, useNativeDriver: true, speed: 30, bounciness: 8 }),
+    ]).start();
+  };
+
+  return (
+    <View style={npStyles.card}>
+      <View style={npStyles.inner}>
+        {isPlaying && <GlassWaveform />}
+        <View style={npStyles.text}>
+          {isPlaying && (
+            <>
+              <Text style={npStyles.title} numberOfLines={1}>{nowPlaying.title}</Text>
+              <Text style={npStyles.artist} numberOfLines={1}>{nowPlaying.artist}</Text>
+            </>
+          )}
+        </View>
+        <Pressable onPress={handleSave} hitSlop={10} style={npStyles.saveBtn}>
+          <Animated.View style={{ transform: [{ scale: heartBounce }] }}>
+            <Heart
+              size={16}
+              color={liked ? '#EF4444' : 'rgba(255,255,255,0.35)'}
+              fill={liked ? '#EF4444' : 'none'}
+            />
+          </Animated.View>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const npStyles = StyleSheet.create({
+  card: {
+    position: 'absolute',
+    top: 56,
+    left: 16,
+    right: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    borderTopColor: 'rgba(255,255,255,0.1)',
+    zIndex: 12,
+  },
+  inner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 9,
+    paddingLeft: 12,
+    paddingRight: 8,
+    gap: 10,
+  },
+  text: {
+    flex: 1,
+    gap: 1,
+  },
+  title: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: 'rgba(255,255,255,0.8)',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  artist: {
+    fontSize: 10,
+    fontWeight: '500' as const,
+    color: 'rgba(255,255,255,0.4)',
+  },
+  saveBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
+
 // ── Feed Card ───────────────────────────────────────────────────────────
 // Immersive TikTok-style card with frosted glass overlays and 3D depth
-function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void }) {
+function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, onSkipTrack, nowPlaying, isMuted }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void; onSkipTrack?: (setId: string) => void; nowPlaying?: { title: string; artist: string } | null; isMuted?: boolean }) {
   const { user } = useAuth();
   const { isLiked, likeCount, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
   const router = useRouter();
@@ -758,15 +1068,21 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }:
       <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} style={{ flex: 1 }}>
         <View style={[styles.feedHero, { height: cardHeight }]}>
           {/* Cover fallback: cover → artist image → dark gradient */}
-          {(item.set.image || item.artist.image) ? (
-            <Image
-              source={{ uri: item.set.image || item.artist.image }}
-              style={StyleSheet.absoluteFill}
-              contentFit="cover"
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-          ) : (
+          {(item.set.image || item.artist.image) ? (() => {
+            const imgUri = item.set.image || item.artist.image;
+            const isExternalThumb = imgUri && (imgUri.includes('img.youtube.com') || imgUri.includes('sndcdn.com'));
+            return (
+              <Image
+                source={{ uri: imgUri }}
+                style={isExternalThumb
+                  ? [StyleSheet.absoluteFill, { transform: [{ scale: 0.92 }] }]
+                  : StyleSheet.absoluteFill}
+                contentFit={isExternalThumb ? 'contain' : 'cover'}
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            );
+          })() : (
             <LinearGradient
               colors={['#1A1A1A', '#111', '#0A0A0A']}
               style={StyleSheet.absoluteFill}
@@ -793,6 +1109,11 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }:
           {/* ── Floating track cards ── */}
           {floatingTracks.length > 0 && (
             <FloatingTracks tracks={floatingTracks} cardHeight={cardHeight} />
+          )}
+
+          {/* ── Centered liquid glass skip button ── */}
+          {onSkipTrack && (
+            <LiquidGlassSkipButton onPress={() => onSkipTrack(item.set.id)} />
           )}
 
           {/* ── Glass action column (right side) ── */}
@@ -840,6 +1161,9 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }:
             </View>
           </View>
 
+          {/* ── Glass now-playing bar (always visible, centered under artist badge) ── */}
+          <NowPlayingBar nowPlaying={nowPlaying} isMuted={isMuted} />
+
           {/* ── Floating glass info panel (bottom) ── */}
           <View style={styles.feedInfoPanel}>
             <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
@@ -879,6 +1203,7 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded }:
 // API base URL for fetching recent sets
 const FEED_API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
+
 type FeedCategory = 'for_you' | 'new' | 'popular' | 'deep_cuts';
 
 const FEED_CATEGORIES: { key: FeedCategory; label: string }[] = [
@@ -887,6 +1212,166 @@ const FEED_CATEGORIES: { key: FeedCategory; label: string }[] = [
   { key: 'popular', label: 'Most Popular' },
   { key: 'deep_cuts', label: 'Deep Cuts' },
 ];
+
+// ── Category Carousel ────────────────────────────────────────────────────
+// Scrollable horizontal carousel. The centered item is the active one — it's
+// large and "hovering" in front; items on the sides are small + receded.
+// Swiping or tapping slides a new item to center.
+
+const CAR_ITEM_W = 120; // fixed width per slot so snapping works
+
+function CategoryCarousel(props: {
+  categories: { key: FeedCategory; label: string }[];
+  activeCategory: FeedCategory;
+  onCategoryChange: (cat: FeedCategory) => void;
+}) {
+  const { categories, activeCategory, onCategoryChange } = props;
+  const scrollXRef = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef<FlatList>(null);
+  const activeIdx = categories.findIndex(c => c.key === activeCategory);
+  const isUserScroll = useRef(false);
+
+  // When activeCategory changes via tap, scroll to it
+  useEffect(() => {
+    if (!isUserScroll.current) {
+      flatListRef.current?.scrollToOffset({
+        offset: activeIdx * CAR_ITEM_W,
+        animated: true,
+      });
+    }
+    isUserScroll.current = false;
+  }, [activeIdx]);
+
+  const sidePad = (SCREEN_WIDTH - CAR_ITEM_W) / 2;
+
+  const handleScrollEnd = useCallback((e: any) => {
+    const x = e.nativeEvent.contentOffset.x;
+    const idx = Math.round(x / CAR_ITEM_W);
+    const clamped = Math.max(0, Math.min(idx, categories.length - 1));
+    if (categories[clamped].key !== activeCategory) {
+      isUserScroll.current = true;
+      onCategoryChange(categories[clamped].key);
+    }
+  }, [categories, activeCategory, onCategoryChange]);
+
+  const renderItem = useCallback(({ item, index }: { item: { key: FeedCategory; label: string }; index: number }) => {
+    // Interpolate based on scroll position — center item at index*CAR_ITEM_W
+    const inputRange = [
+      (index - 1) * CAR_ITEM_W,
+      index * CAR_ITEM_W,
+      (index + 1) * CAR_ITEM_W,
+    ];
+    const scale = scrollXRef.interpolate({
+      inputRange,
+      outputRange: [0.72, 1.05, 0.72],
+      extrapolate: 'clamp',
+    });
+    const itemOpacity = scrollXRef.interpolate({
+      inputRange,
+      outputRange: [0.4, 1, 0.4],
+      extrapolate: 'clamp',
+    });
+    const translateY = scrollXRef.interpolate({
+      inputRange,
+      outputRange: [2, -3, 2],
+      extrapolate: 'clamp',
+    });
+
+    const isCenter = item.key === activeCategory;
+
+    return (
+      <Pressable
+        onPress={() => onCategoryChange(item.key)}
+        style={{ width: CAR_ITEM_W, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <Animated.View style={[
+          carStyles.pill,
+          isCenter && carStyles.pillCenter,
+          {
+            transform: [{ scale }, { translateY }],
+            opacity: itemOpacity,
+          },
+        ]}>
+          <Text
+            style={isCenter ? carStyles.txtCenter : carStyles.txtSide}
+            numberOfLines={1}
+          >
+            {item.label}
+          </Text>
+        </Animated.View>
+      </Pressable>
+    );
+  }, [activeCategory, onCategoryChange, scrollXRef]);
+
+  return (
+    <View style={carStyles.bar}>
+      <Animated.FlatList
+        ref={flatListRef}
+        data={categories}
+        keyExtractor={(item: { key: string }) => item.key}
+        renderItem={renderItem}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={CAR_ITEM_W}
+        decelerationRate="fast"
+        contentContainerStyle={{ paddingHorizontal: sidePad }}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollXRef } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        onMomentumScrollEnd={handleScrollEnd}
+        onScrollEndDrag={handleScrollEnd}
+        getItemLayout={(_: any, index: number) => ({
+          length: CAR_ITEM_W,
+          offset: CAR_ITEM_W * index,
+          index,
+        })}
+      />
+    </View>
+  );
+}
+
+const carStyles = StyleSheet.create({
+  bar: {
+    height: 48,
+    backgroundColor: '#F0EDE8',
+    zIndex: 10,
+  },
+  pill: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.02)',
+  },
+  pillCenter: {
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(196,30,58,0.25)',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    shadowColor: 'rgba(196,30,58,0.35)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  txtCenter: {
+    fontSize: 15,
+    fontWeight: '800' as const,
+    color: '#C41E3A',
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  txtSide: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: 'rgba(0,0,0,0.35)',
+    letterSpacing: -0.2,
+    textAlign: 'center',
+  },
+});
 
 export default function FeedScreen() {
   const router = useRouter();
@@ -910,6 +1395,10 @@ export default function FeedScreen() {
   const visibleSetIdRef = useRef<string | null>(null);
   const tracksCacheRef = useRef<Map<string, any[]>>(new Map());
   const fetchAbortRef = useRef<AbortController | null>(null);
+  const hasAutoPlayedRef = useRef(false);  // ensures auto-play only fires once
+  const audioDisabledRef = useRef(false);  // kill switch — blocks all playback until user scrolls
+  const trackIndexRef = useRef<Map<string, number>>(new Map()); // per-set track index for skip
+  const skipToNextTrackRef = useRef<((setId: string) => void) | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const isMutedRef = useRef(false);
   const [nowPlaying, setNowPlaying] = useState<{ title: string; artist: string } | null>(null);
@@ -927,27 +1416,11 @@ export default function FeedScreen() {
     return () => { stopAudio(); };
   }, []);
 
-  // Stop audio when leaving feed tab, resume when coming back
-  // Listen on the parent tab navigator so it fires on tab switches
+  // Register stop callback so tab layout can stop audio on tab switch
   useEffect(() => {
-    const parent = navigation.getParent();
-    if (!parent) return;
-
-    const onBlur = parent.addListener('blur', () => {
-      stopAudio();
-    });
-    const onFocus = parent.addListener('focus', () => {
-      if (visibleSetIdRef.current) {
-        const cached = tracksCacheRef.current.get(visibleSetIdRef.current);
-        if (cached) playPreviewForSet(visibleSetIdRef.current, cached);
-      }
-    });
-
-    return () => {
-      onBlur();
-      onFocus();
-    };
-  }, [navigation, stopAudio, playPreviewForSet]);
+    registerFeedAudioStop(stopAudio);
+    return () => { unregisterFeedAudioStop(); };
+  }, [stopAudio]);
 
   // Sync muted state
   useEffect(() => {
@@ -957,8 +1430,10 @@ export default function FeedScreen() {
 
   // ── Core helpers ──
 
-  const stopAudio = useCallback(() => {
+  const stopAudio = useCallback((disable = true) => {
+    if (disable) audioDisabledRef.current = true;
     audioGenRef.current++;
+    visibleSetIdRef.current = null;
     fetchAbortRef.current?.abort();
     fetchAbortRef.current = null;
     if (soundRef.current) {
@@ -1010,25 +1485,31 @@ export default function FeedScreen() {
   // ── Main play logic ──
 
   const playPreviewForSet = useCallback(async (setId: string, tracks: any[]) => {
+    if (audioDisabledRef.current) return;
     // Bump generation — any in-flight work from previous calls becomes stale
-    stopAudio();
+    stopAudio(false);
     const gen = audioGenRef.current;
     visibleSetIdRef.current = setId;
 
-    // 1. Spotify preview (already in track data)
-    const spotifyTrack = (tracks || []).find((t: any) => t.previewUrl);
+    // Only use verified tracks (not IDs or unknowns)
+    const verified = (tracks || []).filter(
+      (t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID'
+        && t.artist && t.artist !== 'Unknown' && t.artist !== 'ID'
+    );
+
+    // Shuffle so each scroll plays a different track
+    const shuffled = [...verified].sort(() => Math.random() - 0.5);
+
+    // 1. Try Spotify previews first (random order)
+    const spotifyTrack = shuffled.find((t: any) => t.previewUrl);
     if (spotifyTrack) {
       if (await loadAndPlay(gen, spotifyTrack.previewUrl, spotifyTrack.title, spotifyTrack.artist)) return;
     }
 
-    // 2. Deezer fallback — search first 5 identified tracks
-    const candidates = (tracks || []).filter(
-      (t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID'
-        && t.artist && t.artist !== 'Unknown' && t.artist !== 'ID'
-    ).slice(0, 5);
-
-    // Strip parenthetical suffixes like "(Chris Stussy Edit)" that break Deezer's strict matching
+    // 2. Deezer fallback — try up to 5 random verified tracks
+    const candidates = shuffled.filter((t: any) => !t.previewUrl).slice(0, 5);
     const cleanTitle = (t: string) => t.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     for (const track of candidates) {
       if (audioGenRef.current !== gen) return;
@@ -1036,29 +1517,119 @@ export default function FeedScreen() {
       const artist = cleanTitle(track.artist);
       if (!title || !artist) continue;
       try {
-        // Try structured query first, then simple fallback
         for (const q of [
           encodeURIComponent(`artist:"${artist}" track:"${title}"`),
           encodeURIComponent(`${artist} ${title}`),
         ]) {
           if (audioGenRef.current !== gen) return;
-          const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
+          const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=3`);
           if (audioGenRef.current !== gen) return;
           const json = await res.json();
-          const preview = json?.data?.[0]?.preview;
-          if (preview && await loadAndPlay(gen, preview, track.title, track.artist)) return;
+          // Validate result actually matches — prevent wrong artist/song
+          const match = (json?.data || []).find((d: any) => {
+            if (!d.preview) return false;
+            const rArtist = normalize(d.artist?.name || '');
+            const rTitle = normalize(d.title || '');
+            const qArtist = normalize(artist);
+            const qTitle = normalize(title);
+            // Artist must be a substring match (handles "feat." variants)
+            const artistOk = rArtist.includes(qArtist) || qArtist.includes(rArtist);
+            // Title must share significant overlap
+            const titleOk = rTitle.includes(qTitle) || qTitle.includes(rTitle);
+            return artistOk && titleOk;
+          });
+          if (match && await loadAndPlay(gen, match.preview, track.title, track.artist)) return;
         }
       } catch {}
     }
   }, [stopAudio, loadAndPlay]);
 
+  // ── Skip to next track ──
+
+  const skipToNextTrack = useCallback(async (setId: string) => {
+    const tracks = tracksCacheRef.current.get(setId);
+    if (!tracks || tracks.length === 0) return;
+
+    // Re-enable audio if it was disabled (user interacting)
+    audioDisabledRef.current = false;
+
+    // Filter to verified tracks only
+    const verified = tracks.filter(
+      (t: any) => !t.isId && t.title && t.title !== 'Unknown' && t.title !== 'ID'
+        && t.artist && t.artist !== 'Unknown' && t.artist !== 'ID'
+    );
+    if (verified.length === 0) return;
+
+    // Get current index and advance
+    const currentIdx = trackIndexRef.current.get(setId) ?? -1;
+    const nextIdx = (currentIdx + 1) % verified.length;
+    trackIndexRef.current.set(setId, nextIdx);
+
+    const track = verified[nextIdx];
+
+    // Stop current audio
+    stopAudio(false);
+    const gen = audioGenRef.current;
+    visibleSetIdRef.current = setId;
+
+    // 1. Try Spotify preview first
+    if (track.previewUrl) {
+      if (await loadAndPlay(gen, track.previewUrl, track.title, track.artist)) return;
+    }
+
+    // 2. Deezer fallback
+    const cleanTitle = (t: string) => t.replace(/\s*\([^)]*\)\s*/g, '').trim();
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const title = cleanTitle(track.title);
+    const artist = cleanTitle(track.artist);
+    if (!title || !artist) return;
+
+    try {
+      for (const q of [
+        encodeURIComponent(`artist:"${artist}" track:"${title}"`),
+        encodeURIComponent(`${artist} ${title}`),
+      ]) {
+        if (audioGenRef.current !== gen) return;
+        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=3`);
+        if (audioGenRef.current !== gen) return;
+        const json = await res.json();
+        const match = (json?.data || []).find((d: any) => {
+          if (!d.preview) return false;
+          const rArtist = normalize(d.artist?.name || '');
+          const rTitle = normalize(d.title || '');
+          const qArtist = normalize(artist);
+          const qTitle = normalize(title);
+          const artistOk = rArtist.includes(qArtist) || qArtist.includes(rArtist);
+          const titleOk = rTitle.includes(qTitle) || qTitle.includes(rTitle);
+          return artistOk && titleOk;
+        });
+        if (match && await loadAndPlay(gen, match.preview, track.title, track.artist)) return;
+      }
+    } catch {}
+
+    // If this track had no preview, try the next one automatically
+    if (verified.length > 1) {
+      // Already incremented nextIdx, just recurse with a small guard
+      const attempted = trackIndexRef.current.get(setId) ?? 0;
+      if (attempted < verified.length) {
+        trackIndexRef.current.set(setId, nextIdx);
+        // Use setTimeout to avoid deep recursion in same call
+        setTimeout(() => skipToNextTrackRef.current?.(setId), 0);
+      }
+    }
+  }, [stopAudio, loadAndPlay]);
+
+  // Keep ref in sync for recursive calls
+  skipToNextTrackRef.current = skipToNextTrack;
+
   // ── Visibility handling ──
 
   const handleSetBecameVisible = useCallback(async (setId: string) => {
+    if (audioDisabledRef.current) return;
     if (visibleSetIdRef.current === setId && soundRef.current) return; // already playing this
 
     // Stop old audio immediately
-    stopAudio();
+    stopAudio(false);
     visibleSetIdRef.current = setId;
     const gen = audioGenRef.current;
 
@@ -1300,6 +1871,18 @@ export default function FeedScreen() {
     setRefreshing(false);
   }, [user, followedArtists, activeCategory]);
 
+  // Scroll to top and refresh — called when user re-taps the Feed tab
+  const scrollToTopAndRefresh = useCallback(() => {
+    feedListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    onRefresh();
+  }, [onRefresh]);
+
+  // Register refresh callback so tab layout can trigger it
+  useEffect(() => {
+    registerFeedRefresh(scrollToTopAndRefresh);
+    return () => { unregisterFeedRefresh(); };
+  }, [scrollToTopAndRefresh]);
+
   // Heights for layout calculations
   const HEADER_HEIGHT = 38;
   const CATEGORY_BAR_HEIGHT = 44;
@@ -1314,6 +1897,7 @@ export default function FeedScreen() {
   // ── Scroll tracking: suppress accidental taps during/after scroll ──
   const handleScrollBegin = useCallback(() => {
     isScrollingRef.current = true;
+    audioDisabledRef.current = false; // user is scrolling on feed — re-enable audio
     if (scrollCooldownRef.current) clearTimeout(scrollCooldownRef.current);
   }, []);
 
@@ -1330,9 +1914,10 @@ export default function FeedScreen() {
     }
   }, [fullFeedHeight, realFeedItems, handleSetBecameVisible]);
 
-  // Auto-play first card when feed data loads
+  // Auto-play first card when feed data loads (fires once only)
   useEffect(() => {
-    if (realFeedItems.length > 0 && !visibleSetIdRef.current) {
+    if (realFeedItems.length > 0 && !hasAutoPlayedRef.current) {
+      hasAutoPlayedRef.current = true;
       handleSetBecameVisible(realFeedItems[0].set.id);
     }
   }, [realFeedItems.length, handleSetBecameVisible]);
@@ -1351,9 +1936,12 @@ export default function FeedScreen() {
         }}
         onOpenComments={(setId) => { stopAudio(); setCommentSheetSetId(setId); }}
         onTracksLoaded={handleTracksLoaded}
+        onSkipTrack={skipToNextTrack}
+        nowPlaying={nowPlaying}
+        isMuted={isMuted}
       />
     </View>
-  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded, stopAudio]);
+  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded, stopAudio, skipToNextTrack, nowPlaying, isMuted]);
 
   return (
     <View style={styles.container}>
@@ -1377,52 +1965,12 @@ export default function FeedScreen() {
           </Pressable>
         </View>
 
-        {/* ── Category tab bar ── */}
-        <View style={styles.categoryBar}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryScroll}
-          >
-            {FEED_CATEGORIES.map((cat) => {
-              const isActive = activeCategory === cat.key;
-              return (
-                <Pressable
-                  key={cat.key}
-                  onPress={() => handleCategoryChange(cat.key)}
-                  style={[styles.categoryTab, isActive && styles.categoryTabActive]}
-                >
-                  {isActive && (
-                    <>
-                      <BlurView intensity={30} tint="light" style={StyleSheet.absoluteFill} />
-                      <View style={[StyleSheet.absoluteFill, styles.categoryTabActiveTint]} />
-                    </>
-                  )}
-                  <Text style={[styles.categoryTabText, isActive && styles.categoryTabTextActive]}>
-                    {cat.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <LinearGradient
-            colors={['#F0EDE8', 'rgba(240,237,232,0)']}
-            style={styles.categoryFade}
-            pointerEvents="none"
-          />
-        </View>
-
-        {/* Now playing indicator — always rendered to avoid layout shift */}
-        <View style={styles.nowPlayingBar}>
-          {nowPlaying && !isMuted ? (
-            <>
-              <Music size={10} color="#C41E3A" />
-              <Text style={styles.nowPlayingText} numberOfLines={1}>
-                {nowPlaying.title} — {nowPlaying.artist}
-              </Text>
-            </>
-          ) : null}
-        </View>
+        {/* ── Category carousel ── */}
+        <CategoryCarousel
+          categories={FEED_CATEGORIES}
+          activeCategory={activeCategory}
+          onCategoryChange={handleCategoryChange}
+        />
 
         {/* TikTok-style paging feed */}
         <View
@@ -1471,7 +2019,7 @@ export default function FeedScreen() {
                 style={styles.browseButton}
                 onPress={() => {
                   Haptics.selectionAsync();
-                  router.push('/(tabs)/(discover)');
+                  router.push('/(tabs)/(feed)');
                 }}
               >
                 <Text style={styles.browseButtonText}>Browse All Sets</Text>
@@ -1560,74 +2108,9 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.06)',
   },
 
-  // ── Now Playing bar ──
-  nowPlayingBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 16,
-    height: 22,
-    overflow: 'hidden',
-  },
-  nowPlayingText: {
-    flex: 1,
-    fontSize: 11,
-    fontWeight: '600' as const,
-    color: 'rgba(0,0,0,0.45)',
-    letterSpacing: -0.2,
-  },
+  // (now playing moved into card)
 
-  // ── Category tab bar ──
-  categoryBar: {
-    paddingTop: 2,
-    paddingBottom: 4,
-    zIndex: 10,
-    backgroundColor: '#F0EDE8',
-  },
-  categoryScroll: {
-    paddingHorizontal: 16,
-    gap: 8,
-  },
-  categoryTab: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    paddingHorizontal: 18,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.08)',
-    backgroundColor: 'rgba(0, 0, 0, 0.03)',
-  },
-  categoryTabActive: {
-    borderColor: 'rgba(196, 30, 58, 0.2)',
-    shadowColor: 'rgba(196, 30, 58, 0.25)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  categoryTabActiveTint: {
-    backgroundColor: 'rgba(255,255,255,0.6)',
-  },
-  categoryTabText: {
-    fontSize: 14,
-    fontWeight: '600' as const,
-    color: 'rgba(0, 0, 0, 0.35)',
-    letterSpacing: -0.2,
-  },
-  categoryTabTextActive: {
-    fontSize: 15,
-    fontWeight: '800' as const,
-    color: '#C41E3A',
-    letterSpacing: -0.3,
-  },
-  categoryFade: {
-    position: 'absolute',
-    bottom: -16,
-    left: 0,
-    right: 0,
-    height: 16,
-    zIndex: 10,
-  },
+  // (category styles moved to carouselStyles)
 
   // ── Feed scroll area ──
   feedScrollWrapper: {
@@ -1666,6 +2149,7 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     borderRadius: 20,
+    backgroundColor: '#0A0A0A',
   },
   feedHeroPlaceholder: {
     ...StyleSheet.absoluteFillObject,
@@ -1774,6 +2258,8 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: 'rgba(255,255,255,0.6)',
   },
+
+  // (now playing styles moved to npStyles)
 
   // ── Floating Glass Info Panel (bottom) ──
   feedInfoPanel: {

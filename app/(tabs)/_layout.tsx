@@ -1,5 +1,5 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
-import { Disc3, Rss, Archive, User } from 'lucide-react-native';
+import { Disc3, Rss, Archive, User, Search } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-native';
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
 import * as Haptics from 'expo-haptics';
@@ -13,6 +13,7 @@ import { stopSetRecording, getRecordingStatus, IdentifiedTrack } from '@/compone
 const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
+import { stopFeedAudio, refreshFeed } from '@/lib/feedAudioController';
 
 // Animated Vinyl FAB with "trackd" text in center
 const VinylFAB = ({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
@@ -251,18 +252,13 @@ export default function TabLayout() {
   // TODO: Re-enable auth gate after testing
   const handleTabPress = (tabName: string, e: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    // Auth gate disabled for testing
-    // const gatedTabs = ['(profile)', '(social)'];
-    // if (gatedTabs.includes(tabName) && !isAuthenticated) {
-    //   e.preventDefault();
-    //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    //   setAuthGateMessage(
-    //     tabName === '(profile)'
-    //       ? 'Create an account to build your music profile and track your contributions.'
-    //       : 'Sign up to build your crate with saved sets and identified tracks.'
-    //   );
-    //   setShowAuthGate(true);
-    // }
+    if (tabName === '(feed)' && segments[1] === '(feed)') {
+      // Already on feed — scroll to top and refresh
+      refreshFeed();
+    } else if (tabName !== '(feed)') {
+      // Switching away from feed — stop audio
+      stopFeedAudio();
+    }
   };
 
   return (
@@ -286,23 +282,35 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="(discover)"
-        options={{
-          title: 'Discover',
-          tabBarIcon: ({ color, size }) => <Disc3 size={size} color={color} />,
-        }}
-        listeners={{
-          tabPress: (e) => handleTabPress('(discover)', e),
-        }}
-      />
-      <Tabs.Screen
         name="(feed)"
         options={{
-          title: 'Feed',
-          tabBarIcon: ({ color, size }) => <Rss size={size} color={color} />,
+          title: '',
+          tabBarLabel: () => null,
+          tabBarItemStyle: { overflow: 'visible' },
+          tabBarIcon: ({ focused }) => (
+            <Text style={{
+              color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
+              fontSize: 16,
+              fontWeight: '900',
+              letterSpacing: -0.5,
+              marginTop: 6,
+            }}>
+              trakd
+            </Text>
+          ),
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(feed)', e),
+        }}
+      />
+      <Tabs.Screen
+        name="(discover)"
+        options={{
+          title: 'Dig',
+          tabBarIcon: ({ color, size }) => <Search size={size} color={color} />,
+        }}
+        listeners={{
+          tabPress: (e) => handleTabPress('(discover)', e),
         }}
       />
       <Tabs.Screen

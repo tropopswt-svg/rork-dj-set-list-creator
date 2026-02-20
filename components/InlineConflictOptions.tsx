@@ -25,6 +25,29 @@ interface InlineConflictOptionsProps {
   soundcloudUrl?: string;
 }
 
+// Clean up malformed track/artist names from scraping artifacts
+const cleanTrackName = (name: string | undefined): string => {
+  if (!name) return '';
+  let cleaned = name;
+  cleaned = cleaned.replace(/^\d+\)\s*/, '');
+  cleaned = cleaned.replace(/^\d+\.\s*/, '');
+  cleaned = cleaned.replace(/^\)\s*/, '');
+  let openCount = 0;
+  for (const ch of cleaned) {
+    if (ch === '(') openCount++;
+    if (ch === ')') openCount--;
+  }
+  if (openCount > 0) {
+    for (let k = 0; k < openCount; k++) {
+      const lastOpen = cleaned.lastIndexOf('(');
+      if (lastOpen !== -1) {
+        cleaned = cleaned.substring(0, lastOpen).trim();
+      }
+    }
+  }
+  return cleaned.trim();
+};
+
 // Format timestamp
 const formatTimestamp = (seconds: number) => {
   const h = Math.floor(seconds / 3600);
@@ -149,10 +172,10 @@ const FloatingOptionPill = ({
         {/* Track info */}
         <View style={styles.pillInfo}>
           <Text style={styles.pillTitle} numberOfLines={1}>
-            {option.title}
+            {cleanTrackName(option.title)}
           </Text>
           <Text style={styles.pillArtist} numberOfLines={1}>
-            {option.artist}
+            {cleanTrackName(option.artist)}
           </Text>
         </View>
 
@@ -233,8 +256,8 @@ export default function InlineConflictOptions({
             <Check size={16} color="#22C55E" />
           </View>
           <View style={styles.resolvedInfo}>
-            <Text style={styles.resolvedTitle} numberOfLines={1}>{winner.title}</Text>
-            <Text style={styles.resolvedArtist} numberOfLines={1}>{winner.artist}</Text>
+            <Text style={styles.resolvedTitle} numberOfLines={1}>{cleanTrackName(winner.title)}</Text>
+            <Text style={styles.resolvedArtist} numberOfLines={1}>{cleanTrackName(winner.artist)}</Text>
           </View>
           <View style={styles.pointsEarned}>
             <Sparkles size={10} color={Colors.dark.primary} />

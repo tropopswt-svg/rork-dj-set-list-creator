@@ -248,7 +248,7 @@ export default function LandingScreen() {
 
   const navigateToDiscover = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.replace('/(tabs)/(discover)');
+    router.replace('/(tabs)/(feed)');
   };
 
   const swipeUp = Gesture.Pan().onEnd((event) => {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 12,
   },
   animationArea: {
-    height: SCREEN_HEIGHT * 0.28,
+    height: SCREEN_HEIGHT * 0.2,
     width: '100%',
     overflow: 'visible',
   },
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
   },
   buttonArea: {
     alignItems: 'center',
-    paddingTop: 8,
+    paddingTop: 0,
   },
   exploreButton: {
     backgroundColor: '#C41E3A',

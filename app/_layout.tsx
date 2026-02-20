@@ -9,6 +9,7 @@ import { trpc, trpcClient } from "@/lib/trpc";
 import { SetsProvider } from "@/contexts/SetsContext";
 import { UserProvider } from "@/contexts/UserContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AudioPreviewProvider } from "@/contexts/AudioPreviewContext";
 import ErrorBoundary from "@/components/ErrorBoundary";
 
 SplashScreen.preventAutoHideAsync();
@@ -45,8 +46,10 @@ export default function RootLayout() {
             <AuthProvider>
               <UserProvider>
                 <SetsProvider>
-                  <StatusBar style="light" />
-                  <RootLayoutNav />
+                  <AudioPreviewProvider>
+                    <StatusBar style="light" />
+                    <RootLayoutNav />
+                  </AudioPreviewProvider>
                 </SetsProvider>
               </UserProvider>
             </AuthProvider>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
-import { X, Search, Music, Plus, Clock, Sparkles } from 'lucide-react-native';
+import { X, Search, Plus, Clock, Sparkles, Music2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { Track } from '@/types';
@@ -35,7 +37,6 @@ interface DatabaseTrack {
 export default function FillGapModal({
   visible,
   timestamp,
-  unplacedTracks,
   onClose,
   onSelectTrack,
   onAddNew,
@@ -43,13 +44,22 @@ export default function FillGapModal({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<DatabaseTrack[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [activeTab, setActiveTab] = useState<'unplaced' | 'search'>('unplaced');
+  const searchInputRef = useRef<TextInput>(null);
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
     const s = secs % 60;
     return `${mins}:${s.toString().padStart(2, '0')}`;
   };
+
+  // Auto-focus search on open
+  useEffect(() => {
+    if (visible) {
+      setSearchQuery('');
+      setSearchResults([]);
+      setTimeout(() => searchInputRef.current?.focus(), 350);
+    }
+  }, [visible]);
 
   // Search database for tracks
   useEffect(() => {
@@ -78,12 +88,6 @@ export default function FillGapModal({
     const debounce = setTimeout(searchTracks, 300);
     return () => clearTimeout(debounce);
   }, [searchQuery]);
-
-  const handleSelectUnplaced = (track: Track) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onSelectTrack(track, timestamp);
-    onClose();
-  };
 
   const handleSelectFromDatabase = (dbTrack: DatabaseTrack) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -115,133 +119,113 @@ export default function FillGapModal({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <Pressable style={styles.overlayTap} onPress={onClose} />
+
         <View style={styles.container}>
+          {/* Drag handle */}
+          <View style={styles.handleRow}>
+            <View style={styles.handle} />
+          </View>
+
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <Clock size={18} color={Colors.dark.primary} />
-              <Text style={styles.headerTitle}>Fill Gap at {formatTime(timestamp)}</Text>
-            </View>
-            <Pressable onPress={onClose} hitSlop={8}>
-              <X size={22} color={Colors.dark.textMuted} />
-            </Pressable>
-          </View>
-
-          {/* Tabs */}
-          <View style={styles.tabs}>
-            <Pressable
-              style={[styles.tab, activeTab === 'unplaced' && styles.tabActive]}
-              onPress={() => setActiveTab('unplaced')}
-            >
-              <Text style={[styles.tabText, activeTab === 'unplaced' && styles.tabTextActive]}>
-                Unplaced ({unplacedTracks.length})
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tab, activeTab === 'search' && styles.tabActive]}
-              onPress={() => setActiveTab('search')}
-            >
-              <Text style={[styles.tabText, activeTab === 'search' && styles.tabTextActive]}>
-                Search All Tracks
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Content */}
-          {activeTab === 'unplaced' ? (
-            <ScrollView style={styles.trackList} showsVerticalScrollIndicator={false}>
-              {unplacedTracks.length > 0 ? (
-                unplacedTracks.map((track, index) => (
-                  <Pressable
-                    key={track.id}
-                    style={styles.trackItem}
-                    onPress={() => handleSelectUnplaced(track)}
-                  >
-                    <View style={styles.trackIndex}>
-                      <Text style={styles.trackIndexText}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.trackInfo}>
-                      <Text style={styles.trackTitle} numberOfLines={1}>{track.title}</Text>
-                      <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
-                    </View>
-                    <Plus size={18} color={Colors.dark.primary} />
-                  </Pressable>
-                ))
-              ) : (
-                <View style={styles.emptyState}>
-                  <Text style={styles.emptyText}>No unplaced tracks</Text>
-                  <Text style={styles.emptySubtext}>Search the database or add a new track</Text>
-                </View>
-              )}
-            </ScrollView>
-          ) : (
-            <View style={styles.searchSection}>
-              {/* Search Input */}
-              <View style={styles.searchInputContainer}>
-                <Search size={16} color={Colors.dark.textMuted} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search by title or artist..."
-                  placeholderTextColor={Colors.dark.textMuted}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                {searchQuery.length > 0 && (
-                  <Pressable onPress={() => setSearchQuery('')}>
-                    <X size={16} color={Colors.dark.textMuted} />
-                  </Pressable>
-                )}
+              <View style={styles.timestampPill}>
+                <Clock size={12} color="#FFF" />
+                <Text style={styles.timestampPillText}>{formatTime(timestamp)}</Text>
               </View>
-
-              {/* Search Results */}
-              <ScrollView style={styles.trackList} showsVerticalScrollIndicator={false}>
-                {isSearching ? (
-                  <View style={styles.loadingState}>
-                    <ActivityIndicator size="small" color={Colors.dark.primary} />
-                    <Text style={styles.loadingText}>Searching...</Text>
-                  </View>
-                ) : searchResults.length > 0 ? (
-                  searchResults.map((track) => (
-                    <Pressable
-                      key={track.id}
-                      style={styles.trackItem}
-                      onPress={() => handleSelectFromDatabase(track)}
-                    >
-                      <View style={styles.trackIconContainer}>
-                        <Sparkles size={14} color={Colors.dark.primary} />
-                      </View>
-                      <View style={styles.trackInfo}>
-                        <Text style={styles.trackTitle} numberOfLines={1}>{track.title}</Text>
-                        <Text style={styles.trackArtist} numberOfLines={1}>{track.artist}</Text>
-                      </View>
-                      <Plus size={18} color={Colors.dark.primary} />
-                    </Pressable>
-                  ))
-                ) : searchQuery.length >= 2 ? (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>No tracks found</Text>
-                    <Text style={styles.emptySubtext}>Try a different search term</Text>
-                  </View>
-                ) : (
-                  <View style={styles.emptyState}>
-                    <Text style={styles.emptyText}>Search the database</Text>
-                    <Text style={styles.emptySubtext}>Type at least 2 characters to search</Text>
-                  </View>
-                )}
-              </ScrollView>
+              <Text style={styles.headerTitle}>Fill this gap</Text>
             </View>
-          )}
+            <Pressable style={styles.closeButton} onPress={onClose} hitSlop={8}>
+              <X size={18} color={Colors.dark.textMuted} />
+            </Pressable>
+          </View>
 
-          {/* Add New Button */}
-          <Pressable style={styles.addNewButton} onPress={handleAddNew}>
-            <Plus size={18} color={Colors.dark.background} />
-            <Text style={styles.addNewButtonText}>Add New Track Manually</Text>
-          </Pressable>
+          {/* Search Input */}
+          <View style={styles.searchContainer}>
+            <View style={styles.searchInputContainer}>
+              <Search size={16} color={Colors.dark.textMuted} />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                placeholder="Search by track or artist..."
+                placeholderTextColor={Colors.dark.textMuted}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <Pressable
+                  style={styles.clearButton}
+                  onPress={() => setSearchQuery('')}
+                  hitSlop={6}
+                >
+                  <X size={14} color={Colors.dark.textMuted} />
+                </Pressable>
+              )}
+            </View>
+          </View>
+
+          {/* Results */}
+          <ScrollView
+            style={styles.resultsList}
+            contentContainerStyle={styles.resultsContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {isSearching ? (
+              <View style={styles.stateContainer}>
+                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                <Text style={styles.stateText}>Searching...</Text>
+              </View>
+            ) : searchResults.length > 0 ? (
+              searchResults.map((track) => (
+                <Pressable
+                  key={track.id}
+                  style={styles.resultItem}
+                  onPress={() => handleSelectFromDatabase(track)}
+                >
+                  <View style={styles.resultIcon}>
+                    <Music2 size={14} color={Colors.dark.primary} />
+                  </View>
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultTitle} numberOfLines={1}>{track.title}</Text>
+                    <Text style={styles.resultArtist} numberOfLines={1}>{track.artist}</Text>
+                  </View>
+                  <View style={styles.addIcon}>
+                    <Plus size={16} color={Colors.dark.primary} />
+                  </View>
+                </Pressable>
+              ))
+            ) : searchQuery.length >= 2 ? (
+              <View style={styles.stateContainer}>
+                <Text style={styles.stateText}>No results found</Text>
+                <Text style={styles.stateSubtext}>Try different keywords or add manually</Text>
+              </View>
+            ) : (
+              <View style={styles.stateContainer}>
+                <Sparkles size={28} color={Colors.dark.textMuted} />
+                <Text style={styles.stateText}>Search the track database</Text>
+                <Text style={styles.stateSubtext}>Or add a new track manually below</Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Add manually button */}
+          <View style={styles.footer}>
+            <Pressable style={styles.addManualButton} onPress={handleAddNew}>
+              <Plus size={16} color="#FFF" />
+              <Text style={styles.addManualText}>Add Manually</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
@@ -249,161 +233,232 @@ export default function FillGapModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     justifyContent: 'flex-end',
   },
+  overlayTap: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+  },
   container: {
-    backgroundColor: Colors.dark.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    paddingBottom: 34,
+    backgroundColor: 'rgba(245, 240, 232, 0.92)',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '75%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderBottomWidth: 0,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 20,
+  },
+  handleRow: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 4,
+  },
+  handle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(156, 150, 142, 0.35)',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 14,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '600',
-    color: Colors.dark.text,
-  },
-  tabs: {
+  timestampPill: {
     flexDirection: 'row',
-    padding: 12,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: Colors.dark.surface,
     alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(196, 30, 58, 0.8)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderTopColor: 'rgba(255, 255, 255, 0.35)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.4)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  tabActive: {
-    backgroundColor: Colors.dark.primary,
-  },
-  tabText: {
+  timestampPillText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
+    fontWeight: '800',
+    color: '#FFF',
+    fontVariant: ['tabular-nums'],
   },
-  tabTextActive: {
-    color: Colors.dark.background,
-  },
-  trackList: {
-    flex: 1,
-    paddingHorizontal: 12,
-  },
-  trackItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
-    marginBottom: 8,
-    gap: 12,
-  },
-  trackIndex: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.dark.elevated,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trackIndexText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.dark.textMuted,
-  },
-  trackIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: `${Colors.dark.primary}20`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  trackInfo: {
-    flex: 1,
-  },
-  trackTitle: {
-    fontSize: 14,
-    fontWeight: '600',
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
     color: Colors.dark.text,
-    marginBottom: 2,
   },
-  trackArtist: {
-    fontSize: 12,
-    color: Colors.dark.textSecondary,
+  closeButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    borderTopColor: 'rgba(255, 255, 255, 1)',
+    borderBottomColor: 'rgba(232, 226, 217, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: 'rgba(45, 42, 38, 0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  searchSection: {
-    flex: 1,
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    marginHorizontal: 12,
-    marginBottom: 12,
-    gap: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    gap: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.9)',
+    borderTopColor: 'rgba(255, 255, 255, 1)',
+    borderBottomColor: 'rgba(232, 226, 217, 0.5)',
+    shadowColor: 'rgba(45, 42, 38, 0.08)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 13,
     fontSize: 15,
     color: Colors.dark.text,
+    fontWeight: '500',
   },
-  loadingState: {
+  clearButton: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(232, 226, 217, 0.6)',
     alignItems: 'center',
-    paddingTop: 40,
+    justifyContent: 'center',
+  },
+  resultsList: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  resultsContent: {
+    paddingBottom: 8,
+  },
+  resultItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    marginBottom: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.85)',
+    borderTopColor: 'rgba(255, 255, 255, 0.95)',
+    borderBottomColor: 'rgba(232, 226, 217, 0.5)',
+    shadowColor: 'rgba(45, 42, 38, 0.06)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 1,
     gap: 12,
   },
-  loadingText: {
-    fontSize: 14,
-    color: Colors.dark.textMuted,
-  },
-  emptyState: {
+  resultIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.12)',
     alignItems: 'center',
-    paddingTop: 40,
+    justifyContent: 'center',
   },
-  emptyText: {
+  resultInfo: {
+    flex: 1,
+  },
+  resultTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Colors.dark.text,
+    marginBottom: 1,
+  },
+  resultArtist: {
+    fontSize: 12,
+    color: Colors.dark.textSecondary,
+  },
+  addIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stateContainer: {
+    alignItems: 'center',
+    paddingTop: 36,
+    paddingBottom: 20,
+    gap: 6,
+  },
+  stateText: {
     fontSize: 15,
     fontWeight: '600',
     color: Colors.dark.textSecondary,
-    marginBottom: 4,
   },
-  emptySubtext: {
+  stateSubtext: {
     fontSize: 13,
     color: Colors.dark.textMuted,
   },
-  addNewButton: {
+  footer: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 34,
+  },
+  addManualButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: Colors.dark.primary,
-    marginHorizontal: 12,
-    marginTop: 12,
     paddingVertical: 14,
-    borderRadius: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(196, 30, 58, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.4)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
-  addNewButtonText: {
+  addManualText: {
     fontSize: 15,
-    fontWeight: '600',
-    color: Colors.dark.background,
+    fontWeight: '700',
+    color: '#FFF',
+    letterSpacing: 0.2,
   },
 });
