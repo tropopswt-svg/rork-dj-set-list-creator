@@ -1,15 +1,15 @@
 // Vercel cron endpoint — background drip enrichment
-// Processes 10 un-enriched set_tracks + 10 tracks + 5 artists per invocation
+// Processes 20 un-enriched set_tracks + 15 tracks + 10 artists per invocation
 // Schedule: every 5 minutes via vercel.json cron
-// Rate: ~2,880 tracks/day + 1,440 artists/day
+// Rate: ~5,760 set_tracks/day + 4,320 tracks/day + 2,880 artists/day
 import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistOnSpotify } from './_lib/spotify-core.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit } from './_lib/spotify-cache.js';
 import { fetchSoundCloudClientId, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
 
-const SET_TRACKS_BATCH = 10;
-const TRACKS_BATCH = 10;
-const ARTISTS_BATCH = 5;
-const DELAY_MS = 1200;
+const SET_TRACKS_BATCH = 20;
+const TRACKS_BATCH = 15;
+const ARTISTS_BATCH = 10;
+const DELAY_MS = 1000;
 let soundcloudClientId = null;
 
 export default async function handler(req, res) {
