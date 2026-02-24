@@ -17,7 +17,7 @@ interface AnimatedSetCardProps {
 }
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-export const CARD_HEIGHT = 120; // Height of SetFeedCard (108px row + 12px margin)
+export const CARD_HEIGHT = 122; // Height of SetFeedCard (108px row + 14px margin)
 
 export default function AnimatedSetCard({
   setList,
@@ -64,10 +64,16 @@ export default function AnimatedSetCard({
   });
 
   // Accent bar white overlay opacity - 1 when centered, 0 when away
-  // Uses opacity which is native-driver compatible
   const accentOpacity = scrollY.interpolate({
     inputRange: wideInputRange,
     outputRange: [0, 0, 1, 0, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Solidness — 0 = liquid glass transparent, 1 = solid dark card
+  const solidness = scrollY.interpolate({
+    inputRange: wideInputRange,
+    outputRange: [0, 0.4, 1, 0.4, 0],
     extrapolate: 'clamp',
   });
 
@@ -86,6 +92,7 @@ export default function AnimatedSetCard({
         onEventPress={onEventPress}
         isSelected={isSelectedProp}
         accentOpacity={accentOpacity}
+        solidness={solidness}
       />
     </Animated.View>
   );

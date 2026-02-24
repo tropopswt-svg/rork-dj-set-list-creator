@@ -269,7 +269,7 @@ async function uploadToACRCloud(audioBuffer, metadata) {
 
   const header = Buffer.from(parts.join(''));
   const fileHeader = Buffer.from(
-    `--${boundary}\r\nContent-Disposition: form-data; name="audio_file"; filename="track.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="track.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n`
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
   const body = Buffer.concat([header, fileHeader, audioBuffer, footer]);
@@ -282,6 +282,7 @@ async function uploadToACRCloud(audioBuffer, metadata) {
         'Authorization': `Bearer ${bearerToken}`,
         'Content-Type': `multipart/form-data; boundary=${boundary}`,
         'Content-Length': body.length.toString(),
+        'X-Requested-With': 'XMLHttpRequest',
       },
       body,
       signal: AbortSignal.timeout(30000),
@@ -365,9 +366,9 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 1. Search SoundCloud for "[DJ] unreleased/dub/VIP" ───────────────────
+  // ── 1. Search SoundCloud for "[DJ] unreleased/VIP/forthcoming" ──────────
   if (!curatorsOnly) {
-    const searchTerms = ['unreleased', 'dub', 'VIP', 'forthcoming', 'ID'];
+    const searchTerms = ['unreleased', 'VIP', 'forthcoming', 'bootleg', 'exclusive'];
 
     for (const djName of djs) {
       if (uploadCount >= limit) break;
@@ -377,7 +378,12 @@ export default async function handler(req, res) {
         console.log(`[Discover] Searching: "${query}"`);
         const tracks = await searchSoundCloudTracks(clientId, query, 10);
         debugInfo[`${djName}:${term}`] = `${tracks.length} results`;
+        const djNameLower = djName.toLowerCase();
         for (const track of tracks) {
+          // Relevance filter: DJ name must appear in title or uploader
+          const titleLower = track.title.toLowerCase();
+          const artistLower = track.artist.toLowerCase();
+          if (!titleLower.includes(djNameLower) && !artistLower.includes(djNameLower)) continue;
           await processTrack(track, 0.75);
         }
       }

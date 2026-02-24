@@ -1,12 +1,13 @@
 import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Animated, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Modal, Animated, Alert, Platform } from 'react-native';
 import EventBadge, { detectEvent, EVENT_BADGES } from './EventBadge';
 import { Image } from 'expo-image';
-import { Play, Music, Youtube, Music2, AlertCircle, Calendar, MapPin, Ticket, Star, X, User, HelpCircle } from 'lucide-react-native';
+import { Play, Music, Youtube, Music2, AlertCircle, Calendar, MapPin, Star, X, User, HelpCircle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { SetList } from '@/types';
 import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
+import { BLURHASH } from '@/constants/colors';
 
 interface SetFeedCardProps {
   setList: SetList;
@@ -16,6 +17,7 @@ interface SetFeedCardProps {
   onEventPress?: (eventId: string) => void;
   isSelected?: boolean; // Whether this card is the main/centered one in the scroll wheel
   accentOpacity?: Animated.AnimatedInterpolation<number>; // 0-1 opacity for white accent bar overlay
+  solidness?: Animated.AnimatedInterpolation<number>; // 0 = liquid glass, 1 = solid dark
   fillProgress?: Animated.AnimatedInterpolation<number>; // 0-1 for liquid fill effect on chips
   fillDirection?: Animated.AnimatedInterpolation<number>; // 1 = fill up, -1 = drain down
 }
@@ -262,7 +264,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'FUSE': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, fillProgress, fillDirection }: SetFeedCardProps) {
+export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, solidness, fillProgress, fillDirection }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
   // Calculate dynamic font sizes based on content length and venue presence
@@ -1101,6 +1103,17 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
       delayLongPress={400}
       accessibilityLabel={searchableText}
     >
+      {/* Solid background layer — fades in when card is centered */}
+      {solidness && (
+        <Animated.View
+          style={[
+            styles.solidBg,
+            { opacity: solidness },
+          ]}
+          pointerEvents="none"
+        />
+      )}
+
       {/* Dark shade overlay — fades in when card is centered/hovered */}
       {accentOpacity && (
         <Animated.View
@@ -1119,94 +1132,62 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
         </Pressable>
       )}
 
-      {/* Venue badge - top right corner */}
+      {/* Venue badge - top right corner — liquid glass */}
       {displayVenue && (
         <Animated.View
           style={[
             styles.venueBadgeTopRight,
-            fillProgress && {
-              backgroundColor: fillProgress.interpolate({
-                inputRange: [0, 0.3, 0.6, 1],
-                outputRange: ['rgba(196,30,58,0.35)', 'rgba(196,30,58,0.35)', 'rgba(196,30,58,0.5)', 'rgba(196,30,58,0.5)'],
+            solidness && {
+              backgroundColor: solidness.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.10)'],
                 extrapolate: 'clamp',
               }),
-              borderColor: fillProgress.interpolate({
-                inputRange: [0, 0.3, 0.6, 1],
-                outputRange: ['rgba(196,30,58,0.4)', 'rgba(196,30,58,0.4)', 'rgba(196,30,58,0.55)', 'rgba(196,30,58,0.55)'],
+              borderColor: solidness.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.18)'],
                 extrapolate: 'clamp',
               }),
             },
           ]}
         >
-          <View style={styles.venueContentContainer}>
-            <Ticket size={venueFontSize} color="#D4AF37" />
-            <Animated.Text
-              style={[
-                styles.venueBadgeText,
-                { fontSize: venueFontSize },
-                fillProgress && {
-                  color: fillProgress.interpolate({
-                    inputRange: [0, 0.3, 0.6, 1],
-                    outputRange: ['#F5E6D3', '#F5E6D3', '#FFFFFF', '#FFFFFF'],
-                    extrapolate: 'clamp',
-                  }),
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {displayVenue}
-            </Animated.Text>
-          </View>
+          <Animated.Text
+            style={[
+              styles.venueBadgeText,
+              { fontSize: venueFontSize },
+              solidness && {
+                color: solidness.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['rgba(245,230,211,0.5)', '#F5E6D3'],
+                  extrapolate: 'clamp',
+                }),
+              },
+            ]}
+            numberOfLines={1}
+          >
+            {displayVenue}
+          </Animated.Text>
         </Animated.View>
       )}
 
       <View style={styles.row}>
         <View style={styles.coverContainer}>
-          {/* Show event-branded placeholder if no YouTube source but we detect an event */}
-          {needsSource && detectedEvent && EVENT_BADGES[detectedEvent] ? (
-            <View
-              style={[
-                styles.eventPlaceholder,
-                {
-                  backgroundColor: EVENT_BADGES[detectedEvent].backgroundColor,
-                  borderColor: EVENT_BADGES[detectedEvent].borderColor || EVENT_BADGES[detectedEvent].backgroundColor,
-                },
-              ]}
-            >
-              <Text style={[
-                styles.eventPlaceholderEmoji,
-                { color: EVENT_BADGES[detectedEvent].textColor },
-                EVENT_BADGES[detectedEvent].isEmoji && { fontSize: 32 },
-                EVENT_BADGES[detectedEvent].fontStyle === 'handwritten' && { fontStyle: 'italic', fontWeight: '400', fontSize: 32 },
-              ]}>
-                {EVENT_BADGES[detectedEvent].shortLabel}
-              </Text>
-              {/* Show RADIO subtext for radio shows */}
-              {EVENT_BADGES[detectedEvent].hasRadioSubtext && (
-                <Text style={[
-                  styles.eventPlaceholderRadio,
-                  { color: EVENT_BADGES[detectedEvent].textColor },
-                ]}>
-                  RADIO
-                </Text>
-              )}
-              <Text style={[
-                styles.eventPlaceholderLabel,
-                { color: EVENT_BADGES[detectedEvent].textColor },
-              ]} numberOfLines={1}>
-                {EVENT_BADGES[detectedEvent].label}
-              </Text>
-            </View>
-          ) : getCoverImage() ? (
+          {getCoverImage() ? (
             <Image
               source={{ uri: getCoverImage()! }}
               style={styles.cover}
               contentFit="cover"
+              placeholder={{ blurhash: BLURHASH.coverDark }}
+              transition={300}
               onError={handleImageError}
               cachePolicy="memory-disk"
             />
           ) : (
-            <View style={[styles.cover, { backgroundColor: Colors.dark.surface }]} />
+            <Image
+              style={styles.cover}
+              placeholder={{ blurhash: BLURHASH.coverDark }}
+              contentFit="cover"
+            />
           )}
           <View style={styles.playOverlay}>
             <View style={styles.playButton}>
@@ -1247,15 +1228,15 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                             paddingHorizontal: artistChipStyle.paddingH,
                             paddingVertical: artistChipStyle.paddingV,
                           },
-                          fillProgress && {
-                            backgroundColor: fillProgress.interpolate({
-                              inputRange: [0, 0.3, 0.6, 1],
-                              outputRange: ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0.08)', 'rgba(255,255,255,0.14)', 'rgba(255,255,255,0.14)'],
+                          solidness && {
+                            backgroundColor: solidness.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.10)'],
                               extrapolate: 'clamp',
                             }),
-                            borderColor: fillProgress.interpolate({
-                              inputRange: [0, 0.3, 0.6, 1],
-                              outputRange: ['rgba(255,255,255,0.18)', 'rgba(255,255,255,0.18)', 'rgba(255,255,255,0.28)', 'rgba(255,255,255,0.28)'],
+                            borderColor: solidness.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.18)'],
                               extrapolate: 'clamp',
                             }),
                           },
@@ -1267,10 +1248,10 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                             style={[
                               styles.artistText,
                               { fontSize: artistChipStyle.fontSize },
-                              fillProgress && {
-                                color: fillProgress.interpolate({
-                                  inputRange: [0, 0.3, 0.6, 1],
-                                  outputRange: ['#F5E6D3', '#F5E6D3', '#FFFFFF', '#FFFFFF'],
+                              solidness && {
+                                color: solidness.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: ['rgba(245,230,211,0.5)', '#F5E6D3'],
                                   extrapolate: 'clamp',
                                 }),
                               },
@@ -1450,27 +1431,41 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
 const styles = StyleSheet.create({
   container: {
     marginHorizontal: 16,
-    marginBottom: 12,
-    height: 108, // Fixed height (border-box: includes 1px border) to ensure consistent card heights for scroll wheel
-    backgroundColor: '#0A0A0A',
+    marginBottom: 14,
+    height: 108,
+    backgroundColor: 'rgba(12, 12, 12, 0.35)', // liquid glass base
     borderRadius: 14,
     overflow: 'visible',
+    // Heavy 3D shadow stack
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 10,
+    elevation: 8,
     borderWidth: 1,
-    borderColor: '#1A1A1A',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopColor: 'rgba(255, 255, 255, 0.12)', // glass top highlight
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    borderBottomWidth: 2,
     position: 'relative',
   },
   containerAnalyzed: {
-    borderColor: 'rgba(196, 30, 58, 0.3)',
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+    borderTopColor: 'rgba(196, 30, 58, 0.15)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.3)',
+  },
+  solidBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#0C0C0C',
+    borderRadius: 13,
+    borderWidth: 0,
   },
   hoverShade: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
     borderRadius: 13,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
     zIndex: 1,
   },
   trackdBadgeFloating: {
@@ -1505,22 +1500,20 @@ const styles = StyleSheet.create({
     top: -8,
     right: 8,
     zIndex: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(196, 30, 58, 0.35)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.4)',
-    borderTopColor: 'rgba(255, 120, 140, 0.35)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderTopColor: 'rgba(255, 255, 255, 0.10)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
     maxWidth: 120,
-    shadowColor: 'rgba(196, 30, 58, 0.4)',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 1,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 3,
   },
   venueBadgeWithFill: {
     overflow: 'hidden',
@@ -1549,8 +1542,8 @@ const styles = StyleSheet.create({
     color: '#FFF8F0',
   },
   pressed: {
-    opacity: 0.95,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.92,
+    transform: [{ scale: 0.975 }],
   },
   row: {
     flexDirection: 'row',
@@ -1565,12 +1558,13 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(245, 230, 211, 0.15)',
-    shadowColor: '#C41E3A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    borderColor: 'rgba(245, 230, 211, 0.12)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
   },
   cover: {
     width: '100%',
@@ -1664,16 +1658,17 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   artistChip: {
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.18)',
-    borderTopColor: 'rgba(255, 255, 255, 0.28)',
-    shadowColor: 'rgba(0, 0, 0, 0.4)',
+    borderColor: 'rgba(255, 255, 255, 0.06)',
+    borderTopColor: 'rgba(255, 255, 255, 0.10)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 1,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
     elevation: 3,
   },
@@ -1727,9 +1722,11 @@ const styles = StyleSheet.create({
   },
   artistText: {
     fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
     fontWeight: '700' as const,
-    color: '#F5E6D3',
-    letterSpacing: 0.3,
+    color: 'rgba(245, 230, 211, 0.5)',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   artistTextSelected: {
     color: '#F5E6D3',
@@ -1789,10 +1786,14 @@ const styles = StyleSheet.create({
   },
   name: {
     flex: 1,
-    fontSize: 14,
-    fontWeight: '700' as const,
+    fontSize: 15,
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
+    fontWeight: '800' as const,
     color: '#F5E6D3',
     lineHeight: 18,
+    textShadowColor: 'rgba(0, 0, 0, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   nameTrackd: {
     color: '#FFFFFF',
@@ -1832,8 +1833,11 @@ const styles = StyleSheet.create({
   },
   venueBadgeText: {
     fontSize: 10,
-    color: '#F5E6D3',
-    fontWeight: '600' as const,
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
+    fontWeight: '700' as const,
+    color: 'rgba(245, 230, 211, 0.5)',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
   },
   footer: {
     marginTop: 2,
