@@ -12,8 +12,8 @@ const getBaseUrl = () => {
   const url = process.env.EXPO_PUBLIC_RORK_API_BASE_URL;
 
   if (!url) {
-    console.warn("EXPO_PUBLIC_RORK_API_BASE_URL is not set, using localhost fallback");
-    return "http://localhost:3001";
+    if (__DEV__) console.warn("EXPO_PUBLIC_RORK_API_BASE_URL is not set, using production fallback");
+    return "https://rork-dj-set-list-creator.vercel.app";
   }
 
   return url;
@@ -27,7 +27,7 @@ export const trpcClient = trpc.createClient({
       fetch: (url, options) => {
         // Add better error handling for network issues
         return fetch(url, options).catch((error) => {
-          console.error("tRPC fetch error:", error);
+          if (__DEV__) console.error("tRPC fetch error:", error);
           throw error;
         });
       },

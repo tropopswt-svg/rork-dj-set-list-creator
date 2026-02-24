@@ -87,7 +87,7 @@ export default function ImportSetModal({ visible, onClose, onImport }: ImportSet
     }
 
     // Check if backend is reachable before attempting scrape
-    const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'http://localhost:3001';
+    const backendUrl = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
