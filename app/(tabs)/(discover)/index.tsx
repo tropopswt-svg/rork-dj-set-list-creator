@@ -19,6 +19,92 @@ import { normalizeVenueName, normalizeArtistName } from '@/lib/venueNormalizatio
 // the tab bar is absolutely positioned and overlaps scroll content
 const TAB_BAR_HEIGHT = 85;
 
+// Subtle ambient floating orbs behind the card list
+const AmbientOrbs = () => {
+  // Each orb has independent X/Y drift animations
+  const orb1X = useRef(new Animated.Value(0)).current;
+  const orb1Y = useRef(new Animated.Value(0)).current;
+  const orb2X = useRef(new Animated.Value(0)).current;
+  const orb2Y = useRef(new Animated.Value(0)).current;
+  const orb3X = useRef(new Animated.Value(0)).current;
+  const orb3Y = useRef(new Animated.Value(0)).current;
+  const orb4X = useRef(new Animated.Value(0)).current;
+  const orb4Y = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const drift = (anim: Animated.Value, toA: number, toB: number, dur: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(anim, { toValue: toA, duration: dur, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(anim, { toValue: toB, duration: dur * 0.8, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: dur * 0.6, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      );
+
+    const anims = [
+      drift(orb1X, 30, -20, 12000),
+      drift(orb1Y, -25, 15, 14000),
+      drift(orb2X, -35, 25, 16000),
+      drift(orb2Y, 20, -30, 13000),
+      drift(orb3X, 20, -35, 18000),
+      drift(orb3Y, -15, 25, 15000),
+      drift(orb4X, -25, 30, 14000),
+      drift(orb4Y, 30, -20, 17000),
+    ];
+
+    anims.forEach(a => a.start());
+    return () => anims.forEach(a => a.stop());
+  }, []);
+
+  return (
+    <View style={ambientStyles.container} pointerEvents="none">
+      <Animated.View style={[ambientStyles.orb, ambientStyles.orb1, { transform: [{ translateX: orb1X }, { translateY: orb1Y }] }]} />
+      <Animated.View style={[ambientStyles.orb, ambientStyles.orb2, { transform: [{ translateX: orb2X }, { translateY: orb2Y }] }]} />
+      <Animated.View style={[ambientStyles.orb, ambientStyles.orb3, { transform: [{ translateX: orb3X }, { translateY: orb3Y }] }]} />
+      <Animated.View style={[ambientStyles.orb, ambientStyles.orb4, { transform: [{ translateX: orb4X }, { translateY: orb4Y }] }]} />
+    </View>
+  );
+};
+
+const ambientStyles = StyleSheet.create({
+  container: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  orb: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  orb1: {
+    width: 180,
+    height: 180,
+    top: '25%',
+    left: -40,
+    backgroundColor: 'rgba(196, 30, 58, 0.04)',
+  },
+  orb2: {
+    width: 140,
+    height: 140,
+    top: '45%',
+    right: -30,
+    backgroundColor: 'rgba(196, 30, 58, 0.035)',
+  },
+  orb3: {
+    width: 200,
+    height: 200,
+    top: '65%',
+    left: '20%',
+    backgroundColor: 'rgba(184, 134, 11, 0.025)',
+  },
+  orb4: {
+    width: 120,
+    height: 120,
+    top: '15%',
+    right: '15%',
+    backgroundColor: 'rgba(255, 255, 255, 0.015)',
+  },
+});
+
 // Create outside component to avoid re-creation on every render
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown as typeof FlatList;
 // Initial estimate of header area (logo ~76 + search ~62 + filters ~58 = ~196)
@@ -896,6 +982,7 @@ export default function DiscoverScreen() {
 
   return (
     <View style={styles.container}>
+      <AmbientOrbs />
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <View onLayout={(e) => {
           const h = e.nativeEvent.layout.height;

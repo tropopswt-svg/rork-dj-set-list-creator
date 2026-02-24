@@ -1,144 +1,237 @@
-import React, { createContext, useContext, useRef, useState, useCallback } from 'react';
+// Global audio playback context for track preview play buttons
+// Single Audio.Sound instance — only one track plays at a time
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Audio } from 'expo-av';
+import createContextHook from '@nkzw/create-context-hook';
 
-interface AudioPreviewContextType {
-  currentTrackId: string | null;
-  isPlaying: boolean;
-  isLoading: boolean;
-  failedTrackId: string | null;
-  playPreview: (trackId: string, previewUrl: string) => Promise<void>;
-  playDeezerPreview: (trackId: string, artist: string, title: string) => Promise<void>;
-  stop: () => void;
+// Strip parenthetical suffixes that break Deezer's strict matching
+function cleanTitle(t: string) {
+  return t.replace(/\s*\([^)]*\)\s*/g, '').trim();
 }
 
-const AudioPreviewContext = createContext<AudioPreviewContextType>({
-  currentTrackId: null,
-  isPlaying: false,
-  isLoading: false,
-  failedTrackId: null,
-  playPreview: async () => {},
-  playDeezerPreview: async () => {},
-  stop: () => {},
-});
-
-export function AudioPreviewProvider({ children }: { children: React.ReactNode }) {
+export const [AudioPreviewProvider, useAudioPreview] = createContextHook(() => {
   const [currentTrackId, setCurrentTrackId] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [failedTrackId, setFailedTrackId] = useState<string | null>(null);
-  const soundRef = useRef<Audio.Sound | null>(null);
 
-  const cleanup = useCallback(async () => {
-    if (soundRef.current) {
-      try {
-        await soundRef.current.stopAsync();
-        await soundRef.current.unloadAsync();
-      } catch {}
-      soundRef.current = null;
-    }
-    setIsPlaying(false);
+  const soundRef = useRef<Audio.Sound | null>(null);
+  const genRef = useRef(0);
+  const previewCache = useRef<Map<string, string | null>>(new Map());
+
+  useEffect(() => {
+    Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: false,
+    });
+    return () => {
+      soundRef.current?.unloadAsync().catch(() => {});
+    };
   }, []);
 
-  const stop = useCallback(() => {
-    cleanup();
+  // Auto-clear failedTrackId after 2 seconds
+  useEffect(() => {
+    if (!failedTrackId) return;
+    const timer = setTimeout(() => setFailedTrackId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [failedTrackId]);
+
+  const stop = useCallback(async () => {
+    genRef.current++;
     setCurrentTrackId(null);
-  }, [cleanup]);
+    setIsPlaying(false);
+    setIsLoading(false);
+    setProgress(0);
 
-  const playFromUrl = useCallback(async (trackId: string, url: string) => {
-    // If same track is playing, toggle off
-    if (currentTrackId === trackId && isPlaying) {
-      stop();
-      return;
+    if (soundRef.current) {
+      try { await soundRef.current.unloadAsync(); } catch {}
+      soundRef.current = null;
     }
+  }, []);
 
-    await cleanup();
-    setCurrentTrackId(trackId);
-    setIsLoading(true);
-    setFailedTrackId(null);
-
+  const loadAndPlay = useCallback(async (gen: number, url: string, trackId: string): Promise<boolean> => {
     try {
-      await Audio.setAudioModeAsync({
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-      });
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+
+      if (genRef.current !== gen) return false;
 
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
         { shouldPlay: true },
         (status) => {
-          if (status.isLoaded) {
-            setIsPlaying(status.isPlaying);
-            if (status.didJustFinish) {
-              setIsPlaying(false);
-              setCurrentTrackId(null);
-              sound.unloadAsync();
-              soundRef.current = null;
-            }
+          if (genRef.current !== gen) return;
+          if (!status.isLoaded) return;
+
+          if (status.isPlaying && status.durationMillis) {
+            setProgress(status.positionMillis / status.durationMillis);
+          }
+
+          if (status.didJustFinish) {
+            setIsPlaying(false);
+            setProgress(0);
+            setCurrentTrackId(null);
+            soundRef.current?.unloadAsync().catch(() => {});
+            soundRef.current = null;
           }
         }
       );
 
+      if (genRef.current !== gen) {
+        await sound.unloadAsync().catch(() => {});
+        return false;
+      }
+
       soundRef.current = sound;
+      setCurrentTrackId(trackId);
+      setIsPlaying(true);
       setIsLoading(false);
+      return true;
     } catch {
-      setIsLoading(false);
-      setIsPlaying(false);
-      setFailedTrackId(trackId);
-      setCurrentTrackId(null);
+      if (genRef.current === gen) {
+        setIsLoading(false);
+        setCurrentTrackId(null);
+        setFailedTrackId(trackId);
+      }
+      return false;
     }
-  }, [currentTrackId, isPlaying, cleanup, stop]);
+  }, []);
 
   const playPreview = useCallback(async (trackId: string, previewUrl: string) => {
-    await playFromUrl(trackId, previewUrl);
-  }, [playFromUrl]);
+    // Same track — toggle pause/resume
+    if (currentTrackId === trackId && soundRef.current) {
+      const status = await soundRef.current.getStatusAsync();
+      if (status.isLoaded) {
+        if (status.isPlaying) {
+          await soundRef.current.pauseAsync();
+          setIsPlaying(false);
+        } else {
+          await soundRef.current.playAsync();
+          setIsPlaying(true);
+        }
+        return;
+      }
+    }
 
+    genRef.current++;
+    const gen = genRef.current;
+
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+
+    setCurrentTrackId(trackId);
+    setIsPlaying(false);
+    setIsLoading(true);
+    setProgress(0);
+
+    await loadAndPlay(gen, previewUrl, trackId);
+  }, [currentTrackId, loadAndPlay]);
+
+  /**
+   * Search Deezer directly (same pattern as feed) then play.
+   * Deezer API is free, no auth, no CORS issues on mobile.
+   */
   const playDeezerPreview = useCallback(async (trackId: string, artist: string, title: string) => {
-    if (currentTrackId === trackId && isPlaying) {
-      stop();
+    // Same track — toggle pause/resume
+    if (currentTrackId === trackId && soundRef.current) {
+      const status = await soundRef.current.getStatusAsync();
+      if (status.isLoaded) {
+        if (status.isPlaying) {
+          await soundRef.current.pauseAsync();
+          setIsPlaying(false);
+        } else {
+          await soundRef.current.playAsync();
+          setIsPlaying(true);
+        }
+        return;
+      }
+    }
+
+    // Check client-side cache
+    if (previewCache.current.has(trackId)) {
+      const cachedUrl = previewCache.current.get(trackId);
+      if (cachedUrl) {
+        await playPreview(trackId, cachedUrl);
+        return;
+      }
+      setFailedTrackId(trackId);
       return;
     }
 
-    await cleanup();
-    setCurrentTrackId(trackId);
-    setIsLoading(true);
-    setFailedTrackId(null);
+    // New track — stop current, search Deezer directly
+    genRef.current++;
+    const gen = genRef.current;
 
-    try {
-      const query = encodeURIComponent(`${artist} ${title}`);
-      const res = await fetch(`https://api.deezer.com/search?q=${query}&limit=1`);
-      const data = await res.json();
-      const previewUrl = data?.data?.[0]?.preview;
-
-      if (!previewUrl) {
-        throw new Error('No Deezer preview found');
-      }
-
-      await playFromUrl(trackId, previewUrl);
-    } catch {
-      setIsLoading(false);
-      setIsPlaying(false);
-      setFailedTrackId(trackId);
-      setCurrentTrackId(null);
+    if (soundRef.current) {
+      await soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
     }
-  }, [currentTrackId, isPlaying, cleanup, stop, playFromUrl]);
 
-  return (
-    <AudioPreviewContext.Provider
-      value={{
-        currentTrackId,
-        isPlaying,
-        isLoading,
-        failedTrackId,
-        playPreview,
-        playDeezerPreview,
-        stop,
-      }}
-    >
-      {children}
-    </AudioPreviewContext.Provider>
-  );
-}
+    setCurrentTrackId(trackId);
+    setIsPlaying(false);
+    setIsLoading(true);
+    setProgress(0);
 
-export function useAudioPreview() {
-  return useContext(AudioPreviewContext);
-}
+    const cleanedTitle = cleanTitle(title);
+    const cleanedArtist = cleanTitle(artist);
+
+    // Two-query strategy — same as feed: structured first, then simple
+    const queries = [
+      encodeURIComponent(`artist:"${cleanedArtist}" track:"${cleanedTitle}"`),
+      encodeURIComponent(`${cleanedArtist} ${cleanedTitle}`),
+    ];
+
+    for (const q of queries) {
+      if (genRef.current !== gen) return;
+      try {
+        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
+        if (genRef.current !== gen) return;
+        const json = await res.json();
+        const preview = json?.data?.[0]?.preview;
+        if (preview) {
+          previewCache.current.set(trackId, preview);
+          await loadAndPlay(gen, preview, trackId);
+          return;
+        }
+      } catch {}
+    }
+
+    // Nothing found
+    if (genRef.current === gen) {
+      previewCache.current.set(trackId, null);
+      setIsLoading(false);
+      setCurrentTrackId(null);
+      setFailedTrackId(trackId);
+    }
+  }, [currentTrackId, playPreview, loadAndPlay]);
+
+  const togglePlayPause = useCallback(async () => {
+    if (!soundRef.current) return;
+    const status = await soundRef.current.getStatusAsync();
+    if (!status.isLoaded) return;
+    if (status.isPlaying) {
+      await soundRef.current.pauseAsync();
+      setIsPlaying(false);
+    } else {
+      await soundRef.current.playAsync();
+      setIsPlaying(true);
+    }
+  }, []);
+
+  return {
+    currentTrackId,
+    isPlaying,
+    isLoading,
+    progress,
+    failedTrackId,
+    playPreview,
+    playDeezerPreview,
+    togglePlayPause,
+    stop,
+  };
+});

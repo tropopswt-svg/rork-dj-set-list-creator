@@ -133,7 +133,8 @@ export async function canMakeRequest(supabase) {
  * Record a rate limit (429) from Spotify. Locks requests for retryAfter seconds.
  */
 export async function recordRateLimit(supabase, retryAfterSeconds = 60) {
-  const lockedUntil = new Date(Date.now() + retryAfterSeconds * 1000).toISOString();
+  const cappedSeconds = Math.min(retryAfterSeconds, 300); // Cap at 5 minutes max
+  const lockedUntil = new Date(Date.now() + cappedSeconds * 1000).toISOString();
   const { error } = await supabase
     .from('spotify_rate_limit')
     .update({
