@@ -1,7 +1,7 @@
 import { Tabs, useRouter, useSegments } from 'expo-router';
 import { Disc3, Rss, Archive, User, Search } from 'lucide-react-native';
 import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-native';
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useMemo, useState, useCallback, memo } from 'react';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import FABActionModal from '@/components/FABActionModal';
@@ -15,8 +15,8 @@ import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 import { stopFeedAudio, refreshFeed } from '@/lib/feedAudioController';
 
-// Animated Vinyl FAB with "trackd" text in center
-const VinylFAB = ({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
+// Animated Vinyl FAB with "trackd" text in center — memoized to prevent animation restarts
+const VinylFAB = memo(({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const spinCircleOpacity = useRef(new Animated.Value(0)).current;
   const spinCircleRotation = useRef(new Animated.Value(0)).current;
@@ -113,7 +113,7 @@ const VinylFAB = ({ onPress, onLongPress }: { onPress: () => void; onLongPress?:
       </Animated.View>
     </Pressable>
   );
-};
+});
 
 export default function TabLayout() {
   const router = useRouter();
@@ -157,12 +157,12 @@ export default function TabLayout() {
     return false;
   }, [segments]);
 
-  const handleFABPress = () => {
+  const handleFABPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setShowActionModal(true);
-  };
+  }, []);
 
-  const handleFABLongPress = () => {
+  const handleFABLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (!isAuthenticated) {
       setAuthGateMessage('Sign up to identify tracks playing nearby.');
@@ -170,7 +170,7 @@ export default function TabLayout() {
       return;
     }
     setShowContinuousIdentifyModal(true);
-  };
+  }, [isAuthenticated]);
 
   const handleAddSet = () => {
     setShowActionModal(false);
@@ -319,7 +319,7 @@ export default function TabLayout() {
         options={{
           title: '',
           tabBarLabel: () => null,
-          tabBarItemStyle: { overflow: 'visible', justifyContent: 'center', alignItems: 'center', minWidth: 70 },
+          tabBarItemStyle: { flex: 1, overflow: 'visible', justifyContent: 'center', alignItems: 'center' },
           tabBarIcon: ({ focused }) => (
             <View style={{ overflow: 'visible', minWidth: 60, alignItems: 'center' }}>
               <Text style={{
@@ -343,6 +343,7 @@ export default function TabLayout() {
         options={{
           title: 'Dig',
           tabBarIcon: ({ color, size }) => <Search size={size} color={color} />,
+          tabBarItemStyle: { flex: 1 },
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(discover)', e),
@@ -352,6 +353,7 @@ export default function TabLayout() {
         name="(submit)"
         options={{
           href: null,
+          tabBarItemStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen
@@ -359,6 +361,7 @@ export default function TabLayout() {
         options={{
           title: 'Crate',
           tabBarIcon: ({ color, size }) => <Archive size={size} color={color} />,
+          tabBarItemStyle: { flex: 1 },
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(social)', e),
@@ -369,6 +372,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ color, size }) => <User size={size} color={color} />,
+          tabBarItemStyle: { flex: 1 },
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(profile)', e),
@@ -378,6 +382,7 @@ export default function TabLayout() {
         name="(library)"
         options={{
           href: null,
+          tabBarItemStyle: { display: 'none' },
         }}
       />
     </Tabs>

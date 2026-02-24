@@ -26,8 +26,7 @@ import {
   Users,
   Clock,
   CheckCircle,
-  Bookmark,
-  BookmarkCheck,
+  Heart,
   AlertCircle,
   ChevronUp,
   ChevronDown,
@@ -55,7 +54,7 @@ import WaveformTimeline from '@/components/WaveformTimeline';
 import SimilarSets from '@/components/SimilarSets';
 import IDThisModal from '@/components/IDThisModal';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
-import { isSetSaved, saveSetToLibrary, removeSetFromLibrary } from '@/utils/storage';
+import { useLikeSet } from '@/hooks/useSocial';
 import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 import { useSets } from '@/contexts/SetsContext';
 import { useUser } from '@/contexts/UserContext';
@@ -353,14 +352,13 @@ export default function SetDetailScreen() {
   const { sets, addSourceToSet, voteOnConflict, getActiveConflicts, addTracksToSet } = useSets();
   const { userId, addPoints } = useUser();
   const { currentTrackId, isPlaying, isLoading: isPreviewLoading, failedTrackId, playPreview, playDeezerPreview, stop: stopAudio } = useAudioPreview();
+  const { isLiked, toggleLike } = useLikeSet(id);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [tracklistCollapsed, setTracklistCollapsed] = useState(false);
   const [showFillGapModal, setShowFillGapModal] = useState(false);
   const [fillGapTimestamp, setFillGapTimestamp] = useState(0);
   const [gapMenuData, setGapMenuData] = useState<{ timestamp: number; duration: number } | null>(null);
-  const [isSaved, setIsSaved] = useState(false);
-  const [loadingSaved, setLoadingSaved] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeResult, setAnalyzeResult] = useState<{ type: 'success' | 'empty' | 'error'; message: string; trackCount?: number } | null>(null);
   const analyzePopupScale = useSharedValue(0);
@@ -1175,42 +1173,11 @@ export default function SetDetailScreen() {
     return { tracklistItems: combined, estimatedMissingTracks: cappedMissing, avgTrackDur: avgTrackDuration };
   }, [sortedTracks, conflicts, isLowQualityTrack]);
 
-  const handleSave = useCallback(async () => {
-    if (!setList) return;
-
+  const handleLike = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    toggleLike();
+  }, [toggleLike]);
 
-    try {
-      if (isSaved) {
-        await removeSetFromLibrary(setList.id);
-        setIsSaved(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        await saveSetToLibrary(setList);
-        setIsSaved(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
-    } catch (error) {
-      if (__DEV__) console.error('Error saving/removing set:', error);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }, [setList, isSaved]);
-
-  useEffect(() => {
-    const checkSavedStatus = async () => {
-      if (id) {
-        try {
-          const saved = await isSetSaved(id);
-          setIsSaved(saved);
-        } catch (error) {
-          if (__DEV__) console.error('Error checking saved status:', error);
-        } finally {
-          setLoadingSaved(false);
-        }
-      }
-    };
-    checkSavedStatus();
-  }, [id]);
 
   const getHeaderCoverImage = useCallback((): string | null => {
     if (!setList) return null;
@@ -1567,12 +1534,12 @@ export default function SetDetailScreen() {
                 <Text style={styles.title}>{setList.name}</Text>
               </View>
               <View style={styles.titleActions}>
-                <Pressable style={styles.saveButton} onPress={handleSave}>
-                  {isSaved ? (
-                    <BookmarkCheck size={24} color="#C41E3A" fill="#C41E3A" />
-                  ) : (
-                    <Bookmark size={24} color="#FFFFFF" />
-                  )}
+                <Pressable style={styles.saveButton} onPress={handleLike}>
+                  <Heart
+                    size={24}
+                    color={isLiked ? '#EF4444' : '#FFFFFF'}
+                    fill={isLiked ? '#EF4444' : 'none'}
+                  />
                 </Pressable>
                 {audioSource && (
                   <Pressable

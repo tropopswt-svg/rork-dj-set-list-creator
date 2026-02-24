@@ -12,6 +12,9 @@ import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
 import { useSets } from '@/contexts/SetsContext';
+import { useAuth } from '@/contexts/AuthContext';
+import * as socialService from '@/lib/supabase/socialService';
+import DoubleTapHeart from '@/components/DoubleTapHeart';
 import { detectEvent, getEventLabel } from '@/components/EventBadge';
 import { normalizeVenueName, normalizeArtistName } from '@/lib/venueNormalization';
 
@@ -111,7 +114,7 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown a
 const HEADER_AREA_ESTIMATE = 196;
 
 // Clear filter FAB with grooves, pulse, and spinning accent circle
-const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
+const ClearFilterFab = ({ onPress, bottom }: { onPress: () => void; bottom?: number }) => {
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const spinCircleOpacity = useRef(new Animated.Value(0)).current;
   const spinCircleRotation = useRef(new Animated.Value(0)).current;
@@ -183,7 +186,7 @@ const ClearFilterFab = ({ onPress }: { onPress: () => void }) => {
   });
 
   return (
-    <Pressable style={styles.clearFilterFab} onPress={onPress}>
+    <Pressable style={[styles.clearFilterFab, bottom != null && { bottom }]} onPress={onPress}>
       {/* Multiple vinyl grooves (static) */}
       <View style={styles.clearFilterGroove1} />
       <View style={styles.clearFilterGroove2} />
@@ -262,6 +265,10 @@ export default function DiscoverScreen() {
   const flatListRef = useRef<FlatList<SetList>>(null);
   const lastCenteredIndex = useRef(-1);
   const lastHapticTime = useRef(0);
+  const { user } = useAuth();
+  const lastTapRef = useRef<Record<string, number>>({});
+  const tapTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
   const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [activeFilter, setActiveFilter] = useState<FilterType>('recent');
   const [refreshing, setRefreshing] = useState(false);
@@ -935,6 +942,31 @@ export default function DiscoverScreen() {
     router.push(`/(tabs)/(discover)/${setId}`);
   }, [router]);
 
+  const handleCardTap = useCallback((setId: string) => {
+    const now = Date.now();
+    const lastTap = lastTapRef.current[setId] || 0;
+
+    if (now - lastTap < 300) {
+      // Double-tap → like
+      clearTimeout(tapTimerRef.current[setId]);
+      delete tapTimerRef.current[setId];
+      lastTapRef.current[setId] = 0;
+
+      if (user) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        setDoubleTapHeartId(setId);
+        socialService.likeSet(user.id, setId);
+      }
+    } else {
+      // First tap — wait for possible second tap
+      lastTapRef.current[setId] = now;
+      tapTimerRef.current[setId] = setTimeout(() => {
+        delete tapTimerRef.current[setId];
+        handleSetPress(setId);
+      }, 300);
+    }
+  }, [user, handleSetPress]);
+
   const handleArtistNavPress = useCallback((artist: string) => {
     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
     router.push(`/(tabs)/(discover)/artist/${slug}`);
@@ -947,17 +979,23 @@ export default function DiscoverScreen() {
   }), []);
 
   const renderSetCard = useCallback(({ item, index }: { item: SetList; index: number }) => (
-    <AnimatedSetCard
-      setList={item}
-      index={index}
-      scrollY={scrollY}
-      centerOffset={0}
-      onPress={() => handleSetPress(item.id)}
-      onLongPress={() => handleSetLongPress(item)}
-      onArtistPress={handleArtistNavPress}
-      onEventPress={handleEventFilter}
-    />
-  ), [scrollY, handleSetPress, handleSetLongPress, handleArtistNavPress, handleEventFilter]);
+    <View style={{ position: 'relative' }}>
+      <AnimatedSetCard
+        setList={item}
+        index={index}
+        scrollY={scrollY}
+        centerOffset={0}
+        onPress={() => handleCardTap(item.id)}
+        onLongPress={() => handleSetLongPress(item)}
+        onArtistPress={handleArtistNavPress}
+        onEventPress={handleEventFilter}
+      />
+      <DoubleTapHeart
+        visible={doubleTapHeartId === item.id}
+        onComplete={() => setDoubleTapHeartId(null)}
+      />
+    </View>
+  ), [scrollY, handleCardTap, handleSetLongPress, handleArtistNavPress, handleEventFilter, doubleTapHeartId]);
 
   const keyExtractor = useCallback((item: SetList) => item.id, []);
 
@@ -1415,7 +1453,7 @@ export default function DiscoverScreen() {
 
         {/* Floating Clear Filter Button with spinning ring - shows when filter is open OR has active filters */}
         {(hasActiveFilters || showFilterDropdown) && (
-          <ClearFilterFab onPress={handleClearAllFilters} />
+          <ClearFilterFab onPress={handleClearAllFilters} bottom={totalTabBarHeight + 16} />
         )}
 
         {/* Quick Action Menu Modal */}

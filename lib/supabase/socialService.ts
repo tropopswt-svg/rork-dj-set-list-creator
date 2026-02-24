@@ -336,17 +336,33 @@ export async function hasLikedSet(userId: string, setId: string) {
 
 // Get user's liked sets
 export async function getLikedSets(userId: string, limit = 50) {
-  const { data, error } = await supabase
+  // Step 1: Get liked rows
+  const { data: likes, error: likesError } = await supabase
     .from('likes')
-    .select(`
-      *,
-      set:sets(*)
-    `)
+    .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  return { data, error };
+  if (likesError || !likes || likes.length === 0) {
+    return { data: likes || [], error: likesError };
+  }
+
+  // Step 2: Fetch full set data for the liked set IDs
+  const setIds = likes.map(l => l.set_id).filter(Boolean);
+  const { data: sets } = await supabase
+    .from('sets')
+    .select('*')
+    .in('id', setIds);
+
+  // Step 3: Combine — attach set data to each like row
+  const setsMap = new Map((sets || []).map(s => [s.id, s]));
+  const enriched = likes.map(l => ({
+    ...l,
+    set: setsMap.get(l.set_id) || null,
+  }));
+
+  return { data: enriched, error: null };
 }
 
 // Get set's like count

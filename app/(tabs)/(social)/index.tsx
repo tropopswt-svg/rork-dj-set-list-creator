@@ -20,19 +20,18 @@ import Svg, { Polyline, Line, Rect, Defs, LinearGradient as SvgGradient, Stop, C
 import {
   Heart,
   Music,
-  Bookmark,
   ChevronRight,
   Disc,
   User,
   Flame,
 } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCoverImageUrl } from '@/utils/coverImage';
-import { useSavedSets, useLikedSets, useContributions } from '@/hooks/useSocial';
+import { useLikedSets, useContributions } from '@/hooks/useSocial';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -1099,32 +1098,37 @@ const USE_MOCK_DATA = false;
 export default function MyStuffScreen() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuth();
-  const { savedSets: realSavedSets, isLoading: savedLoading, refresh: refreshSaved } = useSavedSets();
-  const { likedSets: realLikedSets, isLoading: likedLoading, refresh: refreshLiked } = useLikedSets();
+  const { likedSets, isLoading: likedLoading, refresh: refreshLiked } = useLikedSets();
   const {
     identifiedTracks: realIdentifiedTracks,
     isLoading: contributionsLoading,
     refresh: refreshContributions,
   } = useContributions();
 
-  const savedSets = realSavedSets;
-  const likedSets = realLikedSets;
   const identifiedTracks = realIdentifiedTracks;
+
+  // Re-fetch liked sets every time the Crate tab gains focus
+  // so likes from Feed/Discover/Detail are immediately visible
+  useFocusEffect(
+    useCallback(() => {
+      refreshLiked();
+    }, [refreshLiked])
+  );
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
-    await Promise.all([refreshSaved(), refreshLiked(), refreshContributions()]);
+    await Promise.all([refreshLiked(), refreshContributions()]);
     setIsRefreshing(false);
-  }, [refreshSaved, refreshLiked, refreshContributions]);
+  }, [refreshLiked, refreshContributions]);
 
   const navigateToSet = (setId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push(`/(tabs)/(discover)/${setId}`);
   };
 
-  const isLoading = savedLoading || likedLoading || contributionsLoading;
+  const isLoading = likedLoading || contributionsLoading;
 
   return (
     <View style={styles.container}>
@@ -1166,9 +1170,9 @@ export default function MyStuffScreen() {
           )}
 
           {/* ─── Vinyl Crate Stack ─── */}
-          {savedSets.length > 0 && (
+          {likedSets.length > 0 && (
             <View style={styles.section}>
-              <CrateStack sets={savedSets} onPress={navigateToSet} />
+              <CrateStack sets={likedSets} onPress={navigateToSet} />
             </View>
           )}
 
@@ -1228,59 +1232,6 @@ export default function MyStuffScreen() {
             )}
           </View>
 
-          {/* ─── Liked Sets ─── */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleRow}>
-                <Heart size={16} color={Colors.dark.error} />
-                <Text style={styles.sectionTitle}>Liked Sets</Text>
-              </View>
-              {likedSets.length > 0 && (
-                <View style={styles.sectionCountPill}>
-                  <Text style={styles.sectionCountText}>
-                    {likedSets.length}
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {likedLoading ? (
-              <ActivityIndicator
-                color={Colors.dark.primary}
-                style={styles.sectionLoader}
-              />
-            ) : likedSets.length === 0 ? (
-              <View style={styles.emptySection}>
-                <Heart size={28} color="rgba(0,0,0,0.35)" />
-                <Text style={styles.emptyTitle}>No liked sets</Text>
-                <Text style={styles.emptyText}>
-                  Like sets to show your appreciation
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.savedSetsList}>
-                {likedSets.slice(0, 3).map((likedSet) => (
-                  <SavedSetCard
-                    key={likedSet.id}
-                    savedSet={likedSet}
-                    onPress={() => {
-                      if (likedSet.set?.id) {
-                        navigateToSet(likedSet.set.id);
-                      }
-                    }}
-                  />
-                ))}
-                {likedSets.length > 3 && (
-                  <Pressable style={styles.seeAllButton}>
-                    <Text style={styles.seeAllButtonText}>
-                      See All Liked Sets
-                    </Text>
-                    <ChevronRight size={16} color={Colors.dark.primary} />
-                  </Pressable>
-                )}
-              </View>
-            )}
-          </View>
         </ScrollView>
       </SafeAreaView>
     </View>

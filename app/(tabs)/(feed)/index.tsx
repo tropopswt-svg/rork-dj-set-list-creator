@@ -17,6 +17,7 @@ import { useFollowing, useLikeSet, useComments } from '@/hooks/useSocial';
 import { getArtistSets } from '@/lib/supabase/artistService';
 import ArtistAvatar from '@/components/ArtistAvatar';
 import { registerFeedAudioStop, unregisterFeedAudioStop, registerFeedRefresh, unregisterFeedRefresh } from '@/lib/feedAudioController';
+import DoubleTapHeart from '@/components/DoubleTapHeart';
 import type { CommentWithUser } from '@/hooks/useSocial';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -974,6 +975,9 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const heartScale = useRef(new Animated.Value(1)).current;
+  const lastTapTime = useRef(0);
+  const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showDoubleTapHeart, setShowDoubleTapHeart] = useState(false);
 
   // Fetch tracks for floating track cards
   const [floatingTracks, setFloatingTracks] = useState<{ title: string; artist: string; coverUrl?: string; isId?: boolean }[]>([]);
@@ -1065,7 +1069,33 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
       {/* Outer glow ring for 3D lift */}
       <View style={styles.feedCardGlow} />
 
-      <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} style={{ flex: 1 }}>
+      <Pressable
+        onPress={() => {
+          const now = Date.now();
+          if (now - lastTapTime.current < 300) {
+            // Double-tap → like
+            if (tapTimer.current) {
+              clearTimeout(tapTimer.current);
+              tapTimer.current = null;
+            }
+            lastTapTime.current = 0;
+            if (!isLiked) {
+              handleLike();
+            }
+            setShowDoubleTapHeart(true);
+          } else {
+            // First tap — wait for possible second tap
+            lastTapTime.current = now;
+            tapTimer.current = setTimeout(() => {
+              tapTimer.current = null;
+              onPress();
+            }, 300);
+          }
+        }}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={{ flex: 1 }}
+      >
         <View style={[styles.feedHero, { height: cardHeight }]}>
           {/* Cover fallback: cover → artist image → dark gradient */}
           {(item.set.image || item.artist.image) ? (() => {
@@ -1196,6 +1226,10 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
           </View>
         </View>
       </Pressable>
+      <DoubleTapHeart
+        visible={showDoubleTapHeart}
+        onComplete={() => setShowDoubleTapHeart(false)}
+      />
     </Animated.View>
   );
 }
