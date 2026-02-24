@@ -319,17 +319,19 @@ export default function TabLayout() {
         options={{
           title: '',
           tabBarLabel: () => null,
-          tabBarItemStyle: { overflow: 'visible', justifyContent: 'center', alignItems: 'center' },
+          tabBarItemStyle: { overflow: 'visible', justifyContent: 'center', alignItems: 'center', minWidth: 70 },
           tabBarIcon: ({ focused }) => (
-            <Text style={{
-              color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
-              fontSize: 15,
-              fontWeight: '900',
-              letterSpacing: -0.3,
-              marginTop: 10,
-            }}>
-              trakd
-            </Text>
+            <View style={{ overflow: 'visible', minWidth: 60, alignItems: 'center' }}>
+              <Text style={{
+                color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
+                fontSize: 15,
+                fontWeight: '900',
+                letterSpacing: -0.3,
+                marginTop: 10,
+              }}>
+                trakd
+              </Text>
+            </View>
           ),
         }}
         listeners={{

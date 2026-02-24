@@ -1094,7 +1094,7 @@ const MOCK_IDENTIFIED_TRACKS = [
   { id: 'mt-12', track_title: 'Opus', track_artist: 'Eric Prydz', timestamp_seconds: 3600, created_at: new Date(Date.now() - 150 * 3600000).toISOString(), set: { id: 'mock-set-2', name: 'Tomorrowland Mainstage' } },
 ];
 
-const USE_MOCK_DATA = true; // Flip to false to use real data
+const USE_MOCK_DATA = false;
 
 export default function MyStuffScreen() {
   const router = useRouter();
@@ -1107,10 +1107,9 @@ export default function MyStuffScreen() {
     refresh: refreshContributions,
   } = useContributions();
 
-  // Use mock data if real data is empty
-  const savedSets = USE_MOCK_DATA && realSavedSets.length === 0 ? MOCK_SAVED_SETS : realSavedSets;
-  const likedSets = USE_MOCK_DATA && realLikedSets.length === 0 ? MOCK_LIKED_SETS : realLikedSets;
-  const identifiedTracks = USE_MOCK_DATA && realIdentifiedTracks.length === 0 ? MOCK_IDENTIFIED_TRACKS : realIdentifiedTracks;
+  const savedSets = realSavedSets;
+  const likedSets = realLikedSets;
+  const identifiedTracks = realIdentifiedTracks;
 
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -1126,43 +1125,6 @@ export default function MyStuffScreen() {
   };
 
   const isLoading = savedLoading || likedLoading || contributionsLoading;
-
-  // Not logged in view
-  if (false && !isAuthenticated) {
-    return (
-      <View style={styles.container}>
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-          <View style={styles.header}>
-            <View style={styles.headerSpacer} />
-            <BubbleGlassLogo size="medium" />
-            <View style={styles.headerSpacer} />
-          </View>
-          <View style={styles.loginPromptContainer}>
-            <View style={styles.loginLogoWrapper}>
-              <BubbleGlassLogo size="xlarge" />
-            </View>
-            <Text style={styles.loginPromptTitle}>Your personal crate</Text>
-            <Text style={styles.loginPromptText}>
-              Log in to save sets, track your identified songs, and build your
-              crate
-            </Text>
-            <Pressable
-              style={styles.loginButton}
-              onPress={() => router.push('/(auth)/login')}
-            >
-              <Text style={styles.loginButtonText}>Log In</Text>
-            </Pressable>
-            <Pressable
-              style={styles.signupButton}
-              onPress={() => router.push('/(auth)/signup')}
-            >
-              <Text style={styles.signupButtonText}>Create Account</Text>
-            </Pressable>
-          </View>
-        </SafeAreaView>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>

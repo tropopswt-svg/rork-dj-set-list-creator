@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Alert, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase/client';
@@ -106,38 +106,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Refresh profile data
+  // Refresh profile data (explicit refresh — allowed even if already fetched)
   const refreshProfile = useCallback(async () => {
     if (user) {
+      fetchedProfileForRef.current = user.id; // Mark as fetched to prevent duplicate
       const profileData = await fetchProfile(user.id);
       setProfile(profileData);
     }
   }, [user, fetchProfile]);
 
+  // Guard against duplicate profile fetches for the same user
+  const fetchedProfileForRef = useRef<string | null>(null);
+
   // Initialize auth state
   useEffect(() => {
-    // Get initial session
+    // Get initial session — only sets auth state, profile fetch handled by onAuthStateChange
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
-
-      // Fetch profile in background (don't block)
-      if (session?.user) {
-        fetchProfile(session.user.id, session.user).then(setProfile);
-      }
     });
 
-    // Listen for auth changes
+    // Single listener handles all auth changes (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (__DEV__) console.log('[Auth] Auth state changed:', event);
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        // Fetch profile in background (don't block login)
-        fetchProfile(session.user.id, session.user).then(setProfile);
+        // Only fetch profile once per user — skip if already fetched for this user ID
+        if (fetchedProfileForRef.current !== session.user.id) {
+          fetchedProfileForRef.current = session.user.id;
+          fetchProfile(session.user.id, session.user).then(setProfile);
+        }
       } else {
+        fetchedProfileForRef.current = null;
         setProfile(null);
       }
     });
@@ -232,16 +235,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Sign out
+  // Sign out — clear all local data so next login starts fresh
   const signOut = async () => {
     try {
+      fetchedProfileForRef.current = null;
       await supabase.auth.signOut();
       setUser(null);
       setSession(null);
       setProfile(null);
 
-      // Clear any cached data
-      await AsyncStorage.removeItem('supabase.auth.token');
+      // Clear auth token + all local caches so the next user starts clean
+      await AsyncStorage.multiRemove([
+        'supabase.auth.token',
+        'saved_sets',
+        'custom_artists',
+        'submitted_sets',
+        'track_repository',
+        'track_conflicts',
+        'track_library_v2',
+        'track_index_v2',
+        'user_points',
+      ]);
     } catch (error) {
       if (__DEV__) console.error('[Auth] Sign out error:', error);
     }
