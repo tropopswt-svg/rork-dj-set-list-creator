@@ -40,6 +40,7 @@ interface IdentifiedTrack {
   coverUrl?: string;
   spotifyTrackId?: string;
   isUnreleased?: boolean;
+  acrId?: string;
   links: {
     spotify?: string;
     youtube?: string;
@@ -59,6 +60,7 @@ interface IdentifyTrackModalProps {
   onIdentified: (track: IdentifiedTrack, timestamp: number) => void;
   timestamp?: number;
   setTitle?: string;
+  setId?: string; // Pre-fill set context so identifications are automatically linked
   audioUrl?: string;
 }
 
@@ -68,6 +70,7 @@ export default function IdentifyTrackModal({
   onIdentified,
   timestamp: initialTimestamp = 0,
   setTitle,
+  setId,
   audioUrl,
 }: IdentifyTrackModalProps) {
   const [hours, setHours] = useState('');
@@ -82,6 +85,12 @@ export default function IdentifyTrackModal({
   const [loadingSets, setLoadingSets] = useState(false);
   const [savedToSpotify, setSavedToSpotify] = useState(false);
   const [savingToSpotify, setSavingToSpotify] = useState(false);
+  // Set picker state (shown when unreleased track found and no setId prop)
+  const [setSearchQuery, setSetSearchQuery] = useState('');
+  const [setSearchResults, setSetSearchResults] = useState<PlayedInSet[]>([]);
+  const [selectedSet, setSelectedSet] = useState<PlayedInSet | null>(null);
+  const [savingIdentification, setSavingIdentification] = useState(false);
+  const [identificationSaved, setIdentificationSaved] = useState(false);
 
   const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -93,13 +102,17 @@ export default function IdentifyTrackModal({
       const hrs = Math.floor(totalSeconds / 3600);
       const mins = Math.floor((totalSeconds % 3600) / 60);
       const secs = totalSeconds % 60;
-      
+
       setHours(hrs > 0 ? hrs.toString() : '');
       setMinutes(mins.toString());
       setSeconds(secs.toString().padStart(2, '0'));
       setIdentifiedTrack(null);
       setError(null);
       setNoMatch(false);
+      setSetSearchQuery('');
+      setSetSearchResults([]);
+      setSelectedSet(null);
+      setIdentificationSaved(false);
     }
   }, [visible, initialTimestamp]);
 
@@ -135,6 +148,79 @@ export default function IdentifyTrackModal({
   const isUnreleased = identifiedTrack
     ? (identifiedTrack.isUnreleased || (!identifiedTrack.links.spotify && !identifiedTrack.links.youtube))
     : false;
+
+  // Search sets for the inline set picker
+  const searchSets = async (query: string) => {
+    if (!query.trim()) {
+      setSetSearchResults([]);
+      return;
+    }
+    try {
+      const { data } = await supabase
+        .from('sets')
+        .select('id, title, dj_name')
+        .or(`title.ilike.%${query}%,dj_name.ilike.%${query}%`)
+        .limit(5);
+      setSetSearchResults(
+        (data || []).map((s: any) => ({ id: s.id, name: s.title, artist: s.dj_name }))
+      );
+    } catch {
+      // non-critical
+    }
+  };
+
+  // Save identification to DB when user picks a set from the picker
+  const saveIdentificationWithSet = async (pickedSetId: string) => {
+    if (!identifiedTrack) return;
+    setSavingIdentification(true);
+    try {
+      // Find the unreleased track record by acrId first, then by title+artist
+      let trackRecord = null;
+      if (identifiedTrack.acrId) {
+        const { data } = await supabase
+          .from('unreleased_tracks')
+          .select('id, times_identified')
+          .eq('acrcloud_acr_id', identifiedTrack.acrId)
+          .maybeSingle();
+        trackRecord = data;
+      }
+      if (!trackRecord) {
+        const { data } = await supabase
+          .from('unreleased_tracks')
+          .select('id, times_identified')
+          .ilike('title', `%${identifiedTrack.title}%`)
+          .ilike('artist', `%${identifiedTrack.artist}%`)
+          .limit(1)
+          .maybeSingle();
+        trackRecord = data;
+      }
+
+      if (trackRecord) {
+        await supabase.from('unreleased_identifications').insert({
+          unreleased_track_id: trackRecord.id,
+          identified_in_set_id: pickedSetId,
+          confidence: (identifiedTrack.confidence || 0) / 100,
+        });
+
+        await supabase
+          .from('unreleased_tracks')
+          .update({
+            times_identified: (trackRecord.times_identified || 0) + 1,
+            last_identified_at: new Date().toISOString(),
+          })
+          .eq('id', trackRecord.id);
+      }
+
+      const pickedSet = setSearchResults.find(s => s.id === pickedSetId) || null;
+      setSelectedSet(pickedSet);
+      setIdentificationSaved(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (e) {
+      // non-critical
+    } finally {
+      setSavingIdentification(false);
+    }
+  };
 
   const fetchPlayedInSets = async (title: string, artist: string) => {
     setLoadingSets(true);
@@ -278,6 +364,7 @@ export default function IdentifyTrackModal({
         audioUrl,
         startSeconds,
         durationSeconds: 15,
+        setId: setId || undefined, // Pass set context to backend for auto-saving
       });
 
       if (result.success && result.result) {
@@ -529,6 +616,56 @@ export default function IdentifyTrackModal({
                       <ExternalLink size={14} color={Colors.dark.textMuted} />
                     </Pressable>
                   ))}
+                </View>
+              )}
+
+              {/* Set picker: shown when unreleased track identified and no set context pre-filled */}
+              {isUnreleased && !setId && (
+                <View style={styles.setPickerSection}>
+                  {identificationSaved ? (
+                    <View style={styles.setPickerSaved}>
+                      <CheckCircle size={14} color={Colors.dark.success} />
+                      <Text style={styles.setPickerSavedText}>
+                        Linked to {selectedSet?.name || 'set'}
+                      </Text>
+                    </View>
+                  ) : (
+                    <>
+                      <Text style={styles.setPickerLabel}>Which set is this from?</Text>
+                      <TextInput
+                        style={styles.setPickerInput}
+                        value={setSearchQuery}
+                        onChangeText={(q) => {
+                          setSetSearchQuery(q);
+                          searchSets(q);
+                        }}
+                        placeholder="Search sets by name or DJ..."
+                        placeholderTextColor={Colors.dark.textMuted}
+                      />
+                      {setSearchResults.length > 0 && (
+                        <View style={styles.setPickerResults}>
+                          {setSearchResults.map(set => (
+                            <Pressable
+                              key={set.id}
+                              style={[styles.setPickerItem, savingIdentification && { opacity: 0.5 }]}
+                              onPress={() => saveIdentificationWithSet(set.id)}
+                              disabled={savingIdentification}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.setPickerItemName} numberOfLines={1}>{set.name}</Text>
+                                <Text style={styles.setPickerItemArtist} numberOfLines={1}>{set.artist}</Text>
+                              </View>
+                              {savingIdentification ? (
+                                <ActivityIndicator size="small" color={Colors.dark.primary} />
+                              ) : (
+                                <CheckCircle size={14} color={Colors.dark.primary} />
+                              )}
+                            </Pressable>
+                          ))}
+                        </View>
+                      )}
+                    </>
+                  )}
                 </View>
               )}
 
@@ -977,5 +1114,61 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.dark.background,
+  },
+  setPickerSection: {
+    width: '100%',
+    marginBottom: 12,
+  },
+  setPickerLabel: {
+    fontSize: 12,
+    fontWeight: '600' as const,
+    color: Colors.dark.textSecondary,
+    marginBottom: 8,
+  },
+  setPickerInput: {
+    backgroundColor: Colors.dark.background,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: Colors.dark.text,
+    marginBottom: 4,
+  },
+  setPickerResults: {
+    backgroundColor: Colors.dark.background,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  setPickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.surface,
+    gap: 8,
+  },
+  setPickerItemName: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.text,
+  },
+  setPickerItemArtist: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+  },
+  setPickerSaved: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  setPickerSavedText: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.success,
   },
 });

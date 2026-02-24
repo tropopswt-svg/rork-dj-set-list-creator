@@ -6,6 +6,14 @@ import { spawnSync } from "child_process";
 import { createTRPCRouter, publicProcedure } from "../create-context";
 import { tmpdir } from "os";
 import { logACRCloudCall, logSoundCloudCall, logYouTubeCall } from "../../lib/apiLogger";
+import { createClient } from "@supabase/supabase-js";
+
+function getSupabaseClient() {
+  const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) return null;
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 const ScrapedTrack = z.object({
   title: z.string(),
@@ -1419,6 +1427,8 @@ async function identifyTrackFromUrlInternal(
     duration?: number;
     coverUrl?: string;
     spotifyTrackId?: string;
+    isUnreleased?: boolean;
+    acrId?: string;
     links: { spotify?: string; youtube?: string; isrc?: string };
   } | null;
 }> {
@@ -1509,7 +1519,13 @@ async function identifyTrackFromUrlInternal(
     formData.append("signature", signature);
     formData.append("data_type", dataType);
     formData.append("signature_version", signatureVersion);
-    
+
+    // Include custom bucket if configured (to detect unreleased tracks)
+    const bucketName = (process.env.ACRCLOUD_BUCKET_NAME || '').replace(/\\n|\n/g, '').trim();
+    if (bucketName) {
+      formData.append("bucket_name", bucketName);
+    }
+
     // Add timestamp parameters if provided (may be optional for audio_url)
     if (startSeconds > 0) {
       formData.append("start_time_seconds", startSeconds.toString());
@@ -1580,6 +1596,27 @@ async function identifyTrackFromUrlInternal(
       console.log(`[ACRCloud] 💡 ACRCloud may not have been able to access or process the audio stream`);
     }
 
+    // Check custom bucket first (unreleased tracks)
+    if (result.status?.code === 0 && result.metadata?.custom_files?.length > 0) {
+      const customFile = result.metadata.custom_files[0];
+      const customArtist = customFile.artists?.map((a: { name: string }) => a.name).join(', ') || customFile.artist || 'Unknown Artist';
+      const customTitle = customFile.title || 'Unknown Track';
+      console.log(`[ACRCloud] ✅ Unreleased track found in custom bucket: ${customArtist} - ${customTitle}`);
+      console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (UNRELEASED MATCH) =====`);
+      return {
+        success: true,
+        error: null,
+        result: {
+          title: customTitle,
+          artist: customArtist,
+          confidence: customFile.score ?? 0,
+          isUnreleased: true,
+          acrId: customFile.acrid,
+          links: {},
+        },
+      };
+    }
+
     if (result.status?.code === 0 && result.metadata?.music?.length > 0) {
       const music = result.metadata.music[0];
       const artists = music.artists?.map((a: { name: string }) => a.name).join(", ") || "Unknown Artist";
@@ -1587,7 +1624,7 @@ async function identifyTrackFromUrlInternal(
       const externalMetadata = music.external_metadata || {};
       const spotifyId = externalMetadata.spotify?.track?.id;
       const youtubeId = externalMetadata.youtube?.vid;
-      
+
       console.log(`[ACRCloud] ✅ Match found: ${artists} - ${title}`);
       
       // Validate links by checking if they exist via API
@@ -2157,10 +2194,11 @@ export const scraperRouter = createTRPCRouter({
     }),
 
   identifyTrackFromUrl: publicProcedure
-    .input(z.object({ 
+    .input(z.object({
       audioUrl: z.string().url(),
       startSeconds: z.number().optional(),
       durationSeconds: z.number().optional(),
+      setId: z.string().optional(), // Set the user is listening to (for tracking unreleased identifications)
     }))
     .mutation(async ({ input }) => {
       console.log(`[ACRCloud] ===== PROCEDURE CALLED =====`);
@@ -2170,14 +2208,51 @@ export const scraperRouter = createTRPCRouter({
       console.log(`[ACRCloud] durationSeconds type: ${typeof input.durationSeconds}, value: ${input.durationSeconds}`);
       console.log(`[ACRCloud] Identifying track from URL: ${input.audioUrl}`);
       console.log(`[ACRCloud] Start: ${input.startSeconds ?? 0}s, Duration: ${input.durationSeconds ?? 15}s`);
-      
+
       // Use the internal helper which handles SoundCloud/YouTube URL resolution
       const result = await identifyTrackFromUrlInternal(
         input.audioUrl,
         input.startSeconds ?? 0,
         input.durationSeconds ?? 15
       );
-      
+
+      // If an unreleased track was identified and we know which set the user is listening to,
+      // record this identification in the database
+      if (result.success && result.result?.isUnreleased && result.result?.acrId && input.setId) {
+        const supabase = getSupabaseClient();
+        if (supabase) {
+          try {
+            const { data: unreleasedTrack } = await supabase
+              .from('unreleased_tracks')
+              .select('id, times_identified')
+              .eq('acrcloud_acr_id', result.result.acrId)
+              .single();
+
+            if (unreleasedTrack) {
+              // Record the identification with the set it was found in
+              await supabase.from('unreleased_identifications').insert({
+                unreleased_track_id: unreleasedTrack.id,
+                identified_in_set_id: input.setId,
+                confidence: (result.result.confidence || 0) / 100,
+              });
+
+              // Increment the times_identified counter
+              await supabase
+                .from('unreleased_tracks')
+                .update({
+                  times_identified: (unreleasedTrack.times_identified || 0) + 1,
+                  last_identified_at: new Date().toISOString(),
+                })
+                .eq('id', unreleasedTrack.id);
+
+              console.log(`[ACRCloud] Saved unreleased identification: track=${unreleasedTrack.id} set=${input.setId}`);
+            }
+          } catch (dbErr) {
+            console.error('[ACRCloud] Failed to save unreleased identification:', dbErr);
+          }
+        }
+      }
+
       console.log(`[ACRCloud] ===== PROCEDURE RETURNING =====`);
       console.log(`[ACRCloud] Result:`, JSON.stringify(result, null, 2));
       return result;

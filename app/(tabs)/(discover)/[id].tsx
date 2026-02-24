@@ -32,6 +32,7 @@ import {
   ChevronUp,
   ChevronDown,
   HelpCircle,
+  Radio,
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
@@ -47,6 +48,7 @@ import PointsBadge from '@/components/PointsBadge';
 import YouTubePlayer, { extractYouTubeId } from '@/components/YouTubePlayer';
 import TrackDetailModal from '@/components/TrackDetailModal';
 import AudioPreviewModal from '@/components/AudioPreviewModal';
+import IdentifyTrackModal from '@/components/IdentifyTrackModal';
 
 import CommentsSection from '@/components/CommentsSection';
 import WaveformTimeline from '@/components/WaveformTimeline';
@@ -384,6 +386,9 @@ export default function SetDetailScreen() {
 
   // Audio Preview Modal state (for identifying unknown tracks)
   const [audioPreviewTrack, setAudioPreviewTrack] = useState<Track | null>(null);
+
+  // ACRCloud Identify Track Modal
+  const [showIdentifyModal, setShowIdentifyModal] = useState(false);
 
 
   // ID This Modal state
@@ -1569,6 +1574,17 @@ export default function SetDetailScreen() {
                     <Bookmark size={24} color="#FFFFFF" />
                   )}
                 </Pressable>
+                {audioSource && (
+                  <Pressable
+                    style={styles.saveButton}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setShowIdentifyModal(true);
+                    }}
+                  >
+                    <Radio size={22} color="#FFFFFF" />
+                  </Pressable>
+                )}
                 {(() => {
                   const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
                   const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
@@ -2832,6 +2848,18 @@ export default function SetDetailScreen() {
         }}
         track={idThisTrack}
         setId={id || ''}
+      />
+
+      <IdentifyTrackModal
+        visible={showIdentifyModal}
+        onClose={() => setShowIdentifyModal(false)}
+        onIdentified={(track, timestamp) => {
+          // Optionally auto-add to tracklist
+          setShowIdentifyModal(false);
+        }}
+        setTitle={setList?.name}
+        setId={id || undefined}
+        audioUrl={audioSource?.url}
       />
     </View>
   );
