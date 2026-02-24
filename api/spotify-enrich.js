@@ -6,7 +6,7 @@ import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistO
 import { rateLimit } from './_lib/rate-limit.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
 import { fetchSoundCloudClientId, searchTrackOnSoundCloud, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
-import { searchDeezerPreview } from './_lib/deezer-core.js';
+import { searchDeezerTrack } from './_lib/deezer-core.js';
 
 const DELAY_MS = 1200; // 1.2s between Spotify API calls
 let soundcloudClientId = null;
@@ -168,13 +168,19 @@ export default async function handler(req, res) {
         await writeCache(supabase, track.artist_name, track.track_title, !!spotifyData, spotifyData);
 
         if (spotifyData) {
-          // If Spotify found the track but has no preview, try Deezer
+          // If Spotify found the track but has no preview, supplement with Deezer
           if (!spotifyData.preview_url) {
             try {
-              await new Promise(r => setTimeout(r, DELAY_MS));
-              const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+              const deezer = await searchDeezerTrack(track.artist_name, track.track_title);
               if (deezer?.previewUrl) {
                 spotifyData.deezer_preview_url = deezer.previewUrl;
+              }
+              if (deezer?.deezerId) {
+                spotifyData.deezer_id = deezer.deezerId;
+                spotifyData.deezer_url = deezer.deezerUrl;
+              }
+              if (!spotifyData.album_art_url && deezer?.albumArtUrl) {
+                spotifyData.album_art_url = deezer.albumArtUrl;
               }
             } catch {}
           }
@@ -192,77 +198,105 @@ export default async function handler(req, res) {
             source: 'api',
           });
         } else {
-          // Spotify miss — try SoundCloud as fallback for artwork
-          let scArtwork = null;
+          // Spotify miss — try Deezer as full validation source first
+          let deezerMatch = null;
           try {
-            if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
-            if (soundcloudClientId) {
-              scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
-            }
-          } catch (e) {
-            // SoundCloud fallback is best-effort
-          }
-
-          // Try Deezer for preview URL regardless
-          let deezerPreviewUrl = null;
-          try {
-            await new Promise(r => setTimeout(r, DELAY_MS));
-            const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
-            if (deezer?.previewUrl) {
-              deezerPreviewUrl = deezer.previewUrl;
-            }
+            deezerMatch = await searchDeezerTrack(track.artist_name, track.track_title);
           } catch {}
 
-          if (scArtwork?.artwork_url) {
-            // Store SoundCloud artwork in spotify_data format so coverUrl picks it up
-            const scData = {
-              album_art_url: scArtwork.artwork_url,
-              title: scArtwork.title || track.track_title,
-              artist: scArtwork.artist || track.artist_name,
-              source: 'soundcloud',
-              permalink_url: scArtwork.permalink_url,
-              deezer_preview_url: deezerPreviewUrl || undefined,
-            };
-            await supabase
-              .from('set_tracks')
-              .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
-              .eq('id', track.id);
-            enriched++;
-            results.push({
-              track: `${track.artist_name} - ${track.track_title}`,
-              spotify: `${scArtwork.artist} - ${scArtwork.title}`,
-              albumArt: true,
-              source: 'soundcloud_fallback',
-            });
-          } else if (deezerPreviewUrl) {
-            // No Spotify or SoundCloud match, but Deezer has a preview
+          if (deezerMatch && (deezerMatch.confidence === 'exact' || deezerMatch.confidence === 'strong')) {
+            // Deezer confirms this track is released — store full Deezer metadata
             const deezerData = {
-              title: track.track_title,
-              artist: track.artist_name,
+              title: deezerMatch.title,
+              artist: deezerMatch.artist,
+              album: deezerMatch.album,
+              album_art_url: deezerMatch.albumArtUrl,
+              album_art_small: deezerMatch.albumArtSmall,
+              preview_url: deezerMatch.previewUrl,
+              deezer_preview_url: deezerMatch.previewUrl,
+              deezer_id: deezerMatch.deezerId,
+              deezer_url: deezerMatch.deezerUrl,
+              isrc: deezerMatch.isrc,
+              release_date: deezerMatch.releaseDate,
+              duration_ms: deezerMatch.duration ? deezerMatch.duration * 1000 : null,
               source: 'deezer',
-              deezer_preview_url: deezerPreviewUrl,
+              deezer_confidence: deezerMatch.confidence,
             };
             await supabase
               .from('set_tracks')
-              .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .update({ spotify_data: deezerData, is_unreleased: false })
               .eq('id', track.id);
             enriched++;
             results.push({
               track: `${track.artist_name} - ${track.track_title}`,
-              spotify: `Deezer preview found`,
-              albumArt: false,
-              source: 'deezer_fallback',
+              matched: `${deezerMatch.artist} - ${deezerMatch.title}`,
+              albumArt: !!deezerMatch.albumArtUrl,
+              source: 'deezer',
+              confidence: deezerMatch.confidence,
             });
           } else {
-            // Not found on Spotify, SoundCloud, or Deezer — mark as unreleased
-            await supabase
-              .from('set_tracks')
-              .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
-              .eq('id', track.id);
-            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
-            notFound++;
-          }
-        }
+            // Neither Spotify nor Deezer — try SoundCloud for artwork only
+            let scArtwork = null;
+            try {
+              if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
+              if (soundcloudClientId) {
+                scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
+              }
+            } catch (e) {
+              // SoundCloud fallback is best-effort
+            }
+
+            if (scArtwork?.artwork_url) {
+              const scData = {
+                album_art_url: scArtwork.artwork_url,
+                title: scArtwork.title || track.track_title,
+                artist: scArtwork.artist || track.artist_name,
+                source: 'soundcloud',
+                permalink_url: scArtwork.permalink_url,
+                deezer_preview_url: deezerMatch?.previewUrl || undefined,
+              };
+              await supabase
+                .from('set_tracks')
+                .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .eq('id', track.id);
+              enriched++;
+              results.push({
+                track: `${track.artist_name} - ${track.track_title}`,
+                matched: `${scArtwork.artist} - ${scArtwork.title}`,
+                albumArt: true,
+                source: 'soundcloud_fallback',
+              });
+            } else if (deezerMatch?.previewUrl) {
+              // Deezer found something but wasn't a confident match — store preview only
+              const deezerData = {
+                title: track.track_title,
+                artist: track.artist_name,
+                source: 'deezer_partial',
+                deezer_preview_url: deezerMatch.previewUrl,
+                deezer_id: deezerMatch.deezerId,
+              };
+              await supabase
+                .from('set_tracks')
+                .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .eq('id', track.id);
+              enriched++;
+              results.push({
+                track: `${track.artist_name} - ${track.track_title}`,
+                matched: 'Deezer partial match',
+                albumArt: false,
+                source: 'deezer_partial',
+              });
+            } else {
+              // Not found anywhere — mark as unreleased
+              await supabase
+                .from('set_tracks')
+                .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .eq('id', track.id);
+              ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+              notFound++;
+            }
+          } // end: neither Spotify nor Deezer confirmed
+        } // end: Spotify miss
       }
 
       return res.status(200).json({
@@ -342,13 +376,19 @@ export default async function handler(req, res) {
         await writeCache(supabase, track.artist_name, track.track_title, !!spotifyData, spotifyData);
 
         if (spotifyData) {
-          // If Spotify found the track but has no preview, try Deezer
+          // If Spotify found the track but has no preview, supplement with Deezer
           if (!spotifyData.preview_url) {
             try {
-              await new Promise(r => setTimeout(r, DELAY_MS));
-              const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
+              const deezer = await searchDeezerTrack(track.artist_name, track.track_title);
               if (deezer?.previewUrl) {
                 spotifyData.deezer_preview_url = deezer.previewUrl;
+              }
+              if (deezer?.deezerId) {
+                spotifyData.deezer_id = deezer.deezerId;
+                spotifyData.deezer_url = deezer.deezerUrl;
+              }
+              if (!spotifyData.album_art_url && deezer?.albumArtUrl) {
+                spotifyData.album_art_url = deezer.albumArtUrl;
               }
             } catch {}
           }
@@ -359,62 +399,70 @@ export default async function handler(req, res) {
             .eq('id', track.id);
           enriched++;
         } else {
-          // Spotify miss — try SoundCloud fallback for artwork
-          let scArtwork = null;
+          // Spotify miss — try Deezer as full validation source
+          let deezerMatch = null;
           try {
-            if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
-            if (soundcloudClientId) {
-              scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
-            }
-          } catch (e) {
-            // Best-effort
-          }
-
-          // Try Deezer for preview URL
-          let deezerPreviewUrl = null;
-          try {
-            await new Promise(r => setTimeout(r, DELAY_MS));
-            const deezer = await searchDeezerPreview(track.artist_name, track.track_title);
-            if (deezer?.previewUrl) {
-              deezerPreviewUrl = deezer.previewUrl;
-            }
+            deezerMatch = await searchDeezerTrack(track.artist_name, track.track_title);
           } catch {}
 
-          if (scArtwork?.artwork_url) {
-            const scData = {
-              album_art_url: scArtwork.artwork_url,
-              title: scArtwork.title || track.track_title,
-              artist: scArtwork.artist || track.artist_name,
-              source: 'soundcloud',
-              permalink_url: scArtwork.permalink_url,
-              deezer_preview_url: deezerPreviewUrl || undefined,
-            };
-            await supabase
-              .from('set_tracks')
-              .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
-              .eq('id', track.id);
-            enriched++;
-          } else if (deezerPreviewUrl) {
+          if (deezerMatch && (deezerMatch.confidence === 'exact' || deezerMatch.confidence === 'strong')) {
             const deezerData = {
-              title: track.track_title,
-              artist: track.artist_name,
+              title: deezerMatch.title,
+              artist: deezerMatch.artist,
+              album: deezerMatch.album,
+              album_art_url: deezerMatch.albumArtUrl,
+              album_art_small: deezerMatch.albumArtSmall,
+              preview_url: deezerMatch.previewUrl,
+              deezer_preview_url: deezerMatch.previewUrl,
+              deezer_id: deezerMatch.deezerId,
+              deezer_url: deezerMatch.deezerUrl,
+              isrc: deezerMatch.isrc,
+              release_date: deezerMatch.releaseDate,
+              duration_ms: deezerMatch.duration ? deezerMatch.duration * 1000 : null,
               source: 'deezer',
-              deezer_preview_url: deezerPreviewUrl,
+              deezer_confidence: deezerMatch.confidence,
             };
             await supabase
               .from('set_tracks')
-              .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .update({ spotify_data: deezerData, is_unreleased: false })
               .eq('id', track.id);
             enriched++;
           } else {
-            await supabase
-              .from('set_tracks')
-              .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
-              .eq('id', track.id);
-            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
-            notFound++;
-          }
-        }
+            // Not confirmed by Spotify or Deezer — try SoundCloud for artwork
+            let scArtwork = null;
+            try {
+              if (!soundcloudClientId) soundcloudClientId = await fetchSoundCloudClientId();
+              if (soundcloudClientId) {
+                scArtwork = await searchTrackOnSoundCloud(soundcloudClientId, track.artist_name, track.track_title);
+              }
+            } catch (e) {
+              // Best-effort
+            }
+
+            if (scArtwork?.artwork_url) {
+              const scData = {
+                album_art_url: scArtwork.artwork_url,
+                title: scArtwork.title || track.track_title,
+                artist: scArtwork.artist || track.artist_name,
+                source: 'soundcloud',
+                permalink_url: scArtwork.permalink_url,
+                deezer_preview_url: deezerMatch?.previewUrl || undefined,
+              };
+              await supabase
+                .from('set_tracks')
+                .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .eq('id', track.id);
+              enriched++;
+            } else {
+              await supabase
+                .from('set_tracks')
+                .update({ spotify_data: { checked: true, found: false, deezer_checked: true }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .eq('id', track.id);
+              ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+              notFound++;
+            }
+          } // end: neither Spotify nor Deezer confirmed
+        } // end: Spotify miss
       }
 
       return res.status(200).json({
