@@ -23,7 +23,7 @@
  */
 
 import { getSupabaseClient } from './_lib/spotify-core.js';
-import { searchDeezerTrack } from './_lib/deezer-core.js';
+import { searchDeezerTrack, isDjEditTitle } from './_lib/deezer-core.js';
 
 export const config = { maxDuration: 120 };
 
@@ -98,6 +98,12 @@ export default async function handler(req, res) {
     for (const track of tracks || []) {
       if (!track.artist_name || !track.track_title) { stats.errors++; continue; }
 
+      // Skip DJ edits — they're often unreleased tools, not commercially released tracks
+      if (isDjEditTitle(track.track_title)) {
+        stats.errors++; // reuse errors counter as "skipped"
+        continue;
+      }
+
       try {
         await new Promise(r => setTimeout(r, DELAY_MS));
         const match = await searchDeezerTrack(track.artist_name, track.track_title);
@@ -159,6 +165,8 @@ export default async function handler(req, res) {
         stats.skipped++; continue;
       }
       if (!track.artist_name || !track.track_title) { stats.skipped++; continue; }
+      // Skip DJ edits — they're often unreleased tools
+      if (isDjEditTitle(track.track_title)) { stats.skipped++; continue; }
 
       try {
         await new Promise(r => setTimeout(r, DELAY_MS));
@@ -219,6 +227,10 @@ export default async function handler(req, res) {
     const results = [];
 
     for (const track of tracks || []) {
+      // Skip DJ edits — they're often unreleased tools
+      if (!track.artist_name || !track.track_title) continue;
+      if (isDjEditTitle(track.track_title)) { stats.noMatch++; continue; }
+
       try {
         await new Promise(r => setTimeout(r, DELAY_MS));
         const match = await searchDeezerTrack(track.artist_name, track.track_title);
