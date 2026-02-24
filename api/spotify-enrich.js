@@ -3,6 +3,7 @@
 // Actions: enrich-set (enrich all tracks in a set), enrich-batch (batch enrich tracks), enrich-artists
 // Now uses global cache + rate-limit ledger to prevent duplicate API calls and 429 lockouts
 import { getSupabaseClient, getSpotifyToken, searchTrackOnSpotify, searchArtistOnSpotify, normalize } from './_lib/spotify-core.js';
+import { rateLimit } from './_lib/rate-limit.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
 import { fetchSoundCloudClientId, searchTrackOnSoundCloud, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
 import { searchDeezerPreview } from './_lib/deezer-core.js';
@@ -76,6 +77,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Rate limit: 10 enrich requests per minute per IP
+  if (!rateLimit(req, res, { key: 'spotify-enrich', limit: 10, windowMs: 60_000 })) return;
 
   const token = await getSpotifyToken();
   if (!token) {

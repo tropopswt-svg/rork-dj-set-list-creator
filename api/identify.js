@@ -2,6 +2,7 @@
 // Now includes custom bucket check for unreleased tracks
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 export const config = {
   maxDuration: 60,
@@ -312,6 +313,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Rate limit: 15 identify requests per minute per IP
+  if (!rateLimit(req, res, { key: 'identify', limit: 15, windowMs: 60_000 })) return;
 
   try {
     const { audioBase64, audioFormat = 'm4a' } = req.body;

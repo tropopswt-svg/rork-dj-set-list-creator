@@ -49,7 +49,19 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 const LOCAL_YTDLP = path.join(PROJECT_ROOT, 'bin', 'yt-dlp');
 const LOCAL_FFMPEG = path.join(PROJECT_ROOT, 'bin', 'ffmpeg');
 const YTDLP_PATH = fs.existsSync(LOCAL_YTDLP) ? LOCAL_YTDLP : 'yt-dlp';
-const FFMPEG_PATH = fs.existsSync(LOCAL_FFMPEG) ? LOCAL_FFMPEG : 'ffmpeg';
+
+// Important: if we only pass "ffmpeg", path.dirname('ffmpeg') becomes "." and yt-dlp can't find ffprobe.
+// Resolve absolute system ffmpeg path when local binary isn't present.
+const FFMPEG_PATH = fs.existsSync(LOCAL_FFMPEG)
+  ? LOCAL_FFMPEG
+  : ((): string => {
+      try {
+        return execSync('which ffmpeg', { encoding: 'utf8' }).trim() || 'ffmpeg';
+      } catch {
+        return 'ffmpeg';
+      }
+    })();
+const FFMPEG_DIR = path.dirname(FFMPEG_PATH);
 const OUTPUT_DIR = path.join(PROJECT_ROOT, 'unreleased-downloads');
 
 // Supabase client
@@ -219,7 +231,7 @@ async function downloadTracks(
     '--no-playlist-reverse',
     '--ignore-errors',
     '--no-overwrites',
-    '--ffmpeg-location', path.dirname(FFMPEG_PATH),
+    '--ffmpeg-location', FFMPEG_DIR,
   ];
 
   return new Promise((resolve) => {

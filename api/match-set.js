@@ -1,6 +1,7 @@
 // API endpoint to match a URL against existing sets and fill in gaps
 import { createClient } from '@supabase/supabase-js';
 import { cleanTrackTitleUnreleased } from './_lib/track-utils.js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
@@ -35,6 +36,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
+
+  // Rate limit: 10 match requests per minute per IP
+  if (!rateLimit(req, res, { key: 'match-set', limit: 10, windowMs: 60_000 })) return;
 
   const supabase = getSupabaseClient();
   if (!supabase) {

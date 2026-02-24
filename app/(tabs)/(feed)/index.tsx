@@ -1732,7 +1732,9 @@ export default function FeedScreen() {
   };
 
   const loadFollowedArtistSets = async () => {
-    setLoadingSets(true);
+    // Only show blocking loader if we have nothing rendered yet.
+    const shouldBlock = followedArtistSets.length === 0 && recentDbSets.length === 0;
+    if (shouldBlock) setLoadingSets(true);
     try {
       const artistIds = followedArtists
         .map(f => f.following_artist?.id)
@@ -1750,7 +1752,7 @@ export default function FeedScreen() {
     } catch (error) {
       if (__DEV__) console.error('[Feed] Error loading followed artist sets:', error);
     }
-    setLoadingSets(false);
+    if (shouldBlock) setLoadingSets(false);
   };
 
   const formatDate = (date: Date) => {
@@ -1977,7 +1979,7 @@ export default function FeedScreen() {
           style={styles.feedScrollWrapper}
           onLayout={(e) => setFeedAreaHeight(e.nativeEvent.layout.height)}
         >
-          {loadingSets ? (
+          {loadingSets && realFeedItems.length === 0 ? (
             <View style={styles.loadingFeed}>
               <ActivityIndicator color={Colors.dark.primary} />
               <Text style={styles.loadingFeedText}>Loading sets...</Text>

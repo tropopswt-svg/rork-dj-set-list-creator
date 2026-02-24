@@ -1,4 +1,5 @@
 import { fetchSoundCloudClientId } from './_lib/soundcloud-core.js';
+import { rateLimit } from './_lib/rate-limit.js';
 
 const YOUTUBE_API_BASE = 'https://www.googleapis.com/youtube/v3';
 const SOUNDCLOUD_OEMBED = 'https://soundcloud.com/oembed';
@@ -3496,6 +3497,9 @@ module.exports = async (req, res) => {
   }
   
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // Rate limit: 10 imports per minute per IP
+  if (!rateLimit(req, res, { key: 'import', limit: 10, windowMs: 60_000 })) return;
 
   // Parse body - handle both pre-parsed and string bodies
   let body = req.body;
