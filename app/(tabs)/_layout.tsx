@@ -164,21 +164,41 @@ export default function TabLayout() {
 
   const handleFABLongPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    if (!isAuthenticated) {
+      setAuthGateMessage('Sign up to identify tracks playing nearby.');
+      setShowAuthGate(true);
+      return;
+    }
     setShowContinuousIdentifyModal(true);
   };
 
   const handleAddSet = () => {
     setShowActionModal(false);
+    if (!isAuthenticated) {
+      setAuthGateMessage('Sign up to submit and identify DJ sets.');
+      setShowAuthGate(true);
+      return;
+    }
     router.push('/(tabs)/(submit)');
   };
 
   const handleIdentify = () => {
     setShowActionModal(false);
+    if (!isAuthenticated) {
+      setAuthGateMessage('Sign up to identify tracks playing nearby.');
+      setShowAuthGate(true);
+      return;
+    }
     setShowIdentifyModal(true);
   };
 
   const handleRecordSet = () => {
     setShowActionModal(false);
+    if (!isAuthenticated) {
+      setAuthGateMessage('Sign up to record and identify live sets.');
+      setShowAuthGate(true);
+      return;
+    }
     setShowRecordModal(true);
   };
 
@@ -249,9 +269,22 @@ export default function TabLayout() {
   }, [isRecordingSet]);
 
   // Gate certain tabs for unauthenticated users
-  // TODO: Re-enable auth gate after testing
+  const gatedTabs = ['(social)', '(profile)'];
+  const gateMessages: Record<string, string> = {
+    '(social)': 'Sign up to save tracks to your Crate and build your collection.',
+    '(profile)': 'Sign up to create your DJ profile and track your activity.',
+  };
+
   const handleTabPress = (tabName: string, e: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+
+    if (gatedTabs.includes(tabName) && !isAuthenticated) {
+      e.preventDefault();
+      setAuthGateMessage(gateMessages[tabName] || '');
+      setShowAuthGate(true);
+      return;
+    }
+
     if (tabName === '(feed)' && segments[1] === '(feed)') {
       // Already on feed — scroll to top and refresh
       refreshFeed();
