@@ -54,3 +54,17 @@ yt-dlp-master/
 
 # SoundCloud downloads for ACRCloud bucket (audio files)
 soundcloud-downloads/
+
+# Unreleased track downloads and test audio
+unreleased-downloads/
+test-audio/
+
+# Remotion video output
+remotion-ad/out/
+
+# Demo site build artifacts (source is committed)
+demo/node_modules/
+demo/out/
+
+# Vercel env snapshot
+.env.vercel
