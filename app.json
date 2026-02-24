@@ -53,6 +53,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "privacyUrl": "https://trackd.app/privacy.html"
     }
   }
 }
