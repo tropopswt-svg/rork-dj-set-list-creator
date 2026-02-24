@@ -152,6 +152,44 @@ export default async function handler(req, res) {
       }
     }
 
+    // ========== Unreleased cross-reference lookup ==========
+    // For tracks without Spotify data, check if they exist in the unreleased catalog
+    const unreleasedLookup = new Map();
+    const unreleasedCandidates = (setTracks || []).filter(t =>
+      !t.spotify_data?.spotify_id && t.artist_name && t.track_title &&
+      !/^(id|unknown|unknown track|tba|tbc)$/i.test(t.track_title)
+    );
+    if (unreleasedCandidates.length > 0) {
+      try {
+        // Batch lookup: find unreleased_tracks matching any of these artist+title combos
+        for (const t of unreleasedCandidates) {
+          const { data: match } = await supabase
+            .from('unreleased_tracks')
+            .select('id, title, artist, times_identified, source_platform')
+            .ilike('title', t.track_title.toLowerCase().trim())
+            .ilike('artist', t.artist_name.toLowerCase().trim())
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+          if (match) {
+            // Get how many other sets this unreleased track appeared in
+            const { count: setCount } = await supabase
+              .from('unreleased_identifications')
+              .select('*', { count: 'exact', head: true })
+              .eq('unreleased_track_id', match.id);
+            unreleasedLookup.set(t.id, {
+              unreleasedTrackId: match.id,
+              timesIdentified: match.times_identified || 0,
+              otherSetsCount: (setCount || 0),
+              sourcePlatform: match.source_platform,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Unreleased cross-reference error:', err);
+      }
+    }
+
     // Count gaps (ID tracks)
     const gapCount = setTracks?.filter(t => t.is_id)?.length || 0;
     const hasGaps = gapCount > 0;
@@ -163,32 +201,32 @@ export default async function handler(req, res) {
     ).length || 0;
     const hasRealTimestamps = tracksWithRealTimestamps > 1;
 
-    // For complete sets without timestamps, ensure first track is 0:00 and last track is near end
-    const ensureBookendTimestamps = !hasRealTimestamps && setTracks?.length > 0 && totalDuration > 0;
+    // For sets without real timestamps, distribute tracks evenly across the set duration
+    const distributeTimestamps = !hasRealTimestamps && setTracks?.length > 0 && totalDuration > 0;
 
     // Transform tracks to match app's Track type
     const tracks = setTracks?.map((track, index, arr) => {
       let timestamp = track.timestamp_seconds || 0;
       let timestampStr = track.timestamp_str || '0:00';
 
-      // For sets without real timestamps, add bookend timestamps
-      if (ensureBookendTimestamps) {
-        if (index === 0) {
-          // First track always at 0:00
-          timestamp = 0;
-          timestampStr = '0:00';
-        } else if (index === arr.length - 1) {
-          // Last track - estimate start time (total duration minus ~3-5 min for last track)
-          // Use 85% of total duration as a reasonable estimate for last track start
-          timestamp = Math.floor(totalDuration * 0.85);
-          timestampStr = formatTimestamp(timestamp);
-        }
+      // For sets without real timestamps, evenly space tracks across the duration
+      if (distributeTimestamps) {
+        timestamp = Math.floor((index / arr.length) * totalDuration);
+        timestampStr = formatTimestamp(timestamp);
       }
 
       // Spotify enrichment data: try denormalized spotify_data first, then joined tracks table
       const spotify = track.spotify_data || {};
       const linkedTrack = track.track || {};
-      const hasSpotify = !!spotify.spotify_id || !!linkedTrack.spotify_url;
+      // Only mark as Spotify-verified when we have a real Spotify match
+      // (spotify_id from enrichment API, or spotify_url on the enrichment data itself).
+      // linkedTrack.spotify_url alone is not proof — it can be stale or from other sources.
+      const hasSpotify = !!spotify.spotify_id || !!spotify.spotify_url;
+      // Build direct Spotify URL: prefer stored URL, construct from ID as fallback
+      const spotifyDirectUrl = spotify.spotify_url
+        || (spotify.spotify_id ? `https://open.spotify.com/track/${spotify.spotify_id}` : null)
+        || linkedTrack.spotify_url
+        || null;
 
       return {
         id: track.id,
@@ -197,9 +235,16 @@ export default async function handler(req, res) {
         position: track.position,
         timestamp,
         timestampStr,
-        isId: track.is_id || false,
-        isUnreleased: track.is_unreleased || false,
-        isTimed: track.is_timed !== false || ensureBookendTimestamps,
+        // If a track has a real title and artist, it's not an ID — even if is_id flag is stale
+        isId: (track.is_id && (!track.track_title || /^(id|unknown|unknown track|tba|tbc)$/i.test(track.track_title))) || false,
+        // Only treat as unreleased if explicitly tagged (comment hint, scraper detection)
+        // OR if is_unreleased is set and the track name itself contains unreleased indicators.
+        isUnreleased: (track.is_unreleased && (
+          track.unreleased_source !== 'spotify_not_found' ||
+          /unreleased|forthcoming|dubplate/i.test(track.track_title || '') ||
+          /unreleased/i.test(track.artist_name || '')
+        )) || false,
+        isTimed: track.is_timed !== false || distributeTimestamps,
         trackId: track.track_id,
         addedAt: track.created_at,
         source: track.source || '1001tracklists',
@@ -214,11 +259,13 @@ export default async function handler(req, res) {
         popularity: spotify.popularity || undefined,
         isReleased: hasSpotify,
         trackLinks: [
-          (spotify.spotify_url || linkedTrack.spotify_url) && {
+          spotifyDirectUrl && {
             platform: 'spotify',
-            url: spotify.spotify_url || linkedTrack.spotify_url,
+            url: spotifyDirectUrl,
           },
         ].filter(Boolean),
+        // Unreleased catalog cross-reference
+        ...(unreleasedLookup.has(track.id) ? { unreleased: unreleasedLookup.get(track.id) } : {}),
       };
     }) || [];
 

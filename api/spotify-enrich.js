@@ -10,6 +10,48 @@ import { searchDeezerPreview } from './_lib/deezer-core.js';
 const DELAY_MS = 1200; // 1.2s between Spotify API calls
 let soundcloudClientId = null;
 
+// Create or link an unreleased_tracks catalog entry when a track is confirmed not on Spotify
+async function ensureUnreleasedCatalogEntry(supabase, artistName, trackTitle, setTrackId) {
+  if (!artistName || !trackTitle) return;
+  try {
+    const normalizedTitle = trackTitle.toLowerCase().trim();
+    const normalizedArtist = artistName.toLowerCase().trim();
+
+    // Check if already in catalog
+    const { data: existing } = await supabase
+      .from('unreleased_tracks')
+      .select('id')
+      .ilike('title', normalizedTitle)
+      .ilike('artist', normalizedArtist)
+      .eq('is_active', true)
+      .limit(1)
+      .single();
+
+    if (existing) return; // Already cataloged
+
+    // Create new entry
+    await supabase
+      .from('unreleased_tracks')
+      .insert({
+        title: trackTitle,
+        artist: artistName,
+        source_platform: 'manual',
+        source_url: `spotify_enrich:${setTrackId}`,
+        confidence_score: 0.4,
+        metadata: {
+          source: 'spotify_enrichment',
+          reason: 'not_found_on_spotify',
+          set_track_id: setTrackId,
+        },
+      });
+  } catch (err) {
+    // Non-critical — don't block enrichment
+    if (err?.code !== '23505') { // Ignore unique constraint violations
+      console.error('[spotify-enrich] Unreleased catalog error:', err);
+    }
+  }
+}
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -95,6 +137,7 @@ export default async function handler(req, res) {
               .from('set_tracks')
               .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
+            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
           continue;
@@ -212,6 +255,7 @@ export default async function handler(req, res) {
               .from('set_tracks')
               .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
+            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
         }
@@ -267,6 +311,7 @@ export default async function handler(req, res) {
               .from('set_tracks')
               .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
+            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
           continue;
@@ -362,6 +407,7 @@ export default async function handler(req, res) {
               .from('set_tracks')
               .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
+            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
         }

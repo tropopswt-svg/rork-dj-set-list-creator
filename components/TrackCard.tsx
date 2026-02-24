@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
 import { Track } from '@/types';
+import { getPublicTrackStatus } from '@/lib/trackStatus';
 
 interface TrackCardProps {
   track: Track;
@@ -253,8 +254,10 @@ export default function TrackCard({
     );
   }
 
+  const publicStatus = getPublicTrackStatus(track);
+
   // Check if this is an unidentified track that needs to be filled in
-  const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
+  const isUnidentified = publicStatus === 'id';
 
   // Check if this is a partial ID - we have the artist but the title is unknown
   // These should be treated as unreleased since we have some info to work with
@@ -300,15 +303,13 @@ export default function TrackCard({
   const displayTitle = cleanName(track.title);
   const displayArtist = realArtist || cleanName(track.artist);
 
-  // Determine if we should show unreleased badge
-  // Show for: explicitly marked unreleased, parsed from artist name, OR partial IDs
-  const showUnreleasedBadge = !isUnidentified && (track.isUnreleased || !!realArtist);
-  const showPartialIdBadge = isPartialId;
+  // Released badge is explicit only; unknown remains ID.
+  const hasConfirmedRelease = publicStatus === 'released';
 
-  // Only show "Released" when we have explicit database confirmation
-  // For now, we don't have this matching, so we'll use a placeholder check
-  // This could be: track.isReleased, track.matchedToDatabase, etc.
-  const hasConfirmedRelease = (track as any).isReleased === true || (track as any).matchedToDatabase === true;
+  // Determine release badges from 3-state public status model
+  // Never show unreleased if the track has a confirmed release (e.g. found on Spotify)
+  const showUnreleasedBadge = !hasConfirmedRelease && (publicStatus === 'unreleased' || (!isUnidentified && !!realArtist));
+  const showPartialIdBadge = !hasConfirmedRelease && isPartialId;
 
   return (
     <>

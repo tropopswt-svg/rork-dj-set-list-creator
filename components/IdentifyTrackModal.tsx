@@ -13,11 +13,12 @@ import {
   ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { 
-  X, 
-  Radio, 
-  Music2, 
-  CheckCircle, 
+import { useRouter } from 'expo-router';
+import {
+  X,
+  Radio,
+  Music2,
+  CheckCircle,
   AlertCircle,
   Disc3,
   ExternalLink,
@@ -26,6 +27,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { trpc } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase/client';
 
 interface IdentifiedTrack {
   title: string;
@@ -35,11 +37,20 @@ interface IdentifiedTrack {
   label?: string;
   confidence: number;
   duration?: number;
+  coverUrl?: string;
+  spotifyTrackId?: string;
+  isUnreleased?: boolean;
   links: {
     spotify?: string;
     youtube?: string;
     isrc?: string;
   };
+}
+
+interface PlayedInSet {
+  id: string;
+  name: string;
+  artist: string;
 }
 
 interface IdentifyTrackModalProps {
@@ -66,7 +77,13 @@ export default function IdentifyTrackModal({
   const [identifiedTrack, setIdentifiedTrack] = useState<IdentifiedTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [noMatch, setNoMatch] = useState(false);
-  
+  const [playedInSets, setPlayedInSets] = useState<PlayedInSet[]>([]);
+  const [showSets, setShowSets] = useState(false);
+  const [loadingSets, setLoadingSets] = useState(false);
+  const [savedToSpotify, setSavedToSpotify] = useState(false);
+  const [savingToSpotify, setSavingToSpotify] = useState(false);
+
+  const router = useRouter();
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const identifyMutation = trpc.scraper.identifyTrackFromUrl.useMutation();
 
@@ -108,6 +125,82 @@ export default function IdentifyTrackModal({
       pulseAnim.setValue(1);
     }
   }, [isIdentifying]);
+
+  useEffect(() => {
+    if (identifiedTrack && isUnreleased) {
+      fetchPlayedInSets(identifiedTrack.title, identifiedTrack.artist);
+    }
+  }, [identifiedTrack]);
+
+  const isUnreleased = identifiedTrack
+    ? (identifiedTrack.isUnreleased || (!identifiedTrack.links.spotify && !identifiedTrack.links.youtube))
+    : false;
+
+  const fetchPlayedInSets = async (title: string, artist: string) => {
+    setLoadingSets(true);
+    try {
+      const { data: unreleasedTrack } = await supabase
+        .from('unreleased_tracks')
+        .select('id')
+        .ilike('title', `%${title}%`)
+        .ilike('artist', `%${artist}%`)
+        .limit(1)
+        .single();
+
+      if (!unreleasedTrack) return;
+
+      const { data: identifications } = await supabase
+        .from('unreleased_identifications')
+        .select('identified_in_set_id')
+        .eq('unreleased_track_id', unreleasedTrack.id);
+
+      const setIds = (identifications || [])
+        .map((i: any) => i.identified_in_set_id)
+        .filter(Boolean);
+
+      if (setIds.length === 0) return;
+
+      const { data: sets } = await supabase
+        .from('sets')
+        .select('id, title, dj_name')
+        .in('id', setIds);
+
+      setPlayedInSets(
+        (sets || []).map((s: any) => ({ id: s.id, name: s.title, artist: s.dj_name }))
+      );
+    } catch (e) {
+      // non-critical
+    } finally {
+      setLoadingSets(false);
+    }
+  };
+
+  const handleSaveToSpotify = async () => {
+    if (!identifiedTrack?.spotifyTrackId) return;
+    setSavingToSpotify(true);
+    try {
+      const { getValidAccessToken, authenticateWithSpotify } = require('@/services/spotifyAuth');
+      let token = await getValidAccessToken();
+      if (!token) {
+        const ok = await authenticateWithSpotify();
+        if (!ok) return;
+        token = await getValidAccessToken();
+      }
+      if (!token) return;
+      const res = await fetch(
+        `https://api.spotify.com/v1/me/tracks?ids=${identifiedTrack.spotifyTrackId}`,
+        { method: 'PUT', headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.ok || res.status === 200) {
+        setSavedToSpotify(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch {
+      // silent
+    } finally {
+      setSavingToSpotify(false);
+    }
+  };
 
   const parseTimestamp = (): number => {
     const hrs = parseInt(hours) || 0;
@@ -367,13 +460,24 @@ export default function IdentifyTrackModal({
               <Text style={styles.successText}>Track Identified!</Text>
               
               <View style={styles.trackCard}>
-                <View style={styles.trackCoverPlaceholder}>
-                  <Disc3 size={32} color={Colors.dark.primary} />
-                </View>
+                <Image
+                  source={isUnreleased ? undefined : (identifiedTrack.coverUrl ? { uri: identifiedTrack.coverUrl } : undefined)}
+                  style={styles.trackCoverPlaceholder}
+                  placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
+                  transition={250}
+                />
                 <View style={styles.trackInfo}>
-                  <Text style={styles.trackTitle} numberOfLines={2}>
-                    {identifiedTrack.title}
-                  </Text>
+                  <View style={styles.titleRow}>
+                    <Text style={[styles.trackTitle, { flex: 1 }]} numberOfLines={2}>
+                      {identifiedTrack.title}
+                    </Text>
+                    {isUnreleased && (
+                      <View style={styles.unreleasedBadge}>
+                        <Sparkles size={9} color="#FFD700" />
+                        <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
+                      </View>
+                    )}
+                  </View>
                   <Text style={styles.trackArtist} numberOfLines={1}>
                     {identifiedTrack.artist}
                   </Text>
@@ -388,6 +492,46 @@ export default function IdentifyTrackModal({
                 </View>
               </View>
 
+              {isUnreleased && (
+                <Pressable
+                  style={styles.playedInSetsButton}
+                  onPress={() => setShowSets(v => !v)}
+                >
+                  <Disc3 size={14} color={Colors.dark.primary} />
+                  <Text style={styles.playedInSetsText}>
+                    {loadingSets
+                      ? 'Loading sets...'
+                      : playedInSets.length > 0
+                      ? `Played in ${playedInSets.length} set${playedInSets.length !== 1 ? 's' : ''}`
+                      : 'No sets recorded yet'}
+                  </Text>
+                  {playedInSets.length > 0 && (
+                    <Text style={styles.playedInSetsChevron}>{showSets ? '▲' : '▼'}</Text>
+                  )}
+                </Pressable>
+              )}
+
+              {isUnreleased && showSets && playedInSets.length > 0 && (
+                <View style={styles.setsList}>
+                  {playedInSets.map(set => (
+                    <Pressable
+                      key={set.id}
+                      style={styles.setsListItem}
+                      onPress={() => {
+                        onClose();
+                        router.push(`/(tabs)/(discover)/${set.id}`);
+                      }}
+                    >
+                      <View style={styles.setsListItemInfo}>
+                        <Text style={styles.setsListItemName} numberOfLines={1}>{set.name}</Text>
+                        <Text style={styles.setsListItemArtist} numberOfLines={1}>{set.artist}</Text>
+                      </View>
+                      <ExternalLink size={14} color={Colors.dark.textMuted} />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+
               <View style={styles.confidenceBadge}>
                 <Sparkles size={14} color={Colors.dark.primary} />
                 <Text style={styles.confidenceText}>
@@ -395,40 +539,48 @@ export default function IdentifyTrackModal({
                 </Text>
               </View>
 
-              {(identifiedTrack.links.spotify || identifiedTrack.links.youtube) && (
-                <View style={styles.linksRow}>
-                  {identifiedTrack.links.spotify && (
-                    <Pressable 
-                      style={styles.linkChip}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') {
-                          const Linking = require('react-native').Linking;
-                          Linking.openURL(identifiedTrack.links.spotify!);
-                        }
-                      }}
-                    >
-                      <Music2 size={14} color="#1DB954" />
-                      <Text style={styles.linkChipText}>Spotify</Text>
-                      <ExternalLink size={12} color={Colors.dark.textMuted} />
-                    </Pressable>
-                  )}
-                  {identifiedTrack.links.youtube && (
-                    <Pressable 
-                      style={styles.linkChip}
-                      onPress={() => {
-                        if (Platform.OS !== 'web') {
-                          const Linking = require('react-native').Linking;
-                          Linking.openURL(identifiedTrack.links.youtube!);
-                        }
-                      }}
-                    >
-                      <Music2 size={14} color="#FF0000" />
-                      <Text style={styles.linkChipText}>YouTube</Text>
-                      <ExternalLink size={12} color={Colors.dark.textMuted} />
-                    </Pressable>
-                  )}
-                </View>
-              )}
+              <View style={styles.linksRow}>
+                {identifiedTrack.spotifyTrackId && (
+                  <Pressable
+                    style={[styles.saveSpotifyButton, savedToSpotify && styles.saveSpotifyButtonSaved]}
+                    onPress={handleSaveToSpotify}
+                    disabled={savingToSpotify || savedToSpotify}
+                  >
+                    <Music2 size={15} color={savedToSpotify ? '#fff' : '#1DB954'} />
+                    <Text style={[styles.saveSpotifyText, savedToSpotify && { color: '#fff' }]}>
+                      {savingToSpotify ? 'Saving...' : savedToSpotify ? 'Saved to Library ✓' : 'Save to Spotify'}
+                    </Text>
+                  </Pressable>
+                )}
+                {identifiedTrack.links.spotify && (
+                  <Pressable
+                    style={styles.linkChip}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') {
+                        const Linking = require('react-native').Linking;
+                        Linking.openURL(identifiedTrack.links.spotify!);
+                      }
+                    }}
+                  >
+                    <ExternalLink size={13} color={Colors.dark.textMuted} />
+                  </Pressable>
+                )}
+                {identifiedTrack.links.youtube && (
+                  <Pressable
+                    style={styles.linkChip}
+                    onPress={() => {
+                      if (Platform.OS !== 'web') {
+                        const Linking = require('react-native').Linking;
+                        Linking.openURL(identifiedTrack.links.youtube!);
+                      }
+                    }}
+                  >
+                    <Music2 size={14} color="#FF0000" />
+                    <Text style={styles.linkChipText}>YouTube</Text>
+                    <ExternalLink size={12} color={Colors.dark.textMuted} />
+                  </Pressable>
+                )}
+              </View>
 
               <Pressable 
                 style={styles.confirmButton}
@@ -654,9 +806,81 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 10,
+    overflow: 'hidden',
     backgroundColor: Colors.dark.surfaceLight,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    marginBottom: 4,
+  },
+  unreleasedBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(255, 215, 0, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  unreleasedBadgeText: {
+    fontSize: 9,
+    fontWeight: '700' as const,
+    color: '#FFD700',
+    letterSpacing: 0.3,
+  },
+  playedInSetsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.dark.background,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: 4,
+  },
+  playedInSetsText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.primary,
+  },
+  playedInSetsChevron: {
+    fontSize: 10,
+    color: Colors.dark.textMuted,
+  },
+  setsList: {
+    width: '100%',
+    backgroundColor: Colors.dark.background,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  setsListItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.dark.surface,
+  },
+  setsListItemInfo: {
+    flex: 1,
+  },
+  setsListItemName: {
+    fontSize: 13,
+    fontWeight: '500' as const,
+    color: Colors.dark.text,
+  },
+  setsListItemArtist: {
+    fontSize: 11,
+    color: Colors.dark.textMuted,
+    marginTop: 1,
   },
   trackInfo: {
     flex: 1,
@@ -666,7 +890,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600' as const,
     color: Colors.dark.text,
-    marginBottom: 4,
   },
   trackArtist: {
     fontSize: 14,
@@ -700,8 +923,31 @@ const styles = StyleSheet.create({
   },
   linksRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     marginBottom: 20,
+    alignItems: 'center',
+  },
+  saveSpotifyButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    backgroundColor: 'rgba(29, 185, 84, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(29, 185, 84, 0.35)',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 12,
+  },
+  saveSpotifyButtonSaved: {
+    backgroundColor: '#1DB954',
+    borderColor: '#1DB954',
+  },
+  saveSpotifyText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: '#1DB954',
   },
   linkChip: {
     flexDirection: 'row',
@@ -709,8 +955,8 @@ const styles = StyleSheet.create({
     gap: 6,
     backgroundColor: Colors.dark.background,
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingVertical: 10,
+    borderRadius: 12,
   },
   linkChipText: {
     fontSize: 12,

@@ -102,6 +102,7 @@ export default async function handler(req, res) {
       tracksAdded: 0,
       newTracksCreated: 0,
       newArtistsCreated: 0,
+      unreleasedLinked: 0,
     };
 
     if (existingSet) {
@@ -237,6 +238,61 @@ export default async function handler(req, res) {
                 results.tracksAdded++;
               }
             }
+          }
+
+          // === Unreleased catalog cross-reference ===
+          // Check if this identified track matches an entry in unreleased_tracks
+          try {
+            const normalizedUnreleasedTitle = identified.title.toLowerCase().trim();
+            const normalizedUnreleasedArtist = identified.artist.toLowerCase().trim();
+            const { data: unreleasedMatch } = await supabase
+              .from('unreleased_tracks')
+              .select('id')
+              .ilike('title', normalizedUnreleasedTitle)
+              .ilike('artist', normalizedUnreleasedArtist)
+              .eq('is_active', true)
+              .limit(1)
+              .single();
+
+            if (unreleasedMatch) {
+              // Record that this unreleased track appeared in this set
+              const { data: existingIdent } = await supabase
+                .from('unreleased_identifications')
+                .select('id')
+                .eq('unreleased_track_id', unreleasedMatch.id)
+                .eq('identified_in_set_id', existingSet.id)
+                .limit(1)
+                .single();
+
+              if (!existingIdent) {
+                await supabase
+                  .from('unreleased_identifications')
+                  .insert({
+                    unreleased_track_id: unreleasedMatch.id,
+                    identified_in_set_id: existingSet.id,
+                    confidence: 0.8,
+                  });
+                // Increment times_identified
+                const { data: utData } = await supabase
+                  .from('unreleased_tracks')
+                  .select('times_identified')
+                  .eq('id', unreleasedMatch.id)
+                  .single();
+                if (utData) {
+                  await supabase
+                    .from('unreleased_tracks')
+                    .update({
+                      times_identified: (utData.times_identified || 0) + 1,
+                      last_identified_at: new Date().toISOString(),
+                    })
+                    .eq('id', unreleasedMatch.id);
+                }
+                results.unreleasedLinked++;
+              }
+            }
+          } catch (unreleasedErr) {
+            // Non-critical — don't block the main flow
+            console.error('[match-set] Unreleased cross-ref error:', unreleasedErr);
           }
         }
 

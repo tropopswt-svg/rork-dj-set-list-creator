@@ -1417,6 +1417,8 @@ async function identifyTrackFromUrlInternal(
     label?: string;
     confidence: number;
     duration?: number;
+    coverUrl?: string;
+    spotifyTrackId?: string;
     links: { spotify?: string; youtube?: string; isrc?: string };
   } | null;
 }> {
@@ -1616,7 +1618,24 @@ async function identifyTrackFromUrlInternal(
       if (music.external_ids?.isrc) {
         validatedLinks.isrc = music.external_ids.isrc;
       }
-      
+
+      // Fetch album art via Spotify oEmbed (no auth required)
+      let coverUrl: string | undefined;
+      if (spotifyId && validatedLinks.spotify) {
+        try {
+          const oembedRes = await fetch(
+            `https://open.spotify.com/oembed?url=https://open.spotify.com/track/${spotifyId}`,
+            { signal: AbortSignal.timeout(4000) }
+          );
+          if (oembedRes.ok) {
+            const oembedData = await oembedRes.json();
+            coverUrl = oembedData.thumbnail_url;
+          }
+        } catch {
+          // non-critical
+        }
+      }
+
       console.log(`[ACRCloud] ===== IDENTIFICATION TRACE END (SUCCESS) =====`);
       return {
         success: true,
@@ -1629,6 +1648,8 @@ async function identifyTrackFromUrlInternal(
           label: music.label,
           confidence: music.score ?? 100,
           duration: music.duration_ms ? Math.floor(music.duration_ms / 1000) : undefined,
+          coverUrl,
+          spotifyTrackId: validatedLinks.spotify ? spotifyId : undefined,
           links: validatedLinks,
         },
       };

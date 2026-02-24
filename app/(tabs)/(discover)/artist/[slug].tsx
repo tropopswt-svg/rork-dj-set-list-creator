@@ -21,7 +21,7 @@ import {
   HelpCircle,
   Disc3,
 } from 'lucide-react-native';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import { getArtistBySlug, getArtistTracks, getArtistSets } from '@/lib/supabase';
@@ -249,7 +249,7 @@ export default function ArtistProfileScreen() {
             <>
               {tracks.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <TrackdLogo size="small" />
+                  <BubbleGlassLogo size="small" />
                   <Text style={styles.emptyText}>No tracks in database yet</Text>
                 </View>
               ) : (
@@ -340,7 +340,7 @@ export default function ArtistProfileScreen() {
             <>
               {sets.length === 0 ? (
                 <View style={styles.emptyState}>
-                  <TrackdLogo size="small" />
+                  <BubbleGlassLogo size="small" />
                   <Text style={styles.emptyText}>No sets linked yet</Text>
                   <Text style={styles.emptySubtext}>
                     Sets will appear here when imported
@@ -374,7 +374,7 @@ export default function ArtistProfileScreen() {
                         {set.event_date && ` • ${new Date(set.event_date).getFullYear()}`}
                       </Text>
                     </View>
-                    {(set.track_count || 0) > 0 && (
+                    {(set.track_count || 0) > 0 && (set.youtube_url || set.soundcloud_url) && (
                       <View style={styles.trakdBadge}>
                         <CheckCircle size={10} color="#fff" />
                         <Text style={styles.trakdText}>trakd</Text>
@@ -588,19 +588,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(220, 38, 38, 0.15)',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderTopColor: 'rgba(255, 255, 255, 0.7)',
     gap: 10,
   },
   setsTabActive: {
-    backgroundColor: '#DC2626',
+    backgroundColor: Colors.dark.primary,
+    borderColor: Colors.dark.primary,
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
   },
   setsTabText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#DC2626',
+    color: Colors.dark.text,
   },
   setsTabTextActive: {
     color: '#fff',
@@ -612,14 +615,15 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 20,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
     gap: 6,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    borderTopColor: 'rgba(255, 255, 255, 0.7)',
   },
   tracksToggleActive: {
     borderColor: Colors.dark.primary,
-    backgroundColor: 'rgba(255, 107, 53, 0.15)',
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
   },
   tracksToggleText: {
     fontSize: 12,
@@ -649,25 +653,25 @@ const styles = StyleSheet.create({
   trackItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 18,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
-    borderTopColor: 'rgba(255, 255, 255, 0.8)',
-    borderBottomColor: 'rgba(232, 226, 217, 0.4)',
-    shadowColor: 'rgba(45, 42, 38, 0.1)',
-    shadowOffset: { width: 0, height: 3 },
+    borderTopColor: 'rgba(255, 255, 255, 0.7)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 3,
   },
   trackIndex: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(245, 240, 232, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -794,8 +798,10 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: Colors.dark.surfaceLight,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   playsText: {
     fontSize: 11,
@@ -804,26 +810,28 @@ const styles = StyleSheet.create({
   setItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 18,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.5)',
-    borderTopColor: 'rgba(255, 255, 255, 0.8)',
-    borderBottomColor: 'rgba(232, 226, 217, 0.4)',
-    shadowColor: 'rgba(45, 42, 38, 0.1)',
-    shadowOffset: { width: 0, height: 3 },
+    borderTopColor: 'rgba(255, 255, 255, 0.7)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 12,
+    elevation: 3,
   },
   setCover: {
     width: 56,
     height: 56,
-    borderRadius: 10,
-    backgroundColor: 'rgba(245, 240, 232, 0.5)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     marginRight: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   setInfo: {
     flex: 1,
@@ -860,8 +868,10 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: 'rgba(245, 240, 232, 0.6)',
-    borderRadius: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   setTracksCount: {
     fontSize: 11,

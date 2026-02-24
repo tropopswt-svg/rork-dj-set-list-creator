@@ -303,6 +303,7 @@ export default function TrackDetailModal({
                 {track.trackLinks && track.trackLinks.length > 0 ? (
                   track.trackLinks.map((link, index) => {
                     const config = PLATFORM_CONFIG[link.platform] || PLATFORM_CONFIG.other;
+                    const isDirectSpotify = link.platform === 'spotify' && link.url;
                     return (
                       <Pressable
                         key={`${link.platform}-${index}`}
@@ -313,7 +314,7 @@ export default function TrackDetailModal({
                           <Music size={16} color={config.color} />
                         </View>
                         <Text style={[styles.linkText, { color: config.color }]}>
-                          {config.label}
+                          {isDirectSpotify ? 'Listen on Spotify' : config.label}
                         </Text>
                         <ExternalLink size={12} color={config.color} />
                       </Pressable>

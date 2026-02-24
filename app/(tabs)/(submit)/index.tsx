@@ -35,6 +35,7 @@ import ArtistAutocomplete from '@/components/ArtistAutocomplete';
 import TrackAutocomplete from '@/components/TrackAutocomplete';
 import type { DbArtist, DbTrack } from '@/lib/supabase/types';
 import { linkImportedSet, enhanceTracksWithDatabase, artistExists } from '@/lib/supabase';
+import { getPublicTrackStatus } from '@/lib/trackStatus';
 
 type ImportStep = 
   | 'idle' 
@@ -325,13 +326,25 @@ export default function SubmitScreen() {
         );
         
         // Update tracks with database matches
-        const updatedTracks = tracks.map((track, i) => ({
-          ...track,
-          isLinked: !!enhanced[i]?.dbTrack,
-          isUnreleased: enhanced[i]?.dbTrack?.is_unreleased || false,
-          dbTrackId: enhanced[i]?.dbTrack?.id,
-          dbArtistId: enhanced[i]?.dbArtist?.id,
-        }));
+        const updatedTracks = tracks.map((track, i) => {
+          const dbTrack = enhanced[i]?.dbTrack;
+          const isUnreleased = dbTrack?.is_unreleased || false;
+          const isReleased = !isUnreleased && !!dbTrack && !!dbTrack.spotify_url;
+
+          const merged = {
+            ...track,
+            isLinked: !!dbTrack,
+            isUnreleased,
+            isReleased,
+            dbTrackId: dbTrack?.id,
+            dbArtistId: enhanced[i]?.dbArtist?.id,
+          };
+
+          return {
+            ...merged,
+            trackStatus: getPublicTrackStatus(merged),
+          };
+        });
         
         setTracks(updatedTracks);
         
@@ -359,6 +372,8 @@ export default function SubmitScreen() {
             source: 'manual' as const,
             verified: false,
             isUnreleased: t.isUnreleased,
+            isReleased: t.isReleased,
+            trackStatus: t.trackStatus,
           }));
           
           updateSet(submittedSetIdRef.current, {

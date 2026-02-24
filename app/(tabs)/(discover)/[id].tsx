@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Linking, ActivityIndicator, Alert, Platform, Modal, Animated as RNAnimated, Easing } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter, useNavigation } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -39,7 +39,7 @@ import TrackCard from '@/components/TrackCard';
 import AddTrackModal from '@/components/AddTrackModal';
 import FillGapModal from '@/components/FillGapModal';
 import ArtistLink from '@/components/ArtistLink';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import ContributorModal from '@/components/ContributorModal';
 import AddSourceModal from '@/components/AddSourceModal';
 import InlineConflictOptions from '@/components/InlineConflictOptions';
@@ -65,26 +65,102 @@ const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-
 // Animated circle for the identification ring
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-// Identification Ring Component — animated circular gauge
-function IdentificationRing({ identified, total }: { identified: number; total: number }) {
+// Animated trakd waveform bars for ring center
+function TrakdWaveCenter() {
+  const barAnims = useRef(
+    Array.from({ length: 5 }, () => new RNAnimated.Value(0.3))
+  ).current;
+
+  useEffect(() => {
+    barAnims.forEach((anim, i) => {
+      const animate = () => {
+        const peak = 0.4 + Math.random() * 0.6;
+        const valley = 0.15 + Math.random() * 0.2;
+        const dur = 300 + Math.random() * 400;
+        RNAnimated.sequence([
+          RNAnimated.timing(anim, { toValue: peak, duration: dur, easing: Easing.out(Easing.ease), useNativeDriver: true }),
+          RNAnimated.timing(anim, { toValue: valley, duration: dur + 100, easing: Easing.in(Easing.ease), useNativeDriver: true }),
+        ]).start(animate);
+      };
+      setTimeout(animate, i * 80);
+    });
+    return () => barAnims.forEach(a => a.stopAnimation());
+  }, []);
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2 }}>
+      {barAnims.map((anim, i) => (
+        <RNAnimated.View
+          key={i}
+          style={{
+            width: 3,
+            height: 18,
+            borderRadius: 1.5,
+            backgroundColor: '#C41E3A',
+            transform: [{ scaleY: anim }],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
+
+// Liquid Glass Identification Ring — inspired by FYP skip button
+function IdentificationRing({ identified, total, onPress }: { identified: number; total: number; onPress?: () => void }) {
   const progress = useSharedValue(0);
   const ringOpacity = useSharedValue(0);
   const percentage = total > 0 ? Math.round((identified / total) * 100) : 0;
 
-  const size = 52;
-  const strokeWidth = 5;
+  // RN Animated values for shimmer + glow
+  const shimmerAnim = useRef(new RNAnimated.Value(0)).current;
+  const glowAnim = useRef(new RNAnimated.Value(0.3)).current;
+
+  const size = 62;
+  const strokeWidth = 6;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
 
   useEffect(() => {
-    // Fade in
-    ringOpacity.value = withTiming(1, { duration: 300 });
-    // Animate arc with spring
-    progress.value = withDelay(200, withSpring(percentage / 100, {
+    // Reanimated arc
+    ringOpacity.value = withTiming(1, { duration: 400 });
+    progress.value = withDelay(300, withSpring(percentage / 100, {
       damping: 18,
       stiffness: 80,
       mass: 1,
     }));
+
+    // RN Animated shimmer rotation
+    RNAnimated.loop(
+      RNAnimated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 6000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    ).start();
+
+    // RN Animated glow pulse
+    RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(glowAnim, {
+          toValue: 0.7,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        RNAnimated.timing(glowAnim, {
+          toValue: 0.3,
+          duration: 2000,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    return () => {
+      shimmerAnim.stopAnimation();
+      glowAnim.stopAnimation();
+    };
   }, [percentage]);
 
   const animatedStrokeProps = useAnimatedProps(() => ({
@@ -95,54 +171,54 @@ function IdentificationRing({ identified, total }: { identified: number; total: 
     opacity: ringOpacity.value,
   }));
 
-  // Color based on percentage
-  const arcColor = percentage >= 75 ? '#22C55E' : percentage >= 40 ? '#F59E0B' : '#C41E3A';
+  const shimmerRotate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
 
   return (
-    <Animated.View style={[ringStyles.container, containerStyle]}>
-      <View style={ringStyles.ringContainer}>
-        <View style={[ringStyles.ringGlow, { shadowColor: arcColor }]} />
-        <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-          {/* Background track */}
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth={strokeWidth}
-            fill="none"
-          />
-          {/* Animated progress arc */}
-          <AnimatedCircle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke={arcColor}
-            strokeWidth={strokeWidth}
-            fill="none"
-            strokeDasharray={circumference}
-            animatedProps={animatedStrokeProps}
-            strokeLinecap="round"
-          />
-        </Svg>
-        {/* Center percentage - using static Text since reanimated text is complex */}
-        <View style={ringStyles.centerLabel}>
-          <Text style={[ringStyles.percentText, { color: arcColor }]}>{percentage}</Text>
-          <Text style={ringStyles.percentSymbol}>%</Text>
+    <Pressable onPress={onPress} disabled={!onPress}>
+      <Animated.View style={[ringStyles.container, containerStyle]}>
+        <View style={ringStyles.ringContainer}>
+          {/* Outer glow ring — pulsing red */}
+          <RNAnimated.View style={[ringStyles.glowRing, { opacity: glowAnim }]} />
+          {/* Spinning shimmer accent */}
+          <RNAnimated.View style={[ringStyles.shimmerRing, { transform: [{ rotate: shimmerRotate }] }]} />
+          {/* 3D shadow */}
+          <View style={ringStyles.shadowLayer} />
+          {/* Glass face */}
+          <View style={ringStyles.glassFace}>
+            <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+              {/* Background track */}
+              <Circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke="rgba(255,255,255,0.1)"
+                strokeWidth={strokeWidth}
+                fill="none"
+              />
+              {/* Animated red glass arc */}
+              <AnimatedCircle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                stroke="#C41E3A"
+                strokeWidth={strokeWidth}
+                fill="none"
+                strokeDasharray={circumference}
+                animatedProps={animatedStrokeProps}
+                strokeLinecap="round"
+              />
+            </Svg>
+            {/* Center animated waveform */}
+            <View style={ringStyles.centerLabel}>
+              <TrakdWaveCenter />
+            </View>
+          </View>
         </View>
-      </View>
-      <View style={ringStyles.legend}>
-        <View style={ringStyles.legendItem}>
-          <View style={[ringStyles.legendDot, { backgroundColor: '#22C55E' }]} />
-          <Text style={ringStyles.legendValue}>{identified}</Text>
-        </View>
-        <View style={ringStyles.legendDivider} />
-        <View style={ringStyles.legendItem}>
-          <View style={[ringStyles.legendDot, { backgroundColor: '#C41E3A' }]} />
-          <Text style={ringStyles.legendValue}>{total - identified}</Text>
-        </View>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -150,23 +226,57 @@ const ringStyles = StyleSheet.create({
   container: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
   },
   ringContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
+    width: 82,
+    height: 82,
   },
-  ringGlow: {
+  glowRing: {
     position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    shadowOpacity: 0.6,
-    shadowRadius: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    shadowColor: '#C41E3A',
     shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+  },
+  shimmerRing: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderTopColor: 'rgba(255,255,255,0.25)',
+    borderRightColor: 'rgba(196, 30, 58, 0.1)',
+  },
+  shadowLayer: {
+    position: 'absolute',
+    top: 3,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  glassFace: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.3)',
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
   centerLabel: {
     position: 'absolute',
@@ -175,46 +285,19 @@ const ringStyles = StyleSheet.create({
     flexDirection: 'row',
   },
   percentText: {
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    color: 'rgba(255,255,255,0.9)',
+    textShadowColor: 'rgba(196, 30, 58, 0.5)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   percentSymbol: {
-    fontSize: 7,
+    fontSize: 8,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: -2,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: -3,
     marginLeft: 1,
-  },
-  legend: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  legendDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  legendDivider: {
-    width: 1,
-    height: 8,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  legendValue: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
   },
 });
 
@@ -277,6 +360,9 @@ export default function SetDetailScreen() {
   const [isSaved, setIsSaved] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeResult, setAnalyzeResult] = useState<{ type: 'success' | 'empty' | 'error'; message: string; trackCount?: number } | null>(null);
+  const analyzePopupScale = useSharedValue(0);
+  const analyzePopupOpacity = useSharedValue(0);
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
 
   // Database set state
@@ -310,10 +396,25 @@ export default function SetDetailScreen() {
   // Pick-and-place: tap an unplaced track to pick it, then tap a gap to place it
   const [pickedTrack, setPickedTrack] = useState<Track | null>(null);
   const scrollViewRef = useRef<ScrollView>(null);
+  const scrollY = useRef(new RNAnimated.Value(0)).current;
+
+  // Native-driven chart scale — no JS listener, runs on UI thread
+  const chartScale = scrollY.interpolate({
+    inputRange: [0, 250, 500],
+    outputRange: [1, 1.08, 0.85],
+    extrapolate: 'clamp',
+  });
 
   // Cover image fallback state
   const [coverImageError, setCoverImageError] = useState(false);
   const [coverTriedHqFallback, setCoverTriedHqFallback] = useState(false);
+
+  // Chart detail modal
+  const [showChartModal, setShowChartModal] = useState(false);
+  const chartModalAnim = useRef(new RNAnimated.Value(0)).current;
+  // Badge explanation modal
+  const [badgeExplain, setBadgeExplain] = useState<{ type: 'trakd' | 'verified' | 'community' | 'missing'; count: number } | null>(null);
+  const badgeExplainAnim = useRef(new RNAnimated.Value(0)).current;
 
   // YouTube Player state
   const [showPlayer, setShowPlayer] = useState(false);
@@ -534,7 +635,7 @@ export default function SetDetailScreen() {
     const artistAlpha = (artist.match(/[a-zA-Z]/g) || []).length;
     if (titleAlpha < 3 && artistAlpha < 3) return true;
 
-    // 4. Title is a reaction/comment, not a track name
+    // 4. Title or artist is a reaction/comment/sentence, not a track name
     const garbagePatterns = [
       /^(love|loving|loved)\s/i, /^(this|that)\s+(is|was|set)/i,
       /^(so|very|really)\s+(good|fire|sick|crazy)/i,
@@ -545,10 +646,19 @@ export default function SetDetailScreen() {
       /^listen\s+to/i, /^check\s+(out|it)/i,
       /^(the|this|that)\s+\w+\s+(is|was)\s/i,
       /^(amazing|incredible)\s/i, /starting\s+at/i,
+      // Sentence-like text (comment garbage scraped as track names)
+      /\.\s+[A-Z]/, // Period then capital = sentence boundary
+      /^(and it|but it|there have|there are|there is)\s/i, // Sentence openers
+      /\b(plenty of|hundreds of|time for|from many)\b/i, // Multi-word sentence fragments
     ];
-    if (garbagePatterns.some(p => p.test(title))) return true;
+    if (garbagePatterns.some(p => p.test(title) || p.test(artist))) return true;
 
-    // 5. Title equals artist (parsing error — same text landed in both fields)
+    // 5. Title or artist is a short string with a date pattern (event reference, not a track)
+    const datePattern = /\b\d{1,2}[/\-]\d{1,2}\b/;
+    if ((datePattern.test(title) && title.split(/\s+/).length <= 3) ||
+        (datePattern.test(artist) && artist.split(/\s+/).length <= 3)) return true;
+
+    // 6. Title equals artist (parsing error — same text landed in both fields)
     if (titleLower === artistLower && titleLower !== '') return true;
 
     // 6. Confidence below threshold
@@ -638,9 +748,10 @@ export default function SetDetailScreen() {
   };
 
   // Smart timestamp conflict detection and tracklist building
-  const { tracklistItems, estimatedMissingTracks } = useMemo<{
+  const { tracklistItems, estimatedMissingTracks, avgTrackDur } = useMemo<{
     tracklistItems: TracklistItem[];
     estimatedMissingTracks: number;
+    avgTrackDur: number;
   }>(() => {
     // Get max valid timestamp from set duration (use totalDuration or fallback to 2 hours)
     const maxValidTimestamp = (setList?.totalDuration && setList.totalDuration > 0)
@@ -658,6 +769,28 @@ export default function SetDetailScreen() {
         .replace(/^(\d{1,3})(?=[a-z])/g, '') // Strip leading digits before letters (track numbers)
         .replace(/feat|ft|featuring/g, '') // Remove featuring indicators
         .trim();
+    };
+
+    // Helper: check if two artist names refer to the same person
+    // Handles variations like "M High", "High", "M", "mhigh" etc.
+    const isSameArtist = (a: string | undefined, b: string | undefined): boolean => {
+      const artA = normalizeStr(a);
+      const artB = normalizeStr(b);
+      if (!artA || !artB) return false;
+      if (artA === artB) return true;
+      // One contains the other (e.g. "mhigh" contains "high")
+      if (artA.length > 2 && artB.length > 2 && (artA.includes(artB) || artB.includes(artA))) return true;
+      // Character similarity >= 70%
+      if (artA.length > 2 && artB.length > 2) {
+        const shorter = artA.length <= artB.length ? artA : artB;
+        const longer = artA.length > artB.length ? artA : artB;
+        let matches = 0;
+        for (let ci = 0; ci < shorter.length; ci++) {
+          if (shorter[ci] === longer[ci]) matches++;
+        }
+        if (matches / longer.length >= 0.7) return true;
+      }
+      return false;
     };
 
     // Helper: check if two tracks are essentially the same song
@@ -679,7 +812,7 @@ export default function SetDetailScreen() {
       // Title contains the other
       const titleMatch = (titleA && titleB) && (titleA.includes(titleB) || titleB.includes(titleA));
       // Artist contains the other
-      const artistMatch = (artistA && artistB) && (artistA.includes(artistB) || artistB.includes(artistA));
+      const artistMatch = isSameArtist(a.artist, b.artist);
 
       // If both title and artist partially match, likely same track
       if (titleMatch && artistMatch) return true;
@@ -824,16 +957,21 @@ export default function SetDetailScreen() {
     }
 
     const items: TracklistItem[] = [];
-    const avgTrackDuration = 210; // ~3.5 min average track length in DJ sets
+    // Calculate avg track duration from the set's actual data instead of hardcoding 5 min
+    const setDuration = setList?.totalDuration || 0;
+    const trackCount = setList?.trackCount || tracksWithoutConflicts.length;
+    const computedAvg = (setDuration > 0 && trackCount > 1) ? Math.floor(setDuration / trackCount) : 0;
+    // Clamp between 150s (2.5 min) and 420s (7 min), default 300 if data is bad
+    const avgTrackDuration = (computedAvg >= 150 && computedAvg <= 420) ? computedAvg : 300;
     const minTrackGap = 75; // Tracks < 1.25 min apart are suspicious (likely same track or conflict)
-    const gapThreshold = 270; // 4.5+ min gap suggests missing track(s)
+    const gapThreshold = Math.max(avgTrackDuration + 60, 360); // At least one track length + buffer
     let missingCount = 0;
     let gapCounter = 0;
 
     // Check for gap at the START of the set (before first track)
     if (tracksWithoutConflicts.length > 0) {
       const firstTrackTimestamp = tracksWithoutConflicts[0].timestamp || 0;
-      // If first track starts after gapThreshold (4.5 min), there's likely missing tracks at the start
+      // If first track starts after gapThreshold (6 min), there's likely missing tracks at the start
       if (firstTrackTimestamp >= gapThreshold) {
         const estimatedMissing = Math.max(1, Math.floor(firstTrackTimestamp / avgTrackDuration));
         missingCount += estimatedMissing;
@@ -887,7 +1025,8 @@ export default function SetDetailScreen() {
         const gap = trackTimestamp - lastTimestamp;
         // Only add gap if it's within valid duration bounds
         if (gap >= gapThreshold && (lastTimestamp + avgTrackDuration) <= maxValidTimestamp) {
-          const estimatedMissing = Math.max(1, Math.floor(gap / avgTrackDuration));
+          // Subtract avgTrackDuration (previous track is playing during start of gap)
+          const estimatedMissing = Math.max(1, Math.floor((gap - avgTrackDuration) / avgTrackDuration));
           missingCount += estimatedMissing;
           gapCounter++;
           items.push({
@@ -916,6 +1055,21 @@ export default function SetDetailScreen() {
 
         // Pick best track from each group of duplicates
         let uniqueTracks = uniqueGroups.map(group => pickBestTrack(group));
+
+        // Collapse same-artist duplicates: if multiple tracks have the same artist
+        // (with fuzzy matching like "M High" / "High" / "M"), keep only the best per artist
+        const artistGroups: Track[][] = [];
+        for (const t of uniqueTracks) {
+          const existingArtistGroup = artistGroups.find(group =>
+            group.some(existing => isSameArtist(existing.artist, t.artist))
+          );
+          if (existingArtistGroup) {
+            existingArtistGroup.push(t);
+          } else {
+            artistGroups.push([t]);
+          }
+        }
+        uniqueTracks = artistGroups.map(group => pickBestTrack(group));
 
         // Filter out low-quality tracks (ID placeholders, garbage, reactions) from conflict options
         const realTracks = uniqueTracks.filter(t => !isLowQualityTrack(t));
@@ -948,11 +1102,13 @@ export default function SetDetailScreen() {
                 const isDup = trulyUnique.some(u => isSameTrack(u, worthyTracks[wi]));
                 if (!isDup) trulyUnique.push(worthyTracks[wi]);
               }
-              if (trulyUnique.length > 1) {
+              // Cap at 3 options max to avoid overwhelming the voter
+              const capped = trulyUnique.slice(0, 3);
+              if (capped.length > 1) {
                 items.push({
                   type: 'timestamp-conflict' as const,
-                  tracks: trulyUnique,
-                  timestamp: Math.min(...trulyUnique.map(t => t.timestamp || 0)),
+                  tracks: capped,
+                  timestamp: Math.min(...capped.map(t => t.timestamp || 0)),
                 });
               } else {
                 // All "conflicts" are the same song — pick the highest scored
@@ -996,14 +1152,22 @@ export default function SetDetailScreen() {
     });
 
     // Cap the missing count to something reasonable based on set duration
-    // A set can only have so many tracks — roughly 1 per 3 minutes max
-    const maxReasonableTracks = setList?.totalDuration
-      ? Math.floor(setList.totalDuration / 180)
-      : 40; // Default cap for unknown duration
+    // Use totalDuration if available, otherwise estimate from track timestamp range
+    let effectiveDuration = setList?.totalDuration || 0;
+    if (!effectiveDuration && tracksWithoutConflicts.length > 0) {
+      const timestamps = tracksWithoutConflicts.map(t => t.timestamp || 0).filter(t => t > 0);
+      if (timestamps.length > 0) {
+        // Estimate duration as last timestamp + one avg track length
+        effectiveDuration = Math.max(...timestamps) + avgTrackDuration;
+      }
+    }
+    const maxReasonableTracks = effectiveDuration > 0
+      ? Math.floor(effectiveDuration / 240)
+      : 15; // Conservative default cap
     const knownTrackCount = combined.filter(c => c.type === 'track' || c.type === 'timestamp-conflict').length;
     const cappedMissing = Math.min(missingCount, Math.max(0, maxReasonableTracks - knownTrackCount));
 
-    return { tracklistItems: combined, estimatedMissingTracks: cappedMissing };
+    return { tracklistItems: combined, estimatedMissingTracks: cappedMissing, avgTrackDur: avgTrackDuration };
   }, [sortedTracks, conflicts, isLowQualityTrack]);
 
   const handleSave = useCallback(async () => {
@@ -1070,7 +1234,7 @@ export default function SetDetailScreen() {
   if (isLoadingSet || !setList) {
     return (
       <View style={styles.loadingContainer}>
-        <TrackdLogo size="large" />
+        <BubbleGlassLogo size="large" />
         {!isLoadingSet && loadError && (
           <View style={{ alignItems: 'center', marginTop: 16, paddingHorizontal: 32 }}>
             <Text style={styles.loadingText}>{loadError}</Text>
@@ -1330,12 +1494,17 @@ export default function SetDetailScreen() {
   return (
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={RNAnimated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
       >
         <View style={styles.headerImage}>
           {getHeaderCoverImage() ? (
@@ -1352,7 +1521,7 @@ export default function SetDetailScreen() {
             <View style={[styles.coverImage, { backgroundColor: Colors.dark.surface }]} />
           )}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.7)', Colors.dark.background]}
+            colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(40,40,44,1)']}
             style={styles.headerGradient}
           />
           <Pressable
@@ -1370,6 +1539,7 @@ export default function SetDetailScreen() {
           </Pressable>
         </View>
 
+        <View style={styles.darkZone}>
         <View style={styles.content}>
           <View style={styles.titleSection}>
             <View style={styles.titleRow}>
@@ -1391,13 +1561,36 @@ export default function SetDetailScreen() {
                 </View>
                 <Text style={styles.title}>{setList.name}</Text>
               </View>
-              <Pressable style={styles.saveButton} onPress={handleSave}>
-                {isSaved ? (
-                  <BookmarkCheck size={24} color="#C41E3A" fill="#C41E3A" />
-                ) : (
-                  <Bookmark size={24} color="#FFFFFF" />
-                )}
-              </Pressable>
+              <View style={styles.titleActions}>
+                <Pressable style={styles.saveButton} onPress={handleSave}>
+                  {isSaved ? (
+                    <BookmarkCheck size={24} color="#C41E3A" fill="#C41E3A" />
+                  ) : (
+                    <Bookmark size={24} color="#FFFFFF" />
+                  )}
+                </Pressable>
+                {(() => {
+                  const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+                  const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
+                  if (!videoId) return null;
+                  return (
+                    <Pressable
+                      style={styles.statsPlayButton}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        if (Platform.OS !== 'web') {
+                          Linking.openURL(`https://www.youtube.com/watch?v=${videoId}`);
+                        } else {
+                          setShowPlayer(true);
+                          setPlayerMinimized(false);
+                        }
+                      }}
+                    >
+                      <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
+                    </Pressable>
+                  );
+                })()}
+              </View>
             </View>
             
             <View style={styles.quickStats}>
@@ -1422,6 +1615,20 @@ export default function SetDetailScreen() {
                 </>
               ) : null}
               <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
+              {estimatedMissingTracks > 0 && (
+                <Pressable
+                  style={styles.missingTracksChip}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    Alert.alert(
+                      'Missing Tracks',
+                      `~${estimatedMissingTracks} track${estimatedMissingTracks !== 1 ? 's' : ''} estimated missing from this set. Drag from unplaced tracks to fill gaps.`
+                    );
+                  }}
+                >
+                  <AlertCircle size={11} color="#FB923C" />
+                </Pressable>
+              )}
             </View>
 
             {/* Genre Pills */}
@@ -1517,280 +1724,96 @@ export default function SetDetailScreen() {
             return null;
           })()}
 
-          <View style={styles.linksSection}>
-            <Text style={styles.sectionLabel}>Sources</Text>
-            <View style={styles.linksGrid}>
-              {/* YouTube */}
-              {(() => {
-                const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+          {/* Sources section label removed — buttons moved to chart row */}
 
-                if (ytLink) {
-                  return (
-                    <View style={styles.linkCardWrapper}>
-                      <Pressable
-                        style={[styles.linkCard, styles.linkCardFilled, { backgroundColor: 'rgba(255, 0, 0, 0.06)', borderColor: 'rgba(255, 0, 0, 0.15)' }]}
-                        onPress={() => handleOpenSource(ytLink)}
-                      >
-                        <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 0, 0, 0.1)' }]}>
-                          <Youtube size={16} color="#FF0000" />
-                        </View>
-                        <Text style={[styles.linkPlatform, { color: '#CC0000' }]}>YouTube</Text>
-                        <ExternalLink size={12} color="#9C968E" style={styles.linkExternal} />
-                      </Pressable>
-                      <Pressable
-                        style={styles.analyzeButton}
-                        disabled={analyzing}
-                        onPress={async () => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          try {
-                            setAnalyzing(true);
-                            const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ url: ytLink.url }),
-                            });
-                            const importResult = await importResponse.json();
-                            if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
+          {/* Completion chart with source buttons flanking */}
+          {(() => {
+            const tracksWeHave = sortedTracks.length;
+            const estimatedTotal = tracksWeHave + estimatedMissingTracks;
+            const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+            const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
 
-                            if (importResult.success && importResult.setList?.tracks?.length > 0) {
-                              await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  setId: setList.id,
-                                  tracks: importResult.setList.tracks,
-                                  source: 'youtube',
-                                  coverUrl: importResult.setList.coverUrl,
-                                }),
-                              });
-
-                              // Kick off Spotify enrichment (non-blocking)
-                              fetch(`${API_BASE_URL}/api/spotify-enrich`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
-                              }).catch(() => {});
-
-                              // Refresh set data
-                              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
-                              const refreshData = await refreshResponse.json();
-                              if (refreshData.success && refreshData.set) {
-                                setDbSet(transformApiSet(refreshData.set));
-                              }
-
-                              Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
-                            } else {
-                              Alert.alert('No Results', 'No tracks could be identified from this source');
-                            }
-                          } catch (error: any) {
-                            Alert.alert('Error', error.message || 'Failed to analyze');
-                          } finally {
-                            setAnalyzing(false);
-                          }
-                        }}
-                      >
-                        <Sparkles size={12} color="#FFF" />
-                        <Text style={styles.analyzeButtonText}>{analyzing ? 'Analyzing...' : 'Reanalyze'}</Text>
-                      </Pressable>
-                    </View>
-                  );
-                }
-
-                return (
+            return (
+              <RNAnimated.View style={[styles.statsSectionWrap, { transform: [{ scale: chartScale }] }]}>
+                <View style={styles.statsSection}>
+                  {/* YouTube — left of chart */}
                   <Pressable
-                    style={[styles.linkCard, styles.linkCardEmpty]}
+                    style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
-                      setSelectedPlatform('youtube');
-                      setShowSourceModal(true);
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      if (ytLink) {
+                        handleOpenSource(ytLink);
+                      } else {
+                        setSelectedPlatform('youtube');
+                        setShowSourceModal(true);
+                      }
                     }}
                   >
-                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Youtube size={16} color="rgba(255,255,255,0.4)" />
+                    <View style={styles.sourceChipShadow} />
+                    <View style={[styles.sourceChipFace, ytLink ? { borderColor: 'rgba(255, 0, 0, 0.15)' } : {}]}>
+                      <View style={styles.sourceChipShine} />
+                      <View style={[styles.sourceChipIcon, { backgroundColor: 'rgba(255, 0, 0, 0.12)' }]}>
+                        <Youtube size={14} color="#FF0000" />
+                      </View>
+                      <Text style={[styles.sourceChipLabel, { color: ytLink ? '#FF4444' : 'rgba(255,255,255,0.4)' }]}>
+                        {ytLink ? 'YouTube' : '+ YouTube'}
+                      </Text>
                     </View>
-                    <Text style={styles.linkPlatformEmpty}>Add YouTube</Text>
-                    <Plus size={14} color="#FFFFFF" style={styles.linkExternal} />
                   </Pressable>
-                );
-              })()}
 
-              {/* SoundCloud */}
-              {(() => {
-                const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
-
-                if (scLink) {
-                  return (
-                    <View style={styles.linkCardWrapper}>
-                      <Pressable
-                        style={[styles.linkCard, styles.linkCardFilled, { backgroundColor: 'rgba(255, 85, 0, 0.06)', borderColor: 'rgba(255, 85, 0, 0.15)' }]}
-                        onPress={() => handleOpenSource(scLink)}
-                      >
-                        <View style={[styles.linkIconContainer, { backgroundColor: 'rgba(255, 85, 0, 0.1)' }]}>
-                          <Music2 size={16} color="#FF5500" />
-                        </View>
-                        <Text style={[styles.linkPlatform, { color: '#E04D00' }]}>SoundCloud</Text>
-                        <ExternalLink size={12} color="#9C968E" style={styles.linkExternal} />
-                      </Pressable>
-                      <Pressable
-                        style={[styles.analyzeButton, { backgroundColor: 'rgba(255, 85, 0, 0.75)' }]}
-                        disabled={analyzing}
-                        onPress={async () => {
-                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                          try {
-                            setAnalyzing(true);
-                            const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ url: scLink.url }),
-                            });
-                            const importResult = await importResponse.json();
-                            if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
-
-                            if (importResult.success && importResult.setList?.tracks?.length > 0) {
-                              await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  setId: setList.id,
-                                  tracks: importResult.setList.tracks,
-                                  source: 'soundcloud',
-                                  coverUrl: importResult.setList.coverUrl,
-                                }),
-                              });
-
-                              // Kick off Spotify enrichment (non-blocking)
-                              fetch(`${API_BASE_URL}/api/spotify-enrich`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
-                              }).catch(() => {});
-
-                              // Refresh set data
-                              const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
-                              const refreshData = await refreshResponse.json();
-                              if (refreshData.success && refreshData.set) {
-                                setDbSet(transformApiSet(refreshData.set));
-                              }
-
-                              Alert.alert('Success', `trakd ${importResult.setList.tracks.length} tracks from this source`);
-                            } else {
-                              Alert.alert('No Results', 'No tracks could be identified from this source');
-                            }
-                          } catch (error: any) {
-                            Alert.alert('Error', error.message || 'Failed to analyze');
-                          } finally {
-                            setAnalyzing(false);
-                          }
-                        }}
-                      >
-                        <Sparkles size={12} color="#FFF" />
-                        <Text style={styles.analyzeButtonText}>{analyzing ? 'Analyzing...' : 'Reanalyze'}</Text>
-                      </Pressable>
-                    </View>
-                  );
-                }
-
-                return (
-                  <Pressable
-                    style={[styles.linkCard, styles.linkCardEmpty]}
+                  {/* Chart ring — center */}
+                  <IdentificationRing
+                    identified={tracksWeHave}
+                    total={estimatedTotal}
                     onPress={() => {
-                      setSelectedPlatform('soundcloud');
-                      setShowSourceModal(true);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                      setShowChartModal(true);
+                      RNAnimated.spring(chartModalAnim, {
+                        toValue: 1,
+                        damping: 15,
+                        stiffness: 150,
+                        mass: 0.8,
+                        useNativeDriver: true,
+                      }).start();
+                    }}
+                  />
+
+                  {/* SoundCloud — right of chart */}
+                  <Pressable
+                    style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
+                    onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      if (scLink) {
+                        handleOpenSource(scLink);
+                      } else {
+                        setSelectedPlatform('soundcloud');
+                        setShowSourceModal(true);
+                      }
                     }}
                   >
-                    <View style={[styles.linkIconContainer, styles.linkIconEmpty]}>
-                      <Music2 size={16} color="rgba(255,255,255,0.4)" />
+                    <View style={styles.sourceChipShadow} />
+                    <View style={[styles.sourceChipFace, scLink ? { borderColor: 'rgba(255, 85, 0, 0.15)' } : {}]}>
+                      <View style={styles.sourceChipShine} />
+                      <View style={[styles.sourceChipIcon, { backgroundColor: 'rgba(255, 85, 0, 0.12)' }]}>
+                        <Music2 size={14} color="#FF5500" />
+                      </View>
+                      <Text style={[styles.sourceChipLabel, { color: scLink ? '#FF7733' : 'rgba(255,255,255,0.4)' }]}>
+                        {scLink ? 'SoundCloud' : '+ SoundCloud'}
+                      </Text>
                     </View>
-                    <Text style={styles.linkPlatformEmpty}>Add SoundCloud</Text>
-                    <Plus size={14} color="#FFFFFF" style={styles.linkExternal} />
                   </Pressable>
-                );
-              })()}
-            </View>
-          </View>
-
-          <View style={styles.statsSection}>
-            <View style={styles.statCardOuter}>
-              <View style={styles.statCardShadow} />
-              <View style={styles.statCard}>
-                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
-                <View style={styles.statCardContent}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
-                    <Sparkles size={14} color="#00D4AA" />
-                  </View>
-                  <Text style={styles.statValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
-                  <Text style={styles.statLabel}>trakd</Text>
                 </View>
-              </View>
-            </View>
 
-            <View style={styles.statCardOuter}>
-              <View style={styles.statCardShadow} />
-              <View style={styles.statCard}>
-                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
-                <View style={styles.statCardContent}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
-                    <CheckCircle size={14} color="#22C55E" />
+                {/* Gold trakd badge — shown when both sources are linked */}
+                {ytLink && scLink && (
+                  <View style={styles.trakdBadge}>
+                    <Sparkles size={10} color="rgba(255, 210, 70, 0.9)" />
+                    <Text style={styles.trakdBadgeText}>trakd</Text>
                   </View>
-                  <Text style={styles.statValue}>{verifiedCount}</Text>
-                  <Text style={styles.statLabel}>Verified</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.statCardOuter}>
-              <View style={styles.statCardShadow} />
-              <View style={styles.statCard}>
-                <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
-                <View style={styles.statCardContent}>
-                  <View style={[styles.statIconContainer, { backgroundColor: 'rgba(139, 92, 246, 0.2)' }]}>
-                    <Users size={14} color="#8B5CF6" />
-                  </View>
-                  <Text style={styles.statValue}>{communityCount}</Text>
-                  <Text style={styles.statLabel}>Comm.</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Animated Identification Ring */}
-            {(() => {
-              const identifiedTracks = tracks.filter(t =>
-                t.verified && !t.isId && t.title?.toLowerCase() !== 'id'
-              );
-              const totalTracks = tracks.length;
-
-              return (
-                <View style={[styles.statCardOuter, { flex: 1.3, minWidth: 88 }]}>
-                  <View style={styles.statCardShadow} />
-                  <View style={styles.statCardWide}>
-                    <View style={[StyleSheet.absoluteFill, styles.statCardTint]} />
-                    <IdentificationRing
-                      identified={identifiedTracks.length}
-                      total={totalTracks}
-                    />
-                  </View>
-                </View>
-              );
-            })()}
-          </View>
-
-          {/* Estimated Missing Tracks Banner */}
-          {estimatedMissingTracks > 0 && (
-            <View style={styles.missingTracksBanner}>
-              <View style={styles.missingTracksIcon}>
-                <AlertCircle size={14} color="#FB923C" />
-              </View>
-              <Text style={styles.missingTracksText}>
-                ~{estimatedMissingTracks} track{estimatedMissingTracks !== 1 ? 's' : ''} estimated missing
-              </Text>
-              {unplacedTracks.length > 0 && (
-                <Text style={styles.missingTracksHint}>
-                  Drag from unplaced to fill
-                </Text>
-              )}
-            </View>
-          )}
+                )}
+              </RNAnimated.View>
+            );
+          })()}
 
           {setList.aiProcessed && (setList.commentsScraped || 0) > 0 && (
             <View style={styles.aiInfoBanner}>
@@ -1807,33 +1830,6 @@ export default function SetDetailScreen() {
             const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
             
             if (!showPlayer || !videoId) {
-              // Show "Play In App" button when player is hidden
-              if (ytLink && videoId) {
-                return (
-                  <Pressable
-                    style={styles.playInAppButton}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                      if (Platform.OS !== 'web') {
-                        // On native, open YouTube app/browser
-                        Linking.openURL(`https://www.youtube.com/watch?v=${videoId}`);
-                      } else {
-                        setShowPlayer(true);
-                        setPlayerMinimized(false);
-                      }
-                    }}
-                  >
-                    <View style={styles.playInAppIcon}>
-                      <Play size={20} color="#FFFFFF" fill="#FFFFFF" />
-                    </View>
-                    <View style={styles.playInAppInfo}>
-                      <Text style={styles.playInAppTitle}>Play Set</Text>
-                      <Text style={styles.playInAppSubtitle}>Listen while browsing tracklist</Text>
-                    </View>
-                    <Youtube size={20} color="#FF0000" />
-                  </Pressable>
-                );
-              }
               return null;
             }
             
@@ -1870,6 +1866,15 @@ export default function SetDetailScreen() {
             </View>
           )}
 
+        </View>
+        </View>
+          {/* Gradient transition dark → cream */}
+          <LinearGradient
+            colors={['rgba(40,40,44,1)', Colors.dark.background]}
+            style={styles.darkToCreamGradient}
+          />
+
+        <View style={styles.contentBottom}>
           <View style={styles.tracksSection}>
             <View style={styles.tracksSectionHeader}>
               <Text style={styles.sectionTitle}>Tracklist</Text>
@@ -1922,7 +1927,7 @@ export default function SetDetailScreen() {
                   const s = secs % 60;
                   return `${mins}:${s.toString().padStart(2, '0')}`;
                 };
-                const estimatedTracks = Math.max(1, Math.floor(item.duration / 210));
+                const estimatedTracks = Math.max(1, Math.floor(item.duration / avgTrackDur));
                 const isPickMode = !!pickedTrack;
 
                 return (
@@ -2016,14 +2021,10 @@ export default function SetDetailScreen() {
                   <View key={`ts-conflict-${item.timestamp}`} style={styles.timestampConflict}>
                     <View style={styles.timestampConflictHeader}>
                       <View style={styles.timestampConflictBadge}>
-                        <AlertCircle size={12} color="#FB923C" />
-                        <Text style={styles.timestampConflictBadgeText}>Vote: Which track plays here?</Text>
+                        <AlertCircle size={10} color="#FB923C" />
+                        <Text style={styles.timestampConflictBadgeText}>Which track at {formatTime(item.timestamp)}?</Text>
                       </View>
-                      <Text style={styles.timestampConflictTime}>~{formatTime(item.timestamp)}</Text>
                     </View>
-                    <Text style={styles.timestampConflictSubtext}>
-                      These tracks were identified at similar timestamps. Help us determine the correct order.
-                    </Text>
                     {item.tracks.map((track, trackIndex) => {
                       return (
                         <Pressable
@@ -2049,9 +2050,6 @@ export default function SetDetailScreen() {
                               {cleanTrackName(track.artist) || 'Unknown Artist'}
                             </Text>
                           </View>
-                          <Text style={styles.timestampConflictTrackTime}>
-                            {formatTime(track.timestamp || 0)}
-                          </Text>
                         </Pressable>
                       );
                     })}
@@ -2070,9 +2068,7 @@ export default function SetDetailScreen() {
                     showTimestamp
                     onPress={() => {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      // Show track detail modal
                       setSelectedTrack(track);
-                      // Store the timestamp for when user clicks play
                       if (track.timestamp !== undefined) {
                         setPendingTimestamp(track.timestamp);
                       }
@@ -2240,6 +2236,271 @@ export default function SetDetailScreen() {
         onAddNew={() => setShowAddModal(true)}
       />
 
+      {/* Chart Detail Modal */}
+      <Modal
+        visible={showChartModal}
+        transparent
+        animationType="none"
+        onRequestClose={() => {
+          RNAnimated.timing(chartModalAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+            setShowChartModal(false);
+          });
+        }}
+      >
+        <Pressable
+          style={styles.chartModalOverlay}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            RNAnimated.timing(chartModalAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+              setShowChartModal(false);
+            });
+          }}
+        >
+          <RNAnimated.View
+            style={[
+              styles.chartModalCard,
+              {
+                opacity: chartModalAnim,
+                transform: [{
+                  scale: chartModalAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.6, 1],
+                  }),
+                }],
+              },
+            ]}
+          >
+            {/* Big ring at the top */}
+            <View style={styles.chartModalRing}>
+              <IdentificationRing
+                identified={sortedTracks.length}
+                total={sortedTracks.length + estimatedMissingTracks}
+              />
+            </View>
+
+            <Text style={styles.chartModalTitle}>
+              {Math.round((sortedTracks.length / Math.max(sortedTracks.length + estimatedMissingTracks, 1)) * 100)}% Identified
+            </Text>
+            <Text style={styles.chartModalSubtitle}>
+              {sortedTracks.length} of ~{sortedTracks.length + estimatedMissingTracks} estimated tracks
+            </Text>
+
+            <View style={styles.chartModalDivider} />
+
+            <View style={styles.chartModalBadges}>
+              {/* Trakd Badge */}
+              <Pressable
+                style={styles.chartBadge3d}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setBadgeExplain({ type: 'trakd', count: setList.tracksIdentified || sortedTracks.length });
+                  badgeExplainAnim.setValue(0);
+                  RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
+                }}
+              >
+                <View style={styles.chartBadge3dShadow} />
+                <View style={[styles.chartBadge3dFace, { borderColor: 'rgba(0, 212, 170, 0.3)' }]}>
+                  <View style={styles.chartBadge3dShine} />
+                  <View style={[styles.chartBadge3dIcon, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
+                    <Sparkles size={14} color="#00D4AA" />
+                  </View>
+                  <Text style={styles.chartBadge3dValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
+                  <Text style={[styles.chartBadge3dLabel, { color: '#00D4AA' }]}>trakd</Text>
+                </View>
+              </Pressable>
+
+              {/* Verified Badge */}
+              <Pressable
+                style={styles.chartBadge3d}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setBadgeExplain({ type: 'verified', count: verifiedCount });
+                  badgeExplainAnim.setValue(0);
+                  RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
+                }}
+              >
+                <View style={styles.chartBadge3dShadow} />
+                <View style={[styles.chartBadge3dFace, { borderColor: 'rgba(34, 197, 94, 0.3)' }]}>
+                  <View style={styles.chartBadge3dShine} />
+                  <View style={[styles.chartBadge3dIcon, { backgroundColor: 'rgba(34, 197, 94, 0.2)' }]}>
+                    <CheckCircle size={14} color="#22C55E" />
+                  </View>
+                  <Text style={styles.chartBadge3dValue}>{verifiedCount}</Text>
+                  <Text style={[styles.chartBadge3dLabel, { color: '#22C55E' }]}>verified</Text>
+                </View>
+              </Pressable>
+
+              {/* Community Badge */}
+              <Pressable
+                style={styles.chartBadge3d}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setBadgeExplain({ type: 'community', count: communityCount });
+                  badgeExplainAnim.setValue(0);
+                  RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
+                }}
+              >
+                <View style={styles.chartBadge3dShadow} />
+                <View style={[styles.chartBadge3dFace, { borderColor: 'rgba(139, 92, 246, 0.3)' }]}>
+                  <View style={styles.chartBadge3dShine} />
+                  <View style={[styles.chartBadge3dIcon, { backgroundColor: 'rgba(139, 92, 246, 0.2)' }]}>
+                    <Users size={14} color="#8B5CF6" />
+                  </View>
+                  <Text style={styles.chartBadge3dValue}>{communityCount}</Text>
+                  <Text style={[styles.chartBadge3dLabel, { color: '#8B5CF6' }]}>community</Text>
+                </View>
+              </Pressable>
+            </View>
+
+            {estimatedMissingTracks > 0 && (
+              <Pressable
+                style={styles.chartModalMissing}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setBadgeExplain({ type: 'missing', count: estimatedMissingTracks });
+                  badgeExplainAnim.setValue(0);
+                  RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
+                }}
+              >
+                <AlertCircle size={12} color="#FB923C" />
+                <Text style={styles.chartModalMissingText}>~{estimatedMissingTracks} estimated missing</Text>
+              </Pressable>
+            )}
+
+            {/* Reanalyze button */}
+            {(() => {
+              const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+              const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
+              const analyzeLink = ytLink || scLink;
+              if (!analyzeLink) return null;
+              const analyzeSource = ytLink ? 'youtube' : 'soundcloud';
+              return (
+                <Pressable
+                  style={styles.chartModalReanalyze}
+                  disabled={analyzing}
+                  onPress={async () => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    try {
+                      setAnalyzing(true);
+                      const importResponse = await fetch(`${API_BASE_URL}/api/import`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: analyzeLink.url }),
+                      });
+                      const importResult = await importResponse.json();
+                      if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
+
+                      if (importResult.success && importResult.setList?.tracks?.length > 0) {
+                        await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            setId: setList.id,
+                            tracks: importResult.setList.tracks,
+                            source: analyzeSource,
+                            coverUrl: importResult.setList.coverUrl,
+                          }),
+                        });
+                        fetch(`${API_BASE_URL}/api/spotify-enrich`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
+                        }).catch(() => {});
+                        const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+                        const refreshData = await refreshResponse.json();
+                        if (refreshData.success && refreshData.set) {
+                          setDbSet(transformApiSet(refreshData.set));
+                        }
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                        setAnalyzeResult({ type: 'success', message: `trakd ${importResult.setList.tracks.length} new tracks`, trackCount: importResult.setList.tracks.length });
+                        analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
+                        analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                      } else {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                        setAnalyzeResult({ type: 'empty', message: 'Nothing new found' });
+                        analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                        analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                      }
+                      // Close the chart modal after analyzing
+                      RNAnimated.timing(chartModalAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+                        setShowChartModal(false);
+                      });
+                    } catch (error: any) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      setAnalyzeResult({ type: 'error', message: error.message || 'Failed to analyze' });
+                      analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                      analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                    } finally {
+                      setAnalyzing(false);
+                    }
+                  }}
+                >
+                  <Sparkles size={14} color="#C41E3A" />
+                  <Text style={styles.chartModalReanalyzeText}>{analyzing ? 'Analyzing...' : 'Reanalyze Set'}</Text>
+                </Pressable>
+              );
+            })()}
+
+            {/* Badge explanation overlay */}
+            {badgeExplain && (
+              <RNAnimated.View
+                style={[
+                  styles.badgeExplainCard,
+                  {
+                    opacity: badgeExplainAnim,
+                    transform: [{
+                      scale: badgeExplainAnim.interpolate({ inputRange: [0, 1], outputRange: [0.7, 1] }),
+                    }],
+                  },
+                ]}
+              >
+                <View style={[
+                  styles.badgeExplainIcon,
+                  {
+                    backgroundColor: badgeExplain.type === 'trakd' ? 'rgba(0,212,170,0.15)'
+                      : badgeExplain.type === 'verified' ? 'rgba(34,197,94,0.15)'
+                      : badgeExplain.type === 'community' ? 'rgba(139,92,246,0.15)'
+                      : 'rgba(251,146,60,0.15)',
+                  },
+                ]}>
+                  {badgeExplain.type === 'trakd' && <Sparkles size={20} color="#00D4AA" />}
+                  {badgeExplain.type === 'verified' && <CheckCircle size={20} color="#22C55E" />}
+                  {badgeExplain.type === 'community' && <Users size={20} color="#8B5CF6" />}
+                  {badgeExplain.type === 'missing' && <AlertCircle size={20} color="#FB923C" />}
+                </View>
+                <Text style={[
+                  styles.badgeExplainTitle,
+                  {
+                    color: badgeExplain.type === 'trakd' ? '#00D4AA'
+                      : badgeExplain.type === 'verified' ? '#22C55E'
+                      : badgeExplain.type === 'community' ? '#8B5CF6'
+                      : '#FB923C',
+                  },
+                ]}>
+                  {badgeExplain.type === 'trakd' ? 'Trakd' : badgeExplain.type === 'verified' ? 'Verified' : badgeExplain.type === 'community' ? 'Community' : 'Est. Missing'}
+                </Text>
+                <Text style={styles.badgeExplainDesc}>
+                  {badgeExplain.type === 'trakd' ? 'Total tracks identified in this set by all sources — AI, community, and database matches.'
+                    : badgeExplain.type === 'verified' ? 'Tracks confirmed by multiple sources or manually verified. High confidence these are correct.'
+                    : badgeExplain.type === 'community' ? 'Tracks contributed by users — submitted via comments, social shares, or manual additions.'
+                    : 'Based on gaps in the tracklist, we estimate there are tracks not yet identified. Help fill them in!'}
+                </Text>
+                <Pressable
+                  style={styles.badgeExplainClose}
+                  onPress={() => {
+                    RNAnimated.timing(badgeExplainAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+                      setBadgeExplain(null);
+                    });
+                  }}
+                >
+                  <Text style={styles.badgeExplainCloseText}>Got it</Text>
+                </Pressable>
+              </RNAnimated.View>
+            )}
+          </RNAnimated.View>
+        </Pressable>
+      </Modal>
+
       {/* Gap Menu — tapping a gap shows frosted glass track cards for each missing slot */}
       {gapMenuData !== null && (
         <Modal
@@ -2252,15 +2513,15 @@ export default function SetDetailScreen() {
             <View style={styles.gapMenuContent} onStartShouldSetResponder={() => true}>
               <View style={styles.gapMenuHeader}>
                 <Text style={styles.gapMenuTitle}>
-                  ~{Math.max(1, Math.round(gapMenuData.duration / 180))} Missing Track{Math.max(1, Math.round(gapMenuData.duration / 180)) !== 1 ? 's' : ''}
+                  ~{Math.max(1, Math.round(gapMenuData.duration / avgTrackDur))} Missing Track{Math.max(1, Math.round(gapMenuData.duration / avgTrackDur)) !== 1 ? 's' : ''}
                 </Text>
                 <Text style={styles.gapMenuSubtitle}>
                   {(() => { const m1 = Math.floor(gapMenuData.timestamp / 60); const s1 = Math.floor(gapMenuData.timestamp % 60); const end = gapMenuData.timestamp + gapMenuData.duration; const m2 = Math.floor(end / 60); const s2 = Math.floor(end % 60); return `${m1}:${s1.toString().padStart(2, '0')} — ${m2}:${s2.toString().padStart(2, '0')}`; })()}
                 </Text>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
-                {Array.from({ length: Math.max(1, Math.round(gapMenuData.duration / 180)) }, (_, i) => {
-                  const ts = Math.floor(gapMenuData.timestamp + (i * gapMenuData.duration) / Math.max(1, Math.round(gapMenuData.duration / 180)));
+                {Array.from({ length: Math.max(1, Math.round(gapMenuData.duration / avgTrackDur)) }, (_, i) => {
+                  const ts = Math.floor(gapMenuData.timestamp + (i * gapMenuData.duration) / Math.max(1, Math.round(gapMenuData.duration / avgTrackDur)));
                   const m = Math.floor(ts / 60);
                   const s = Math.floor(ts % 60);
                   const timeStr = `${m}:${s.toString().padStart(2, '0')}`;
@@ -2325,6 +2586,86 @@ export default function SetDetailScreen() {
         username={selectedContributor || ''}
         onClose={() => setSelectedContributor(null)}
       />
+
+      {/* Analyze Result Popup */}
+      {analyzeResult && (
+        <Modal
+          visible={true}
+          transparent
+          animationType="none"
+          onRequestClose={() => {
+            analyzePopupScale.value = withTiming(0, { duration: 150 });
+            analyzePopupOpacity.value = withTiming(0, { duration: 150 });
+            setTimeout(() => setAnalyzeResult(null), 160);
+          }}
+        >
+          <Pressable
+            style={styles.analyzePopupOverlay}
+            onPress={() => {
+              analyzePopupScale.value = withTiming(0, { duration: 150 });
+              analyzePopupOpacity.value = withTiming(0, { duration: 150 });
+              setTimeout(() => setAnalyzeResult(null), 160);
+            }}
+          >
+            <Animated.View
+              style={[
+                styles.analyzePopupContainer,
+                analyzeResult.type === 'success' && styles.analyzePopupSuccess,
+                analyzeResult.type === 'empty' && styles.analyzePopupEmpty,
+                analyzeResult.type === 'error' && styles.analyzePopupError,
+                useAnimatedStyle(() => ({
+                  transform: [{ scale: analyzePopupScale.value }],
+                  opacity: analyzePopupOpacity.value,
+                })),
+              ]}
+            >
+              {analyzeResult.type === 'success' ? (
+                <>
+                  <Animated.View
+                    style={[
+                      styles.analyzePopupIconRing,
+                      { borderColor: 'rgba(196, 30, 58, 0.4)' },
+                      useAnimatedStyle(() => ({
+                        transform: [{ scale: withDelay(200, withSpring(1.1, { damping: 8 })) }],
+                      })),
+                    ]}
+                  >
+                    <Sparkles size={28} color="#C41E3A" />
+                  </Animated.View>
+                  <Text style={styles.analyzePopupTitle}>Tracks Found!</Text>
+                  <Text style={styles.analyzePopupMessage}>{analyzeResult.message}</Text>
+                </>
+              ) : analyzeResult.type === 'empty' ? (
+                <>
+                  <View style={[styles.analyzePopupIconRing, { borderColor: 'rgba(156, 150, 142, 0.3)' }]}>
+                    <ListMusic size={28} color="#9C968E" />
+                  </View>
+                  <Text style={styles.analyzePopupTitle}>Nothing New</Text>
+                  <Text style={styles.analyzePopupMessage}>No new tracks could be identified from this source</Text>
+                </>
+              ) : (
+                <>
+                  <View style={[styles.analyzePopupIconRing, { borderColor: 'rgba(255, 107, 53, 0.3)' }]}>
+                    <AlertCircle size={28} color="#FF6B35" />
+                  </View>
+                  <Text style={styles.analyzePopupTitle}>Analysis Failed</Text>
+                  <Text style={styles.analyzePopupMessage}>{analyzeResult.message}</Text>
+                </>
+              )}
+              <Pressable
+                style={styles.analyzePopupDismiss}
+                onPress={() => {
+                  analyzePopupScale.value = withTiming(0, { duration: 150 });
+                  analyzePopupOpacity.value = withTiming(0, { duration: 150 });
+                  setTimeout(() => setAnalyzeResult(null), 160);
+                }}
+              >
+                <Text style={styles.analyzePopupDismissText}>OK</Text>
+              </Pressable>
+            </Animated.View>
+          </Pressable>
+        </Modal>
+      )}
 
       <AddSourceModal
         visible={showSourceModal}
@@ -2541,9 +2882,19 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  darkZone: {
+    backgroundColor: 'rgba(40,40,44,1)',
+  },
+  darkToCreamGradient: {
+    height: 40,
+    marginTop: -1,
+  },
   content: {
     paddingHorizontal: 20,
     marginTop: -240,
+  },
+  contentBottom: {
+    paddingHorizontal: 20,
   },
   titleSection: {
     marginBottom: 24,
@@ -2584,6 +2935,10 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#FFFFFF',
     lineHeight: 30,
+  },
+  titleActions: {
+    alignItems: 'center',
+    gap: 10,
   },
   saveButton: {
     width: 44,
@@ -2660,16 +3015,16 @@ const styles = StyleSheet.create({
   linkCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    backgroundColor: 'rgba(255, 255, 255, 0.12)',
     paddingHorizontal: 10,
     paddingVertical: 8,
     borderRadius: 10,
     gap: 8,
     flex: 1,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    borderTopColor: 'rgba(255,255,255,1)',
-    borderBottomColor: 'rgba(232,226,217,0.5)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.25)',
+    borderBottomColor: 'rgba(0,0,0,0.15)',
   },
   linkCardFilled: {
     borderWidth: 1,
@@ -2677,7 +3032,7 @@ const styles = StyleSheet.create({
   },
   linkCardEmpty: {
     borderWidth: 1,
-    borderColor: '#E8E2D9',
+    borderColor: 'rgba(255,255,255,0.2)',
     borderStyle: 'dashed',
   },
   linkIconContainer: {
@@ -2696,7 +3051,7 @@ const styles = StyleSheet.create({
   linkPlatform: {
     fontSize: 12,
     fontWeight: '600' as const,
-    color: '#2D2A26',
+    color: 'rgba(255,255,255,0.85)',
   },
   linkPlatformEmpty: {
     fontSize: 12,
@@ -2797,76 +3152,134 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
   },
+  statsSectionWrap: {
+    marginBottom: 12,
+    alignItems: 'center',
+  },
   statsSection: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 16,
-  },
-  statCardOuter: {
-    flex: 1,
-    position: 'relative',
-  },
-  statCardShadow: {
-    position: 'absolute',
-    top: 3,
-    left: 2,
-    right: 2,
-    bottom: -1,
-    borderRadius: 10,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-  },
-  statCard: {
-    borderRadius: 10,
     alignItems: 'center',
-    overflow: 'hidden',
-    backgroundColor: 'rgba(15, 15, 15, 0.88)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderTopColor: 'rgba(255,255,255,0.28)',
-    borderBottomColor: 'rgba(0,0,0,0.3)',
-  },
-  statCardTint: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-  },
-  statCardContent: {
-    padding: 8,
-    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
     width: '100%',
   },
-  statIconContainer: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+  sourceChip: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  sourceChipShadow: {
+    position: 'absolute',
+    bottom: -2,
+    left: 4,
+    right: 4,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  sourceChipFace: {
+    width: '100%',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(0,0,0,0.15)',
+    overflow: 'hidden',
+  },
+  sourceChipShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  sourceChipIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
   },
-  statValue: {
-    fontSize: 15,
+  sourceChipLabel: {
+    fontSize: 10,
     fontWeight: '700' as const,
-    color: '#FFFFFF',
-    marginBottom: 1,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    letterSpacing: 0.3,
   },
-  statLabel: {
-    fontSize: 8,
-    color: 'rgba(255,255,255,0.7)',
-    textTransform: 'uppercase',
-    letterSpacing: 0.2,
-    textShadowColor: 'rgba(0,0,0,0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  statCardWide: {
+  trakdBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
     borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(15, 15, 15, 0.88)',
+    backgroundColor: 'rgba(255, 200, 50, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderTopColor: 'rgba(255,255,255,0.28)',
-    borderBottomColor: 'rgba(0,0,0,0.3)',
+    borderColor: 'rgba(255, 200, 50, 0.2)',
+    borderTopColor: 'rgba(255, 215, 80, 0.3)',
+    borderBottomColor: 'rgba(180, 140, 20, 0.15)',
+    alignSelf: 'center',
+  },
+  trakdBadgeText: {
+    fontSize: 9,
+    fontWeight: '800' as const,
+    color: 'rgba(255, 210, 70, 0.85)',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  statsBadgeColumn: {
+    gap: 4,
+  },
+  statBadgeMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 7,
+  },
+  statBadgeMiniIcon: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statBadgeMiniValue: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  statBadgeMiniLabel: {
+    fontSize: 7,
+    color: 'rgba(255,255,255,0.45)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  statsPlayButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 0, 0, 0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#FF0000',
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 4,
+  },
+  missingTracksChip: {
+    marginLeft: 4,
+    padding: 2,
   },
   // Missing tracks banner
   missingTracksBanner: {
@@ -2895,32 +3308,43 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#FB923C',
   },
+  missingTracksInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 2,
+  },
+  missingTracksInlineText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#FB923C',
+  },
   missingTracksHint: {
     fontSize: 11,
     color: '#9C968E',
   },
-  // Timestamp conflict styles
+  // Timestamp conflict styles — compact inline vote
   timestampConflict: {
-    backgroundColor: 'rgba(251, 146, 60, 0.08)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
+    backgroundColor: 'rgba(251, 146, 60, 0.06)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 6,
     borderWidth: 1,
-    borderColor: 'rgba(251, 146, 60, 0.2)',
+    borderColor: 'rgba(251, 146, 60, 0.15)',
   },
   timestampConflictHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     marginBottom: 6,
   },
   timestampConflictBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   timestampConflictBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600' as const,
     color: '#FB923C',
   },
@@ -2940,17 +3364,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderRadius: 10,
-    padding: 10,
-    marginBottom: 6,
-    gap: 10,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 7,
+    marginBottom: 4,
+    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.9)',
   },
   timestampConflictVoteBtn: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: 'rgba(251, 146, 60, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -2958,7 +3383,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(251, 146, 60, 0.3)',
   },
   timestampConflictVoteBtnText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: '700' as const,
     color: '#FB923C',
   },
@@ -2966,14 +3391,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   timestampConflictTrackTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: '#2D2A26',
   },
   timestampConflictTrackArtist: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#6B6560',
-    marginTop: 1,
   },
   timestampConflictTrackTime: {
     fontSize: 11,
@@ -3022,9 +3446,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(10, 10, 10, 0.55)',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12,
     gap: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
@@ -3036,9 +3461,9 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   playInAppIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: 'rgba(255, 0, 0, 0.8)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3053,14 +3478,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   playInAppTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
   },
   playInAppSubtitle: {
-    fontSize: 12,
+    fontSize: 10,
     color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
+    marginTop: 1,
   },
   aiInfoText: {
     flex: 1,
@@ -3332,19 +3757,20 @@ const styles = StyleSheet.create({
   // Needs Source Banner styles
   needsSourceBanner: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     backgroundColor: 'rgba(255, 107, 53, 0.1)',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 20,
-    gap: 12,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 16,
+    gap: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 53, 0.25)',
   },
   needsSourceIconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3353,15 +3779,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   needsSourceTitle: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600' as const,
     color: '#FF6B35',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   needsSourceText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#6B6560',
-    lineHeight: 18,
+    lineHeight: 15,
   },
   // Pick-and-place styles
   unplacedTrackCard: {
@@ -3565,5 +3991,274 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(196, 30, 58, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  chartModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chartModalCard: {
+    width: 260,
+    backgroundColor: 'rgba(30, 30, 34, 0.95)',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    shadowColor: '#C41E3A',
+    shadowOpacity: 0.3,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 20,
+  },
+  chartModalRing: {
+    marginBottom: 16,
+    transform: [{ scale: 1.4 }],
+  },
+  chartModalTitle: {
+    fontSize: 22,
+    fontWeight: '800' as const,
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  chartModalSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.5)',
+    marginBottom: 16,
+  },
+  chartModalDivider: {
+    width: '80%',
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    marginBottom: 16,
+  },
+  chartModalBadges: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 12,
+    marginBottom: 14,
+  },
+  chartBadge3d: {
+    alignItems: 'center',
+    width: 68,
+  },
+  chartBadge3dShadow: {
+    position: 'absolute',
+    bottom: -3,
+    left: 4,
+    right: 4,
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  chartBadge3dFace: {
+    width: 68,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(45, 45, 50, 0.95)',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
+    overflow: 'hidden',
+  },
+  chartBadge3dShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  chartBadge3dIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  chartBadge3dValue: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  chartBadge3dLabel: {
+    fontSize: 9,
+    fontWeight: '600' as const,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  chartModalMissing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(251, 146, 60, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(251, 146, 60, 0.2)',
+  },
+  chartModalMissingText: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    color: '#FB923C',
+  },
+  chartModalReanalyze: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    width: '100%',
+  },
+  chartModalReanalyzeText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+    color: '#C41E3A',
+  },
+  badgeExplainCard: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(25, 25, 28, 0.97)',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeExplainIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  badgeExplainTitle: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    marginBottom: 8,
+  },
+  badgeExplainDesc: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.6)',
+    textAlign: 'center',
+    lineHeight: 19,
+    marginBottom: 20,
+  },
+  badgeExplainClose: {
+    paddingVertical: 8,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  badgeExplainCloseText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  reanalyzeBox: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reanalyzeBoxText: {
+    fontSize: 10,
+    fontWeight: '600' as const,
+    color: '#9C968E',
+  },
+  analyzePopupOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  analyzePopupContainer: {
+    width: 280,
+    borderRadius: 20,
+    backgroundColor: 'rgba(20, 20, 20, 0.95)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  analyzePopupSuccess: {
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderTopColor: 'rgba(196, 30, 58, 0.35)',
+    shadowColor: '#C41E3A',
+    shadowOpacity: 0.3,
+  },
+  analyzePopupEmpty: {
+    borderColor: 'rgba(156, 150, 142, 0.15)',
+  },
+  analyzePopupError: {
+    borderColor: 'rgba(255, 107, 53, 0.2)',
+  },
+  analyzePopupIconRing: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    borderWidth: 2,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  analyzePopupTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: '#F5E6D3',
+    marginBottom: 6,
+  },
+  analyzePopupMessage: {
+    fontSize: 13,
+    color: '#9C968E',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  analyzePopupDismiss: {
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+  },
+  analyzePopupDismissText: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: '#F5E6D3',
   },
 });

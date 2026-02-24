@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -197,12 +197,12 @@ export default function ProfileScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.headerBar}>
             <View style={styles.headerSpacer} />
-            <TrackdLogo size="medium" />
+            <BubbleGlassLogo size="medium" />
             <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
-              <TrackdLogo size="xlarge" />
+              <BubbleGlassLogo size="xlarge" />
             </View>
             <Text style={styles.loginPromptTitle}>Join the community</Text>
             <Text style={styles.loginPromptText}>
@@ -246,7 +246,7 @@ export default function ProfileScreen() {
         {/* ── Header ── */}
         <View style={styles.headerBar}>
           <View style={styles.headerSpacer} />
-          <TrackdLogo size="medium" />
+          <BubbleGlassLogo size="medium" />
           <Pressable
             style={styles.settingsButton}
             onPress={() => {
@@ -255,7 +255,7 @@ export default function ProfileScreen() {
             }}
           >
             <BlurView intensity={20} tint="light" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.4)' }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255,255,255,0.06)' }]} />
             <Settings size={20} color={Colors.dark.text} />
           </Pressable>
         </View>
@@ -461,7 +461,7 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F0EDE8',
+    backgroundColor: '#F5F0E8',
   },
   safeArea: {
     flex: 1,
@@ -523,7 +523,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -555,29 +557,37 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   loginButton: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
     paddingVertical: 14,
     paddingHorizontal: 48,
     borderRadius: 16,
     marginTop: 8,
     width: '100%',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderTopColor: 'rgba(196, 30, 58, 0.35)',
   },
   loginButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: '#C41E3A',
   },
   signupButton: {
     paddingVertical: 14,
     paddingHorizontal: 48,
     width: '100%',
     alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
   },
   signupButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.dark.primary,
+    color: '#F5E6D3',
   },
 
   scrollContent: {
@@ -672,16 +682,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
-    borderTopColor: 'rgba(255,255,255,0.7)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
     shadowRadius: 8,
     elevation: 3,
   },
   followPillTint: {
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
   },
   followPillLightEdge: {
     position: 'absolute',
@@ -689,7 +701,7 @@ const styles = StyleSheet.create({
     left: 8,
     right: 8,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 1,
     zIndex: 2,
   },
@@ -727,11 +739,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
     elevation: 2,
   },
   genreTagPressed: {
@@ -758,13 +772,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.45)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
   },
   statPillActive: {
-    borderColor: 'rgba(196, 30, 58, 0.3)',
-    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
   },
   statValue: {
     fontSize: 14,
@@ -806,7 +821,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.5)',
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
   },
   clearFilterText: {
     fontSize: 12,

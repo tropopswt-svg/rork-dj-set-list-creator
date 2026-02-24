@@ -492,7 +492,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#F5F0E8',
   },
   safeArea: {
     flex: 1,

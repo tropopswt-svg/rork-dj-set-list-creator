@@ -15,7 +15,7 @@ import { useRouter, Link } from 'expo-router';
 import { Mail, Lock, Eye, EyeOff, User, AtSign } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function SignupScreen() {
@@ -116,7 +116,7 @@ export default function SignupScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <TrackdLogo size="large" />
+          <BubbleGlassLogo size="large" />
           <Text style={styles.subtitle}>Create your account</Text>
         </View>
 

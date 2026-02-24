@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import AnimatedSetCard, { CARD_HEIGHT } from '@/components/AnimatedSetCard';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import ImportSetModal from '@/components/ImportSetModal';
 import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
@@ -918,7 +918,7 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={Colors.dark.primary} />
             )}
           </Pressable>
-          <TrackdLogo />
+          <BubbleGlassLogo />
           <View style={styles.headerSpacer} />
         </View>
 

@@ -29,7 +29,7 @@ import {
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
-import TrackdLogo from '@/components/TrackdLogo';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCoverImageUrl } from '@/utils/coverImage';
 import { useSavedSets, useLikedSets, useContributions } from '@/hooks/useSocial';
@@ -166,14 +166,14 @@ function GlassStatCard({
 }) {
   return (
     <PressableCard style={styles.glassStatCard}>
-      <BlurView intensity={60} tint="light" style={styles.glassStatBlur}>
+      <BlurView intensity={50} tint="light" style={styles.glassStatBlur}>
         {/* Top refraction edge */}
         <View style={styles.glassStatEdgeTop} />
         <View style={styles.glassStatInner}>
           <View style={[styles.glassStatIcon, { backgroundColor: `${color}15` }]}>
             <Icon size={18} color={color} />
           </View>
-          <AnimatedCounter value={value} color={Colors.dark.text} />
+          <AnimatedCounter value={value} color="#1A1A1E" />
           <Text style={styles.glassStatLabel}>{label}</Text>
         </View>
         {/* Bottom refraction */}
@@ -366,7 +366,7 @@ function CrateStack({
 
       {/* Collapsed crate preview — liquid glass */}
       <PressableCard style={styles.crateStack} onPress={openCrate}>
-        <BlurView intensity={60} tint="light" style={styles.crateStackGlass}>
+        <BlurView intensity={50} tint="light" style={styles.crateStackGlass}>
           {/* Glass refraction edges */}
           <View style={styles.crateGlassEdgeTop} />
           <View style={styles.crateGlassEdgeBottom} />
@@ -640,7 +640,7 @@ function ActivitySparkline({ contributions }: { contributions: any[] }) {
       />
 
       {/* Glass container */}
-      <BlurView intensity={65} tint="light" style={styles.sparklineGlass}>
+      <BlurView intensity={50} tint="light" style={styles.sparklineGlass}>
         {/* Inner refraction edge — top highlight */}
         <View style={styles.sparklineEdgeTop} />
         {/* Inner refraction edge — bottom subtle */}
@@ -993,7 +993,7 @@ function IdentifiedTrackCard({
         {/* Set name — prominent */}
         {contribution.set && (
           <View style={styles.trackSetRow}>
-            <Disc size={11} color={Colors.dark.textMuted} />
+            <Disc size={11} color="rgba(0,0,0,0.35)" />
             <Text style={styles.trackSetName} numberOfLines={1}>
               {contribution.set.name}
             </Text>
@@ -1017,7 +1017,7 @@ function SavedSetCard({
 
   return (
     <PressableCard style={styles.savedSetCard} onPress={onPress}>
-      <BlurView intensity={55} tint="light" style={styles.savedSetGlass}>
+      <BlurView intensity={50} tint="light" style={styles.savedSetGlass}>
         <View style={styles.savedSetGlassEdge} />
         <Image
           source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
@@ -1037,7 +1037,7 @@ function SavedSetCard({
             {formatTimeAgo(savedSet.created_at)}
           </Text>
         </View>
-        <ChevronRight size={18} color={Colors.dark.textMuted} />
+        <ChevronRight size={18} color="rgba(0,0,0,0.35)" />
       </BlurView>
     </PressableCard>
   );
@@ -1134,12 +1134,12 @@ export default function MyStuffScreen() {
         <SafeAreaView style={styles.safeArea} edges={['top']}>
           <View style={styles.header}>
             <View style={styles.headerSpacer} />
-            <TrackdLogo size="medium" />
+            <BubbleGlassLogo size="medium" />
             <View style={styles.headerSpacer} />
           </View>
           <View style={styles.loginPromptContainer}>
             <View style={styles.loginLogoWrapper}>
-              <TrackdLogo size="xlarge" />
+              <BubbleGlassLogo size="xlarge" />
             </View>
             <Text style={styles.loginPromptTitle}>Your personal crate</Text>
             <Text style={styles.loginPromptText}>
@@ -1178,8 +1178,8 @@ export default function MyStuffScreen() {
               router.push('/(tabs)/(profile)');
             }}
           >
-            <BlurView intensity={55} tint="light" style={styles.headerButtonGlass}>
-              <User size={20} color={Colors.dark.text} />
+            <BlurView intensity={50} tint="light" style={styles.headerButtonGlass}>
+              <User size={20} color="#1A1A1E" />
             </BlurView>
           </Pressable>
         </View>
@@ -1232,7 +1232,7 @@ export default function MyStuffScreen() {
               />
             ) : identifiedTracks.length === 0 ? (
               <View style={styles.emptySection}>
-                <Music size={28} color={Colors.dark.textMuted} />
+                <Music size={28} color="rgba(0,0,0,0.35)" />
                 <Text style={styles.emptyTitle}>No identified tracks yet</Text>
                 <Text style={styles.emptyText}>
                   Contribute track IDs to sets to build your collection
@@ -1289,7 +1289,7 @@ export default function MyStuffScreen() {
               />
             ) : likedSets.length === 0 ? (
               <View style={styles.emptySection}>
-                <Heart size={28} color={Colors.dark.textMuted} />
+                <Heart size={28} color="rgba(0,0,0,0.35)" />
                 <Text style={styles.emptyTitle}>No liked sets</Text>
                 <Text style={styles.emptyText}>
                   Like sets to show your appreciation
@@ -1332,7 +1332,7 @@ export default function MyStuffScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: '#F5F0E8',
   },
   safeArea: {
     flex: 1,
@@ -1351,7 +1351,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     letterSpacing: -0.3,
   },
   headerButton: {
@@ -1372,8 +1372,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.75)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
   },
   scrollView: {
     flex: 1,
@@ -1396,35 +1398,43 @@ const styles = StyleSheet.create({
   loginPromptTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     marginTop: 8,
   },
   loginPromptText: {
     fontSize: 14,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     textAlign: 'center',
     lineHeight: 20,
   },
   loginButton: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.12)',
     paddingVertical: 14,
     paddingHorizontal: 48,
-    borderRadius: 12,
+    borderRadius: 16,
     marginTop: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderTopColor: 'rgba(196, 30, 58, 0.35)',
   },
   loginButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#fff',
+    color: '#C41E3A',
   },
   signupButton: {
     paddingVertical: 14,
     paddingHorizontal: 48,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
   },
   signupButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: Colors.dark.primary,
+    color: '#F5E6D3',
   },
 
   // ─── Glass Stat Cards (Liquid Glass) ───
@@ -1449,9 +1459,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 14,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     position: 'relative',
   },
   glassStatEdgeTop: {
@@ -1459,8 +1470,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    height: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
@@ -1470,7 +1481,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.08)',
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
   },
@@ -1485,7 +1496,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   statValue: {
     fontSize: 24,
@@ -1495,7 +1506,7 @@ const styles = StyleSheet.create({
   glassStatLabel: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     marginTop: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -1514,20 +1525,21 @@ const styles = StyleSheet.create({
     bottom: -4,
     borderRadius: 28,
     backgroundColor: 'transparent',
-    shadowColor: 'rgba(255,255,255,1)',
+    shadowColor: 'rgba(255,255,255,0.6)',
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.7,
-    shadowRadius: 24,
+    shadowOpacity: 0.4,
+    shadowRadius: 18,
     elevation: 0,
   },
   sparklineGlass: {
     borderRadius: 24,
     padding: 18,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    shadowColor: 'rgba(0,0,0,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    shadowColor: 'rgba(0,0,0,0.12)',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 1,
     shadowRadius: 28,
@@ -1538,8 +1550,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    height: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
   },
@@ -1549,7 +1561,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1.5,
-    backgroundColor: 'rgba(0,0,0,0.07)',
+    backgroundColor: 'rgba(0,0,0,0.08)',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
@@ -1559,7 +1571,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 80,
     height: '100%',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     transform: [{ skewX: '-20deg' }],
   },
   sparklineHeader: {
@@ -1576,7 +1588,7 @@ const styles = StyleSheet.create({
   sparklineTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
   },
   sparklineStat: {
     flexDirection: 'row',
@@ -1591,7 +1603,7 @@ const styles = StyleSheet.create({
   },
   sparklineStatLabel: {
     fontSize: 11,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     fontWeight: '500',
   },
   sparklineSvg: {
@@ -1607,11 +1619,11 @@ const styles = StyleSheet.create({
   },
   sparklineDayLabel: {
     fontSize: 11,
-    color: 'rgba(0,0,0,0.3)',
+    color: 'rgba(0,0,0,0.25)',
     fontWeight: '600',
   },
   sparklineDayLabelActive: {
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     fontWeight: '700',
   },
 
@@ -1628,12 +1640,12 @@ const styles = StyleSheet.create({
   crateTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     flex: 1,
   },
   crateCount: {
     fontSize: 13,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     fontWeight: '500',
   },
   crateStack: {
@@ -1649,9 +1661,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     padding: 18,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     position: 'relative',
   },
   crateGlassEdgeTop: {
@@ -1659,8 +1672,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    height: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     zIndex: 2,
@@ -1671,7 +1684,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1.5,
-    backgroundColor: 'rgba(0,0,0,0.07)',
+    backgroundColor: 'rgba(0,0,0,0.08)',
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
     zIndex: 2,
@@ -1710,11 +1723,11 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     marginTop: -6,
     marginLeft: -6,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.4)',
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   crateInfo: {
     flex: 1,
@@ -1724,7 +1737,7 @@ const styles = StyleSheet.create({
   crateInfoTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     marginBottom: 4,
   },
   crateInfoSub: {
@@ -1737,14 +1750,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
     alignSelf: 'flex-start',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    shadowColor: 'rgba(0,0,0,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: 'rgba(0,0,0,0.1)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 6,
@@ -1874,10 +1888,11 @@ const styles = StyleSheet.create({
   crateModalClose: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(139,99,50,0.2)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
   },
   crateModalCloseText: {
     fontSize: 14,
@@ -1964,16 +1979,17 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
   },
   sectionCountPill: {
-    backgroundColor: 'rgba(255,255,255,0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    shadowColor: 'rgba(0,0,0,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: 'rgba(0,0,0,0.08)',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 1,
     shadowRadius: 4,
@@ -1992,11 +2008,12 @@ const styles = StyleSheet.create({
     paddingVertical: 28,
     paddingHorizontal: 32,
     marginHorizontal: 16,
-    backgroundColor: 'rgba(255,255,255,0.5)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 22,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    shadowColor: 'rgba(0,0,0,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    shadowColor: 'rgba(0,0,0,0.1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 12,
@@ -2005,13 +2022,13 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     marginTop: 10,
     marginBottom: 4,
   },
   emptyText: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -2024,11 +2041,12 @@ const styles = StyleSheet.create({
   },
   trackCard: {
     width: 164,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     borderRadius: 22,
     padding: 16,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
     shadowColor: 'rgba(0,0,0,0.12)',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 1,
@@ -2063,7 +2081,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 60,
     height: '100%',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     transform: [{ skewX: '-20deg' }],
   },
   trackCardTop: {
@@ -2089,7 +2107,7 @@ const styles = StyleSheet.create({
   trackTimeDivider: {
     width: 1,
     height: 10,
-    backgroundColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   // Waveform bars
   waveformContainer: {
@@ -2106,7 +2124,7 @@ const styles = StyleSheet.create({
   trackTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     marginBottom: 2,
     lineHeight: 20,
     letterSpacing: -0.3,
@@ -2124,25 +2142,26 @@ const styles = StyleSheet.create({
   trackSetName: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.45)',
     flex: 1,
   },
   trackDate: {
     fontSize: 10,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.35)',
     fontWeight: '500',
   },
   seeAllCard: {
     width: 80,
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 22,
     padding: 12,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowColor: 'rgba(0,0,0,0.1)',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 1,
     shadowRadius: 10,
@@ -2174,9 +2193,10 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 12,
     overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.8)',
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     position: 'relative',
   },
   savedSetGlassEdge: {
@@ -2184,8 +2204,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.9)',
+    height: 1.5,
+    backgroundColor: 'rgba(255,255,255,0.6)',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
@@ -2194,7 +2214,7 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
+    borderColor: 'rgba(255,255,255,0.4)',
   },
   savedSetInfo: {
     flex: 1,
@@ -2203,7 +2223,7 @@ const styles = StyleSheet.create({
   savedSetName: {
     fontSize: 15,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#1A1A1E',
     marginBottom: 2,
   },
   savedSetArtist: {
@@ -2214,7 +2234,7 @@ const styles = StyleSheet.create({
   },
   savedSetDate: {
     fontSize: 11,
-    color: Colors.dark.textMuted,
+    color: 'rgba(0,0,0,0.35)',
   },
   seeAllButton: {
     flexDirection: 'row',

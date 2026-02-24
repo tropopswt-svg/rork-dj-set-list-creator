@@ -81,11 +81,16 @@ function isValidTrackPart(str: string): boolean {
     /^(amazing|incredible|insane|crazy|unreal)$/i,
     /starting\s+at/i,
     /\d{4}$/,  // Ends with a year (likely a comment about an event)
+    /^\w*\s*\d{1,2}[/\-]\d{1,2}\s*$/,  // Date patterns like "Stussy 11/10", "EDC 01-20" (event refs)
     /^(set|mix|live|vibes?|tune|song|track)$/i,  // Single generic music words
     /^(man|bro|mate|dude|lol|omg|wow)$/i,        // Reactions/filler
     /^(yes|no|yeah|nah|yep|nope)$/i,             // Affirmatives
     /^(here|there|now|then|just|only)$/i,         // Adverbs alone
     /^\d+$/,                                       // Pure numbers
+    // Sentence-like text (comment garbage, not track names)
+    /\.\s+[A-Z]/,                                  // Period followed by capital letter (mid-sentence)
+    /^(and it|but it|there have|there are|there is)\s/i, // Starts with sentence openers
+    /\b(plenty of|hundreds of|time for|from many)\b/i,   // Multi-word sentence fragments
   ];
 
   for (const pattern of invalidPatterns) {
@@ -148,6 +153,11 @@ function parseTrackInfo(text: string): { title: string; artist: string; isUnrele
 
   for (const pattern of reactionPatterns) {
     if (pattern.test(cleaned)) return null;
+  }
+
+  // Reject short text with date patterns (event references like "Stussy 11/10", "EDC 01-20")
+  if (/\b\d{1,2}[/\-]\d{1,2}\b/.test(cleaned) && cleaned.split(/\s+/).length <= 3) {
+    return null;
   }
 
   // Reject ID/unknown tracks

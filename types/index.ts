@@ -34,7 +34,8 @@ export interface Track {
   featuredIn?: FeaturedInSet[];
   // Multi-source identification
   sources?: TrackSource[];
-  confidence?: number; // 0-1 confidence score
+  confidence?: number; // 0-1 internal confidence score (not user-facing)
+  trackStatus?: 'released' | 'unreleased' | 'id'; // Public 3-state status
   // Spotify enrichment
   previewUrl?: string;        // 30-second Spotify preview MP3
   isrc?: string;              // International Standard Recording Code

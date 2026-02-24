@@ -286,14 +286,14 @@ export default function TabLayout() {
         options={{
           title: '',
           tabBarLabel: () => null,
-          tabBarItemStyle: { overflow: 'visible' },
+          tabBarItemStyle: { overflow: 'visible', justifyContent: 'center', alignItems: 'center' },
           tabBarIcon: ({ focused }) => (
             <Text style={{
               color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
-              fontSize: 16,
+              fontSize: 20,
               fontWeight: '900',
               letterSpacing: -0.5,
-              marginTop: 6,
+              marginTop: 10,
             }}>
               trakd
             </Text>

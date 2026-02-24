@@ -6,7 +6,7 @@ export default function SocialLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: Colors.dark.background },
+        contentStyle: { backgroundColor: '#F5F0E8' },
       }}
     />
   );
