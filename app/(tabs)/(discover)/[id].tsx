@@ -1500,7 +1500,7 @@ export default function SetDetailScreen() {
     <View style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      <ScrollView
+      <RNAnimated.ScrollView
         ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -2213,7 +2213,7 @@ export default function SetDetailScreen() {
 
           {id && <CommentsSection setId={id} />}
         </View>
-      </ScrollView>
+      </RNAnimated.ScrollView>
 
       {/* Floating banner when a track is picked for placement */}
       {pickedTrack && (

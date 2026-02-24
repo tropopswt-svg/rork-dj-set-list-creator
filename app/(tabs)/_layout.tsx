@@ -323,9 +323,9 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => (
             <Text style={{
               color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
-              fontSize: 20,
+              fontSize: 15,
               fontWeight: '900',
-              letterSpacing: -0.5,
+              letterSpacing: -0.3,
               marginTop: 10,
             }}>
               trakd
