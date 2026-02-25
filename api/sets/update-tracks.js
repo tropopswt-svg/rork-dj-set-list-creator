@@ -134,6 +134,7 @@ export default async function handler(req, res) {
         if (timestamp > 0) {
           updateData.timestamp_seconds = timestamp;
           updateData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
+          updateData.is_timed = true;
           updatedCount++;
         } else {
           confirmedCount++;
@@ -175,6 +176,7 @@ export default async function handler(req, res) {
             timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
             source: source || 'youtube',
             is_id: false,
+            is_timed: true,
           };
           if (scrapedUnreleased) {
             insertData.is_unreleased = true;

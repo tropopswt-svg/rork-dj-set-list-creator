@@ -2410,7 +2410,10 @@ export default function SetDetailScreen() {
                           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                           analyzePopupScale.value = 0;
                           analyzePopupOpacity.value = 0;
-                          setAnalyzeResult({ type: 'success', message: `trakd ${importResult.setList.tracks.length} new tracks`, trackCount: importResult.setList.tracks.length });
+                          const timedCount = importResult.setList?.timedTracksCount || importResult.setList?.tracks?.filter((t: any) => t.timestamp > 0).length || 0;
+                          const totalCount = importResult.setList.tracks.length;
+                          const msg = timedCount > 0 ? `trakd ${totalCount} tracks (${timedCount} timestamped)` : `trakd ${totalCount} tracks`;
+                          setAnalyzeResult({ type: 'success', message: msg, trackCount: totalCount });
                           analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
                           analyzePopupOpacity.value = withTiming(1, { duration: 200 });
                         }, 250);

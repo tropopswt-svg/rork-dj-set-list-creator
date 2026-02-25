@@ -2269,6 +2269,7 @@ async function importFromYouTube(url, apiKey) {
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
+      timestampFormatted: pt.timestampFormatted || '',
       verified: false,
       contributedBy: pt.sourceAuthor,
       hasConflict: pt.hasConflict,
@@ -2281,15 +2282,27 @@ async function importFromYouTube(url, apiKey) {
     aiProcessed: true,
     commentsScraped: comments.length,
     tracksIdentified: tracks.length,
+    timedTracksCount: tracks.filter(t => t.timestamp > 0).length,
+    untimedTracksCount: tracks.filter(t => !t.timestamp || t.timestamp === 0).length,
     conflicts: samePlatformConflicts, // Include same-platform conflicts
     plays: 0,
   };
 
-  return { 
-    success: true, 
-    setList, 
-    videoInfo: video, 
-    commentsCount: comments.length, 
+  console.log(`[YouTube Import] Final: ${tracks.length} tracks (${tracks.filter(t => t.timestamp > 0).length} timed, ${tracks.filter(t => !t.timestamp || t.timestamp === 0).length} untimed), ${comments.length} comments scraped`);
+  if (tracks.length > 0) {
+    console.log(`[YouTube Import] Sample final tracks:`, tracks.slice(0, 5).map(t => ({
+      artist: t.artist,
+      title: t.title,
+      timestamp: t.timestamp,
+      tsFormatted: t.timestampFormatted,
+    })));
+  }
+
+  return {
+    success: true,
+    setList,
+    videoInfo: video,
+    commentsCount: comments.length,
     tracksCount: tracks.length,
     samePlatformConflicts: samePlatformConflicts.length,
   };
