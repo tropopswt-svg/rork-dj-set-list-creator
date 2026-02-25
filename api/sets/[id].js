@@ -37,7 +37,10 @@ function getYouTubeThumbnail(videoId) {
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  // Use service role key to bypass RLS — ensures all tracks are always returned
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseKey = serviceKey || anonKey;
   if (!supabaseUrl || !supabaseKey) return null;
   return createClient(supabaseUrl, supabaseKey);
 }

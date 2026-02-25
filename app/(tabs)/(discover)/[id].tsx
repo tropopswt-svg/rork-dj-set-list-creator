@@ -2408,7 +2408,13 @@ export default function SetDetailScreen() {
                         const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
                         const refreshData = await refreshResponse.json();
                         if (refreshData.success && refreshData.set) {
-                          setDbSet(transformApiSet(refreshData.set));
+                          const refreshedSet = transformApiSet(refreshData.set);
+                          const currentTrackCount = setList.tracks?.length || 0;
+                          const newTrackCount = refreshedSet.tracks?.length || 0;
+                          // GUARD: never accept fewer tracks — sources are additive
+                          if (newTrackCount >= currentTrackCount) {
+                            setDbSet(refreshedSet);
+                          }
                         }
 
                         // Build breakdown message from update-tracks response
@@ -2768,13 +2774,20 @@ export default function SetDetailScreen() {
               if (__DEV__) console.warn('[AddSource] Import/analysis failed:', importError.message);
             }
 
-            // Always refresh set data from the API
+            // Refresh set data from the API — GUARD: never accept fewer tracks
             try {
               const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
               if (refreshResponse.ok) {
                 const refreshData = await refreshResponse.json();
                 if (refreshData.success && refreshData.set) {
-                  setDbSet(transformApiSet(refreshData.set));
+                  const refreshedSet = transformApiSet(refreshData.set);
+                  const currentTrackCount = setList.tracks?.length || 0;
+                  const newTrackCount = refreshedSet.tracks?.length || 0;
+                  if (newTrackCount >= currentTrackCount) {
+                    setDbSet(refreshedSet);
+                  } else if (__DEV__) {
+                    console.warn(`[AddSource] Refresh returned fewer tracks (${newTrackCount} vs ${currentTrackCount}), keeping current data`);
+                  }
                 }
               }
             } catch (e: any) {

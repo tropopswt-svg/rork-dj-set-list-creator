@@ -3558,29 +3558,80 @@ async function handleChromeExtensionImport(req, res, data) {
         console.log('[Chrome Import] Set already exists:', tracklistUrl || setSlug);
         results.setId = existingSet.id;
 
-        // Update existing tracks with new timestamp data if available
+        // Backfill missing tracks and update timestamps (ADDITIVE — never remove)
         if (data.tracks && data.tracks.length > 0) {
-          let tracksUpdated = 0;
-          for (const track of data.tracks) {
-            if (track.timestamp_seconds && track.timestamp_seconds > 0) {
-              // Try to match by position and update timestamp
-              const { error: updateError } = await supabase
-                .from('set_tracks')
-                .update({
-                  timestamp_seconds: track.timestamp_seconds,
-                  timestamp_str: track.timestamp_str,
-                })
-                .eq('set_id', existingSet.id)
-                .eq('position', track.position);
+          // Get existing set_tracks to compare
+          const { data: existingTracks } = await supabase
+            .from('set_tracks')
+            .select('id, position, track_title, artist_name, timestamp_seconds')
+            .eq('set_id', existingSet.id)
+            .order('position', { ascending: true });
 
-              if (!updateError) {
-                tracksUpdated++;
+          const existingPositions = new Set((existingTracks || []).map(t => t.position));
+          let tracksUpdated = 0;
+          let tracksBackfilled = 0;
+
+          for (const track of data.tracks) {
+            const pos = track.position || 0;
+
+            if (existingPositions.has(pos)) {
+              // Track exists at this position — only update timestamp if it has one
+              if (track.timestamp_seconds && track.timestamp_seconds > 0) {
+                const { error: updateError } = await supabase
+                  .from('set_tracks')
+                  .update({
+                    timestamp_seconds: track.timestamp_seconds,
+                    timestamp_str: track.timestamp_str,
+                  })
+                  .eq('set_id', existingSet.id)
+                  .eq('position', pos);
+
+                if (!updateError) tracksUpdated++;
               }
+            } else {
+              // Track missing at this position — backfill it
+              let artistName = (track.artist || 'Unknown').trim().replace(/\s{2,}/g, ' ');
+              artistName = artistName.replace(/\bb2b\b/gi, 'B2B');
+              let trackTitle = (track.title || '').trim().replace(/\s{2,}/g, ' ');
+
+              if (track.is_unreleased || detectUnreleasedInText(trackTitle)) {
+                trackTitle = stripUnreleasedFromTitle(trackTitle);
+              }
+
+              const { error: insertError } = await supabase
+                .from('set_tracks')
+                .insert({
+                  set_id: existingSet.id,
+                  artist_name: artistName,
+                  track_title: trackTitle,
+                  position: pos,
+                  timestamp_seconds: track.timestamp_seconds || null,
+                  timestamp_str: track.timestamp_str || null,
+                  source: '1001tracklists',
+                  is_id: trackTitle?.toLowerCase() === 'id',
+                  is_unreleased: track.is_unreleased || false,
+                  unreleased_source: track.is_unreleased ? 'comment_hint' : null,
+                });
+
+              if (!insertError) tracksBackfilled++;
             }
           }
-          if (tracksUpdated > 0) {
-            console.log(`[Chrome Import] Updated ${tracksUpdated} tracks with timestamps`);
+
+          // Fix track_count to match actual rows
+          if (tracksBackfilled > 0) {
+            const { count: actualCount } = await supabase
+              .from('set_tracks')
+              .select('*', { count: 'exact', head: true })
+              .eq('set_id', existingSet.id);
+            if (actualCount !== null) {
+              await supabase.from('sets').update({ track_count: actualCount }).eq('id', existingSet.id);
+            }
+          }
+
+          if (tracksUpdated > 0 || tracksBackfilled > 0) {
+            console.log(`[Chrome Import] Updated ${tracksUpdated} timestamps, backfilled ${tracksBackfilled} missing tracks`);
             results.tracksUpdated = tracksUpdated;
+            results.tracksBackfilled = tracksBackfilled;
           }
         }
       }

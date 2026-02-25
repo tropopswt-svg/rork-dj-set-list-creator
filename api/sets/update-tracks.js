@@ -86,12 +86,18 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: 'No tracks found for this set' });
     }
 
+    const existingTrackCount = existingTracks.length;
     let updatedCount = 0;
     let newTracksAdded = 0;
     let confirmedCount = 0;
+    let errorCount = 0;
     const matchThreshold = 0.6;
 
-    console.log(`[Update Tracks] Processing ${tracks.length} scraped tracks for set ${setId}`);
+    // Source reliability ranking — never overwrite a more reliable source
+    const SOURCE_RANK = { '1001tracklists': 10, 'tracklist': 8, 'database': 6, 'manual': 5, 'soundcloud': 3, 'youtube': 2, 'unknown': 0 };
+    function sourceRank(s) { return SOURCE_RANK[s] || 0; }
+
+    console.log(`[Update Tracks] Processing ${tracks.length} scraped tracks for set ${setId} (${existingTrackCount} existing)`);
     console.log(`[Update Tracks] First 3 scraped tracks:`, tracks.slice(0, 3).map(t => ({
       title: t.title,
       artist: t.artist,
@@ -104,8 +110,6 @@ export default async function handler(req, res) {
       const timestamp = typeof scrapedTrack.timestamp === 'number'
         ? scrapedTrack.timestamp
         : (scrapedTrack.timestamp_seconds || 0);
-
-      console.log(`[Update Tracks] Processing: "${scrapedTrack.title}" by "${scrapedTrack.artist}" at ${timestamp}s`);
 
       let bestMatch = null;
       let bestScore = 0;
@@ -125,41 +129,42 @@ export default async function handler(req, res) {
       }
 
       if (bestMatch) {
-        // Build update object - always update source, optionally update timestamp
-        const updateData = {
-          source: source || bestMatch.source,
-        };
+        // Build update object — ADDITIVE ONLY: enhance, never downgrade
+        const updateData = {};
 
-        // Only update timestamp if we have a valid one
+        // Only upgrade source if the new one is MORE reliable (never downgrade)
+        if (source && sourceRank(source) > sourceRank(bestMatch.source)) {
+          updateData.source = source;
+        }
+
+        // Only update timestamp if we have a valid one AND the track doesn't already have one
         if (timestamp > 0) {
-          updateData.timestamp_seconds = timestamp;
-          updateData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
-          updateData.is_timed = true;
+          if (!bestMatch.timestamp_seconds || bestMatch.timestamp_seconds === 0) {
+            updateData.timestamp_seconds = timestamp;
+            updateData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
+            updateData.is_timed = true;
+          }
           updatedCount++;
         } else {
           confirmedCount++;
         }
 
-        console.log(`[Update Tracks] Updating track ${bestMatch.id} with:`, JSON.stringify(updateData));
+        // Only write to DB if there's something to update
+        if (Object.keys(updateData).length > 0) {
+          const { error: updateError } = await supabase
+            .from('set_tracks')
+            .update(updateData)
+            .eq('id', bestMatch.id);
 
-        const { data: updateResult, error: updateError } = await supabase
-          .from('set_tracks')
-          .update(updateData)
-          .eq('id', bestMatch.id)
-          .select();
-
-        if (!updateError) {
-          console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, ts: ${timestamp}s)`);
-          console.log(`[Update Tracks] Update result:`, JSON.stringify(updateResult));
+          if (updateError) {
+            // Log but CONTINUE — never stop processing because of one track
+            console.log(`[Update Tracks] Update error for track ${bestMatch.id}:`, updateError);
+            errorCount++;
+          } else {
+            console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, ts: ${timestamp}s)`);
+          }
         } else {
-          console.log(`[Update Tracks] Update error:`, updateError);
-          // Return error immediately so we can debug
-          return res.status(500).json({
-            error: 'Update failed',
-            details: updateError,
-            updateData,
-            trackId: bestMatch.id
-          });
+          console.log(`[Update Tracks] Confirmed "${scrapedTrack.title}" → "${bestMatch.track_title}" (no changes needed)`);
         }
       } else {
         // No match found - only add as new track if we have a timestamp
@@ -189,6 +194,9 @@ export default async function handler(req, res) {
           if (!insertError) {
             newTracksAdded++;
             console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp}s`);
+          } else {
+            console.log(`[Update Tracks] Insert error for "${scrapedTrack.title}":`, insertError);
+            errorCount++;
           }
         } else {
           console.log(`[Update Tracks] No match for "${scrapedTrack.title}" and no timestamp, skipping`);
@@ -199,23 +207,27 @@ export default async function handler(req, res) {
     // Update the set with analysis info
     const setUpdateData = {};
 
-    // Update coverUrl if provided and valid
+    // Update coverUrl if provided and valid AND the set doesn't already have one
     if (coverUrl && coverUrl.startsWith('http')) {
-      setUpdateData.cover_url = coverUrl;
-      console.log(`[Update Tracks] Updating cover URL to: ${coverUrl}`);
-    }
-
-    // Update track count if we added new tracks
-    if (newTracksAdded > 0) {
-      const { data: set } = await supabase
+      const { data: currentSet } = await supabase
         .from('sets')
-        .select('track_count')
+        .select('cover_url')
         .eq('id', setId)
         .single();
-
-      if (set) {
-        setUpdateData.track_count = (set.track_count || 0) + newTracksAdded;
+      if (!currentSet?.cover_url) {
+        setUpdateData.cover_url = coverUrl;
+        console.log(`[Update Tracks] Setting cover URL to: ${coverUrl}`);
       }
+    }
+
+    // Always recount tracks from DB to get accurate count (never trust incremental math)
+    const { count: actualTrackCount } = await supabase
+      .from('set_tracks')
+      .select('*', { count: 'exact', head: true })
+      .eq('set_id', setId);
+
+    if (actualTrackCount !== null) {
+      setUpdateData.track_count = actualTrackCount;
     }
 
     // Mark the set as analyzed by this source
@@ -239,14 +251,13 @@ export default async function handler(req, res) {
       }
     }
 
-    console.log(`[Update Tracks] Complete: ${updatedCount} updated with timestamps, ${confirmedCount} confirmed, ${newTracksAdded} new`);
+    // Safety check: verify we didn't lose tracks
+    const finalTrackCount = actualTrackCount || existingTrackCount;
+    if (finalTrackCount < existingTrackCount) {
+      console.error(`[Update Tracks] SAFETY WARNING: Track count dropped from ${existingTrackCount} to ${finalTrackCount}!`);
+    }
 
-    // Re-fetch tracks to verify updates actually persisted
-    const { data: verifyTracks } = await supabase
-      .from('set_tracks')
-      .select('id, track_title, source, timestamp_seconds')
-      .eq('set_id', setId)
-      .limit(5);
+    console.log(`[Update Tracks] Complete: ${updatedCount} timestamped, ${confirmedCount} confirmed, ${newTracksAdded} new, ${errorCount} errors (${existingTrackCount} existing → ${finalTrackCount} total)`);
 
     return res.status(200).json({
       success: true,
@@ -254,9 +265,9 @@ export default async function handler(req, res) {
       updatedCount,
       confirmedCount,
       newTracksAdded,
-      debug: {
-        sampleTracks: verifyTracks,
-      },
+      errorCount,
+      existingTrackCount,
+      finalTrackCount,
     });
 
   } catch (error) {
