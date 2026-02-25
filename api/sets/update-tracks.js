@@ -26,7 +26,19 @@ function normalize(str) {
     .trim();
 }
 
-// Calculate similarity between two strings
+// Levenshtein similarity between two words (0-1)
+function levenshteinSim(a, b) {
+  if (a === b) return 1;
+  if (!a.length || !b.length) return 0;
+  const m = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 0; j <= b.length; j++) m[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      m[i][j] = Math.min(m[i-1][j]+1, m[i][j-1]+1, m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));
+  return 1 - m[a.length][b.length] / Math.max(a.length, b.length);
+}
+
+// Calculate similarity between two strings (word overlap + Levenshtein for typos)
 function similarity(s1, s2) {
   const n1 = normalize(s1);
   const n2 = normalize(s2);
@@ -34,14 +46,28 @@ function similarity(s1, s2) {
   if (!n1 || !n2) return 0;
 
   // Check if one contains the other
-  if (n1.includes(n2) || n2.includes(n1)) return 0.8;
+  if (n1.includes(n2) || n2.includes(n1)) return 0.85;
 
-  // Word overlap
-  const words1 = new Set(n1.split(' '));
-  const words2 = new Set(n2.split(' '));
-  const intersection = [...words1].filter(w => words2.has(w));
-  const union = new Set([...words1, ...words2]);
-  return intersection.length / union.size;
+  // Word-level matching with fuzzy support for typos
+  const words1 = n1.split(' ');
+  const words2 = n2.split(' ');
+  let matches = 0;
+
+  for (const w1 of words1) {
+    let bestWordMatch = 0;
+    for (const w2 of words2) {
+      if (w1 === w2) { bestWordMatch = 1; break; }
+      if (w1.includes(w2) || w2.includes(w1)) { bestWordMatch = Math.max(bestWordMatch, 0.8); continue; }
+      // Levenshtein for words 3+ chars — catches "Good" vs "Goof", "Me" stays exact
+      if (w1.length >= 3 && w2.length >= 3) {
+        const lev = levenshteinSim(w1, w2);
+        if (lev > 0.75) bestWordMatch = Math.max(bestWordMatch, lev);
+      }
+    }
+    matches += bestWordMatch;
+  }
+
+  return matches / Math.max(words1.length, words2.length);
 }
 
 export default async function handler(req, res) {
@@ -169,8 +195,21 @@ export default async function handler(req, res) {
           console.log(`[Update Tracks] Confirmed "${scrapedTrack.title}" → "${bestMatch.track_title}" (no changes needed)`);
         }
       } else {
-        // No match found - only add as new track if we have a timestamp
-        if (timestamp > 0) {
+        // No match found at 0.6 threshold — double-check with title-only similarity
+        // to catch near-duplicates like "Be Good to Me" vs "Be Good 2 Me"
+        let isNearDuplicate = false;
+        for (const existingTrack of existingTracks) {
+          const titleSim = similarity(scrapedTrack.title, existingTrack.track_title);
+          if (titleSim >= 0.5) {
+            console.log(`[Update Tracks] Near-duplicate: "${scrapedTrack.title}" ≈ "${existingTrack.track_title}" (title=${titleSim.toFixed(2)}), skipping insert`);
+            isNearDuplicate = true;
+            confirmedCount++;
+            break;
+          }
+        }
+
+        // Only add as new track if we have a timestamp AND it's not a near-duplicate
+        if (!isNearDuplicate && timestamp > 0) {
           maxPosition++;
           const position = maxPosition;
 
@@ -200,7 +239,7 @@ export default async function handler(req, res) {
             console.log(`[Update Tracks] Insert error for "${scrapedTrack.title}":`, insertError);
             errorCount++;
           }
-        } else {
+        } else if (!isNearDuplicate) {
           console.log(`[Update Tracks] No match for "${scrapedTrack.title}" and no timestamp, skipping`);
         }
       }

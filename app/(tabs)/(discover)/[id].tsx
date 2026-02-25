@@ -698,26 +698,60 @@ export default function SetDetailScreen() {
       }
     }
 
-    // Deduplicate unplaced tracks (same title+artist appearing multiple times)
-    const normalizeStr = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Fuzzy string similarity using word overlap + Levenshtein for typos
+    const fuzzyTitleMatch = (a: string, b: string): number => {
+      const na = (a || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      const nb = (b || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+      if (!na || !nb) return 0;
+      if (na === nb) return 1;
+      if (na.includes(nb) || nb.includes(na)) return 0.85;
+      // Word overlap with Levenshtein for 1-2 letter typos
+      const wa = na.split(/\s+/);
+      const wb = nb.split(/\s+/);
+      let matches = 0;
+      for (const w1 of wa) {
+        for (const w2 of wb) {
+          if (w1 === w2) { matches++; break; }
+          // Levenshtein: allow 1-2 char difference for words 4+ chars
+          if (w1.length >= 4 && w2.length >= 4) {
+            const maxLen = Math.max(w1.length, w2.length);
+            let dist = 0;
+            const dp: number[][] = Array.from({ length: w1.length + 1 }, (_, i) => [i]);
+            for (let j = 0; j <= w2.length; j++) dp[0][j] = j;
+            for (let i = 1; i <= w1.length; i++)
+              for (let j = 1; j <= w2.length; j++)
+                dp[i][j] = Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(w1[i-1]===w2[j-1]?0:1));
+            dist = dp[w1.length][w2.length];
+            if (1 - dist / maxLen > 0.75) { matches += 0.8; break; }
+          }
+        }
+      }
+      return matches / Math.max(wa.length, wb.length);
+    };
+
+    // Deduplicate unplaced tracks AND cross-check against placed tracks
     const dedupedUnplaced: Track[] = [];
     for (const track of unplaced) {
-      const isDupe = dedupedUnplaced.some(existing => {
-        const existTitle = normalizeStr(existing.title);
-        const existArtist = normalizeStr(existing.artist);
-        const newTitle = normalizeStr(track.title);
-        const newArtist = normalizeStr(track.artist);
-        // Exact match
-        if (existTitle === newTitle && existArtist === newArtist) return true;
-        // Title substring match (one contains the other)
-        if (existTitle && newTitle && (existTitle.includes(newTitle) || newTitle.includes(existTitle))) {
-          if (!existArtist || !newArtist || existArtist === newArtist) return true;
-        }
-        return false;
+      const newTitle = (track.title || '').toLowerCase();
+      const newArtist = (track.artist || '').toLowerCase();
+
+      // Check against PLACED tracks — skip if a near-duplicate is already in the timeline
+      const matchesPlaced = timed.some(placed => {
+        const titleSim = fuzzyTitleMatch(track.title, placed.title);
+        const artistSim = fuzzyTitleMatch(track.artist, placed.artist);
+        return titleSim >= 0.7 && (artistSim >= 0.5 || !newArtist || !placed.artist);
       });
-      if (!isDupe) {
-        dedupedUnplaced.push(track);
-      }
+      if (matchesPlaced) continue;
+
+      // Check against other unplaced tracks already accepted
+      const matchesUnplaced = dedupedUnplaced.some(existing => {
+        const titleSim = fuzzyTitleMatch(track.title, existing.title);
+        const artistSim = fuzzyTitleMatch(track.artist, existing.artist);
+        return titleSim >= 0.7 && (artistSim >= 0.5 || !newArtist || !existing.artist);
+      });
+      if (matchesUnplaced) continue;
+
+      dedupedUnplaced.push(track);
     }
 
     // Sort timed tracks by timestamp
