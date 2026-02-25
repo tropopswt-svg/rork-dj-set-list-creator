@@ -340,6 +340,25 @@ export default async function handler(req, res) {
 
     const transformedSets = (resultSets || []).map(transformSet);
 
+    // Backfill artist images for sets where the FK join (dj_id) didn't produce one
+    const needsImage = transformedSets.filter(s => !s.artistImageUrl && s.artist && s.artist !== 'Unknown Artist');
+    if (needsImage.length > 0) {
+      const uniqueNames = [...new Set(needsImage.map(s => s.artist.toLowerCase()))];
+      const { data: artists } = await supabase
+        .from('artists')
+        .select('name, image_url')
+        .filter('image_url', 'not.is', null)
+        .in('name', uniqueNames);
+
+      if (artists && artists.length > 0) {
+        const nameToImage = new Map(artists.map(a => [a.name.toLowerCase(), a.image_url]));
+        for (const set of needsImage) {
+          const img = nameToImage.get(set.artist.toLowerCase());
+          if (img) set.artistImageUrl = img;
+        }
+      }
+    }
+
     return res.status(200).json({
       success: true,
       sets: transformedSets,

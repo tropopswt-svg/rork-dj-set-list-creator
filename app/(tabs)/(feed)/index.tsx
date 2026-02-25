@@ -1858,7 +1858,7 @@ export default function FeedScreen() {
           artist: {
             id: set.dj_name,
             name: set.dj_name,
-            image: artistImageMap.get(set.dj_name?.toLowerCase()) || null,
+            image: artistImageMap.get(set.dj_name?.toLowerCase()) || set._artistImageUrl || null,
             following: true,
           },
           set: {

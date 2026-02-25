@@ -453,7 +453,9 @@ export async function getArtistSets(artistId: string, limit: number = 50): Promi
     return [];
   }
 
-  return data;
+  // Attach the artist image to each set so feed cards can use it as fallback
+  const artistImage = artist.image_url || null;
+  return (data || []).map(s => ({ ...s, _artistImageUrl: artistImage }));
 }
 
 // ============================================
