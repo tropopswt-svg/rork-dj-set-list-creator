@@ -8,6 +8,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Animated,
+  Easing,
   Dimensions,
   Modal,
   FlatList,
