@@ -1764,10 +1764,32 @@ async function importFromSoundCloud(url) {
   
   // Parse tracklist from description
   const descTracks = parseDescription(description);
-  
-  // Combine description and comment tracks
-  const allTracks = [...descTracks, ...commentTracks];
-  
+
+  // Cross-reference: if description tracks lack timestamps, try to inherit from matching comment tracks
+  const untimedScDescTracks = descTracks.filter(t => !t.timestamp || t.timestamp === 0);
+  if (untimedScDescTracks.length > 0 && commentTracks.length > 0) {
+    console.log(`[SoundCloud Import] Cross-referencing ${untimedScDescTracks.length} untimed description tracks against ${commentTracks.length} comment tracks`);
+    let matched = 0;
+    for (const dt of untimedScDescTracks) {
+      let bestMatch = null;
+      let bestSim = 0;
+      for (const ct of commentTracks) {
+        const sim = calculateTrackSimilarity(dt.title, dt.artist, ct.title, ct.artist);
+        if (sim > bestSim && sim >= 0.55) {
+          bestSim = sim;
+          bestMatch = ct;
+        }
+      }
+      if (bestMatch) {
+        dt.timestamp = bestMatch.timestamp;
+        dt.timestampFormatted = bestMatch.timestampFormatted;
+        dt.confidence = Math.min((dt.confidence || 0.85) + 0.1, 1);
+        matched++;
+      }
+    }
+    console.log(`[SoundCloud Import] Cross-reference: ${matched}/${untimedScDescTracks.length} description tracks got timestamps from comments`);
+  }
+
   // Parse artist/title/venue/location
   const setInfo = parseSetInfo(title);
   const finalArtist = setInfo.artist !== 'Unknown Artist' ? setInfo.artist : artistFromPage;
@@ -1775,14 +1797,27 @@ async function importFromSoundCloud(url) {
   const finalVenue = setInfo.venue || null;
   const finalLocation = setInfo.location || null;
   const setId = `sc-${oembedInfo.id}-${Date.now()}`;
-  
-  // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
-  const { tracks, conflicts: samePlatformConflicts } = deduplicateSingleSource(
-    allTracks,
+
+  // Separate timestamped and still-untimed tracks for proper dedup
+  const scTimedTracks = [...descTracks.filter(t => t.timestamp > 0), ...commentTracks];
+  const scStillUntimed = descTracks.filter(t => !t.timestamp || t.timestamp === 0);
+
+  // Deduplicate only the timestamped tracks
+  const { tracks: scDedupedTimed, conflicts: samePlatformConflicts } = deduplicateSingleSource(
+    scTimedTracks,
     'soundcloud',
     setId,
     finalName
   );
+
+  // For untimed tracks, only keep those that don't already exist in the timed set
+  const scUntimedUnique = scStillUntimed.filter(ut => {
+    return !scDedupedTimed.some(tt =>
+      calculateTrackSimilarity(ut.title, ut.artist, tt.title, tt.artist) >= 0.55
+    );
+  });
+
+  const tracks = [...scDedupedTimed, ...scUntimedUnique];
   
   const setList = {
     id: setId,
@@ -2159,18 +2194,62 @@ async function importFromYouTube(url, apiKey) {
     })));
   }
 
-  // Combine description and comment tracks
-  const allTracks = [...descTracks, ...commentTracks];
-  console.log(`[YouTube Import] Total tracks before dedup: ${allTracks.length}`);
+  // Cross-reference: if description tracks lack timestamps, try to inherit from matching comment tracks
+  const untimedDescTracks = descTracks.filter(t => !t.timestamp || t.timestamp === 0);
+  if (untimedDescTracks.length > 0 && commentTracks.length > 0) {
+    console.log(`[YouTube Import] Cross-referencing ${untimedDescTracks.length} untimed description tracks against ${commentTracks.length} comment tracks`);
+    let matched = 0;
+    for (const dt of untimedDescTracks) {
+      let bestMatch = null;
+      let bestSim = 0;
+      for (const ct of commentTracks) {
+        const sim = calculateTrackSimilarity(dt.title, dt.artist, ct.title, ct.artist);
+        if (sim > bestSim && sim >= 0.55) {
+          bestSim = sim;
+          bestMatch = ct;
+        }
+      }
+      if (bestMatch) {
+        dt.timestamp = bestMatch.timestamp;
+        dt.timestampFormatted = bestMatch.timestampFormatted;
+        // Boost confidence since both description and comments agree on this track
+        dt.confidence = Math.min((dt.confidence || 0.85) + 0.1, 1);
+        matched++;
+        console.log(`[YouTube Import] Matched "${dt.artist} - ${dt.title}" → timestamp ${bestMatch.timestampFormatted} (sim: ${bestSim.toFixed(2)})`);
+      }
+    }
+    console.log(`[YouTube Import] Cross-reference: ${matched}/${untimedDescTracks.length} description tracks got timestamps from comments`);
+  }
+
+  // Separate timestamped and still-untimed tracks for proper dedup
+  const timedTracks = [...descTracks.filter(t => t.timestamp > 0), ...commentTracks];
+  const stillUntimed = descTracks.filter(t => !t.timestamp || t.timestamp === 0);
+
+  console.log(`[YouTube Import] Timed tracks: ${timedTracks.length}, still untimed: ${stillUntimed.length}`);
   const setId = `yt-${video.id}-${Date.now()}`;
-  
-  // Deduplicate using segment-based grouping (returns tracks + same-platform conflicts)
-  const { tracks, conflicts: samePlatformConflicts } = deduplicateSingleSource(
-    allTracks, 
+
+  // Deduplicate only the timestamped tracks (segment-based grouping works correctly for these)
+  const { tracks: dedupedTimed, conflicts: samePlatformConflicts } = deduplicateSingleSource(
+    timedTracks,
     'youtube',
     setId,
     name
   );
+
+  // For untimed tracks, only keep those that don't already exist in the timed set
+  const untimedUnique = stillUntimed.filter(ut => {
+    const isDuplicate = dedupedTimed.some(tt =>
+      calculateTrackSimilarity(ut.title, ut.artist, tt.title, tt.artist) >= 0.55
+    );
+    return !isDuplicate;
+  });
+
+  if (untimedUnique.length > 0) {
+    console.log(`[YouTube Import] ${untimedUnique.length} untimed tracks not found in comments — appending as unmatched`);
+  }
+
+  // Final track list: timed tracks first (ordered by timestamp), then remaining untimed tracks
+  const tracks = [...dedupedTimed, ...untimedUnique];
 
   const setList = {
     id: setId,
