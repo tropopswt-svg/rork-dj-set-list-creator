@@ -146,8 +146,47 @@ export default async function handler(req, res) {
       results.actions.push({ action: 'fixCount', from: set.track_count, to: actualCount });
     }
 
+    // Action: insertTracks — directly insert tracks (for restoring lost data)
+    if (action === 'insertTracks' && req.body.tracks) {
+      const { data: existing } = await supabase
+        .from('set_tracks')
+        .select('position')
+        .eq('set_id', setId);
+      let maxPos = Math.max(0, ...(existing || []).map(t => t.position || 0));
+      let inserted = 0;
+
+      for (const t of req.body.tracks) {
+        maxPos++;
+        const { error } = await supabase.from('set_tracks').insert({
+          set_id: setId,
+          artist_name: t.artist || 'Unknown',
+          track_title: t.title || 'Unknown',
+          position: maxPos,
+          timestamp_seconds: t.timestamp || null,
+          timestamp_str: t.timestampFormatted || null,
+          source: t.source || 'youtube',
+          is_id: false,
+          is_timed: !!(t.timestamp && t.timestamp > 0),
+        });
+        if (!error) inserted++;
+        else console.log(`[Repair] Insert error for "${t.title}":`, error.message);
+      }
+
+      // Recount
+      const { count: newCount } = await supabase
+        .from('set_tracks')
+        .select('*', { count: 'exact', head: true })
+        .eq('set_id', setId);
+      if (newCount !== null) {
+        await supabase.from('sets').update({ track_count: newCount }).eq('id', setId);
+      }
+
+      results.actions.push({ action: 'insertTracks', inserted, requested: req.body.tracks.length });
+      results.finalTrackCount = newCount;
+    }
+
     results.success = true;
-    results.finalTrackCount = actualCount;
+    if (!results.finalTrackCount) results.finalTrackCount = actualCount;
     return res.status(200).json(results);
   }
 

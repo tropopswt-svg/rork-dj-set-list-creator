@@ -87,6 +87,8 @@ export default async function handler(req, res) {
     }
 
     const existingTrackCount = existingTracks.length;
+    // Use max position (not array length) so new inserts don't collide with sparse positions
+    let maxPosition = Math.max(...existingTracks.map(t => t.position || 0));
     let updatedCount = 0;
     let newTracksAdded = 0;
     let confirmedCount = 0;
@@ -169,7 +171,8 @@ export default async function handler(req, res) {
       } else {
         // No match found - only add as new track if we have a timestamp
         if (timestamp > 0) {
-          const position = existingTracks.length + newTracksAdded + 1;
+          maxPosition++;
+          const position = maxPosition;
 
           const { title: cleanScrapedTitle, isUnreleased: scrapedUnreleased } = cleanTrackTitleUnreleased(scrapedTrack.title || 'Unknown');
           const insertData = {
