@@ -168,8 +168,13 @@ export default async function handler(req, res) {
           is_id: false,
           is_timed: !!(t.timestamp && t.timestamp > 0),
         });
-        if (!error) inserted++;
-        else console.log(`[Repair] Insert error for "${t.title}":`, error.message);
+        if (!error) {
+          inserted++;
+        } else {
+          console.log(`[Repair] Insert error for "${t.title}":`, error.message, error.code, error.details);
+          if (!results.errors) results.errors = [];
+          results.errors.push({ title: t.title, error: error.message, code: error.code, details: error.details });
+        }
       }
 
       // Recount
