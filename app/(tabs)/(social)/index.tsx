@@ -191,9 +191,20 @@ function CrateStack({
   onPress: (setId: string) => void;
 }) {
   const covers = sets.slice(0, 5);
+  const previewSets = sets.slice(0, 7);
   const [isOpen, setIsOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const recordAnims = useRef(sets.map(() => new Animated.Value(0))).current;
+  const floatAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(floatAnim, { toValue: -6, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(floatAnim, { toValue: 6, duration: 1800, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
 
   if (covers.length === 0) return null;
 
@@ -313,66 +324,70 @@ function CrateStack({
         <Text style={styles.crateCount}>{sets.length} sets</Text>
       </View>
 
-      {/* Collapsed crate preview — liquid glass */}
-      <PressableCard style={styles.crateStack} onPress={openCrate}>
-        <BlurView intensity={50} tint="light" style={styles.crateStackGlass}>
-          {/* Glass refraction edges */}
-          <View style={styles.crateGlassEdgeTop} />
-          <View style={styles.crateGlassEdgeBottom} />
+      {/* Animated Vinyl Crate */}
+      <Pressable onPress={openCrate}>
+        <Animated.View style={[vcStyles.outerCrate, { transform: [{ translateY: floatAnim }] }]}>
+          {/* Glow underneath */}
+          <View style={vcStyles.glow} />
 
-          {/* Content row */}
-          <View style={styles.crateStackContent}>
-            <View style={styles.crateVisual}>
-              {covers.map((savedSet, i) => {
-                const set = savedSet.set;
-                if (!set) return null;
-                const offset = i * 14;
-                const rotation = (i - 2) * 3;
-                const zIndex = covers.length - i;
-                const coverUrl = getSetCoverUrl(set);
+          {/* Records peeking out the top */}
+          <View style={vcStyles.peekRow}>
+            {previewSets.map((savedSet, i) => {
+              const set = savedSet.set;
+              if (!set) return null;
+              const coverUrl = getSetCoverUrl(set);
+              const total = previewSets.length;
+              const centerIdx = (total - 1) / 2;
+              const off = i - centerIdx;
+              const rotation = off * 2.2;
+              const height = 65 - Math.abs(off) * 5;
+              const xShift = off * 39;
 
-                return (
-                  <View
-                    key={savedSet.id || i}
-                    style={[
-                      styles.crateRecord,
-                      {
-                        zIndex,
-                        transform: [
-                          { translateX: offset - 28 },
-                          { rotate: `${rotation}deg` },
-                        ],
-                      },
-                    ]}
-                  >
-                    <Image
-                      source={{ uri: coverUrl }}
-                      style={styles.crateRecordImage}
-                      contentFit="cover"
-                      placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
-                      transition={250}
-                    />
-                    <View style={styles.vinylHole} />
-                  </View>
-                );
-              })}
-            </View>
+              return (
+                <View
+                  key={savedSet.id || i}
+                  style={[
+                    vcStyles.peekSleeve,
+                    {
+                      height,
+                      transform: [{ translateX: xShift }, { rotateZ: `${rotation}deg` }],
+                      zIndex: total - Math.abs(Math.round(off)),
+                    },
+                  ]}
+                >
+                  {coverUrl ? (
+                    <Image source={{ uri: coverUrl }} style={vcStyles.peekCover} contentFit="cover" transition={200} />
+                  ) : (
+                    <View style={[vcStyles.peekCover, vcStyles.peekFallback]}>
+                      <Disc size={11} color="rgba(255,255,255,0.25)" />
+                    </View>
+                  )}
+                  <View style={vcStyles.peekSheen} />
+                </View>
+              );
+            })}
+          </View>
 
-            <View style={styles.crateInfo}>
-              <Text style={styles.crateInfoTitle}>
-                {covers[0]?.set?.name || 'Your Collection'}
-              </Text>
-              <Text style={styles.crateInfoSub}>
-                {covers[0]?.set?.artist_name}
-              </Text>
-              <View style={styles.crateBrowse}>
-                <Text style={styles.crateBrowseText}>Browse Crate</Text>
-                <ChevronRight size={14} color={Colors.dark.primary} />
+          {/* Crate body */}
+          <View style={vcStyles.body}>
+            <View style={vcStyles.sideL} />
+            <View style={vcStyles.sideR} />
+            <View style={vcStyles.front}>
+              <View style={vcStyles.frontSlats}>
+                <View style={vcStyles.slat} />
+                <View style={vcStyles.slat} />
+                <View style={vcStyles.slat} />
+                <View style={vcStyles.slat} />
               </View>
             </View>
+            <View style={vcStyles.badge}>
+              <Text style={vcStyles.badgeText}>{sets.length}</Text>
+            </View>
+            <View style={vcStyles.bottomEdge} />
           </View>
-        </BlurView>
-      </PressableCard>
+        </Animated.View>
+      </Pressable>
+      <Text style={vcStyles.hint}>Tap to dig</Text>
 
       {/* ─── Full-screen Animated Crate Modal (Liquid Glass) ─── */}
       <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeCrate}>
@@ -2024,5 +2039,147 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     color: Colors.dark.primary,
+  },
+});
+
+// ─── Vinyl Crate Visual Styles ─────────────────────────────────
+const VC_W = 260;
+const VC_BODY_H = 140;
+const VC_PEEK_W = 42;
+
+const vcStyles = StyleSheet.create({
+  outerCrate: {
+    width: VC_W,
+    alignItems: 'center',
+    alignSelf: 'center',
+  },
+  glow: {
+    position: 'absolute',
+    bottom: -8,
+    width: '70%',
+    height: 30,
+    alignSelf: 'center',
+    borderRadius: 100,
+    backgroundColor: 'transparent',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+  },
+  peekRow: {
+    width: VC_W,
+    height: 65,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  peekSleeve: {
+    position: 'absolute',
+    bottom: 0,
+    left: VC_W / 2 - VC_PEEK_W / 2,
+    width: VC_PEEK_W,
+    borderRadius: 4,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(20, 20, 22, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
+  },
+  peekCover: {
+    width: '100%',
+    flex: 1,
+  },
+  peekFallback: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  peekSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '35%',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+  },
+  body: {
+    width: VC_W,
+    height: VC_BODY_H,
+    backgroundColor: 'rgba(18, 18, 22, 0.95)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: 'rgba(255,255,255,0.15)',
+    borderBottomColor: 'rgba(0,0,0,0.4)',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  sideL: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 12,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(255,255,255,0.04)',
+  },
+  sideR: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 12,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.04)',
+  },
+  front: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+  },
+  frontSlats: {
+    flex: 1,
+    justifyContent: 'space-evenly',
+  },
+  slat: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 0.5,
+  },
+  badge: {
+    position: 'absolute',
+    right: 20,
+    bottom: 16,
+    backgroundColor: 'rgba(196, 30, 58, 0.25)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.35)',
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: 'rgba(245, 230, 211, 0.7)',
+  },
+  bottomEdge: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  hint: {
+    marginTop: 16,
+    fontSize: 14,
+    color: 'rgba(245, 230, 211, 0.3)',
+    letterSpacing: 0.5,
+    textAlign: 'center',
   },
 });
