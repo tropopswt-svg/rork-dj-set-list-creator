@@ -17,7 +17,6 @@ import { useRouter } from 'expo-router';
 import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles, Edit3, Camera, Image as ImageIcon, Trash2, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
@@ -172,19 +171,24 @@ export default function ProfileScreen() {
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${authUser?.id || 'user'}-${Date.now()}.${ext}`;
 
-      // Read as base64 and decode — reliable in React Native (avoids blob/ArrayBuffer issues)
-      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
+      // Use FormData — React Native handles local file URIs natively, no conversion needed
+      const formData = new FormData();
+      formData.append('file', { uri: asset.uri, name: fileName, type: `image/${ext}` } as any);
 
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, bytes, { contentType: `image/${ext}`, upsert: true });
+      const session = await supabase.auth.getSession();
+      const token = session.data.session?.access_token;
+      const uploadUrl = `${process.env.EXPO_PUBLIC_SUPABASE_URL}/storage/v1/object/avatars/${fileName}`;
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'x-upsert': 'true',
+        },
+        body: formData,
+      });
+
+      const uploadError = uploadResponse.ok ? null : { message: await uploadResponse.text() };
 
       if (uploadError) {
         console.error('[Profile] Upload error:', uploadError);
