@@ -2375,8 +2375,13 @@ export default function SetDetailScreen() {
                       const importResult = await importResponse.json();
                       if (!importResponse.ok) throw new Error(importResult.error || `Server error (${importResponse.status})`);
 
+                      // Close chart modal FIRST to avoid stacked modals
+                      RNAnimated.timing(chartModalAnim, { toValue: 0, duration: 150, useNativeDriver: true }).start(() => {
+                        setShowChartModal(false);
+                      });
+
                       if (importResult.success && importResult.setList?.tracks?.length > 0) {
-                        await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                        const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
@@ -2386,6 +2391,10 @@ export default function SetDetailScreen() {
                             coverUrl: importResult.setList.coverUrl,
                           }),
                         });
+                        if (!updateResponse.ok) {
+                          const errBody = await updateResponse.json().catch(() => ({}));
+                          console.warn('[Reanalyze] update-tracks error:', errBody);
+                        }
                         fetch(`${API_BASE_URL}/api/spotify-enrich`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -2396,25 +2405,36 @@ export default function SetDetailScreen() {
                         if (refreshData.success && refreshData.set) {
                           setDbSet(transformApiSet(refreshData.set));
                         }
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        setAnalyzeResult({ type: 'success', message: `trakd ${importResult.setList.tracks.length} new tracks`, trackCount: importResult.setList.tracks.length });
-                        analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
-                        analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                        // Show result popup after chart modal is gone
+                        setTimeout(() => {
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          analyzePopupScale.value = 0;
+                          analyzePopupOpacity.value = 0;
+                          setAnalyzeResult({ type: 'success', message: `trakd ${importResult.setList.tracks.length} new tracks`, trackCount: importResult.setList.tracks.length });
+                          analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
+                          analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                        }, 250);
                       } else {
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-                        setAnalyzeResult({ type: 'empty', message: 'Nothing new found' });
+                        setTimeout(() => {
+                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                          analyzePopupScale.value = 0;
+                          analyzePopupOpacity.value = 0;
+                          setAnalyzeResult({ type: 'empty', message: 'Nothing new found' });
+                          analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                          analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                        }, 250);
+                      }
+                    } catch (error: any) {
+                      // Close chart modal first if still open
+                      setShowChartModal(false);
+                      setTimeout(() => {
+                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                        analyzePopupScale.value = 0;
+                        analyzePopupOpacity.value = 0;
+                        setAnalyzeResult({ type: 'error', message: error.message || 'Failed to analyze' });
                         analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
                         analyzePopupOpacity.value = withTiming(1, { duration: 200 });
-                      }
-                      // Close the chart modal after analyzing
-                      RNAnimated.timing(chartModalAnim, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-                        setShowChartModal(false);
-                      });
-                    } catch (error: any) {
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-                      setAnalyzeResult({ type: 'error', message: error.message || 'Failed to analyze' });
-                      analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
-                      analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                      }, 250);
                     } finally {
                       setAnalyzing(false);
                     }
