@@ -78,13 +78,25 @@ function clearMessage() {
 function showScrapeResults(data) {
   const resultDiv = document.getElementById('scrapeResult');
   const sendBtn = document.getElementById('sendBtn');
-  
+
   if (data) {
-    document.getElementById('artistCount').textContent = data.artists?.length || 0;
-    document.getElementById('trackCount').textContent = data.tracks?.length || 0;
-    document.getElementById('sourceType').textContent = getPlatformLabel(data.source);
-    resultDiv.style.display = 'block';
-    sendBtn.style.display = 'block';
+    if (data.isBatchPage) {
+      document.getElementById('artistCount').textContent = '-';
+      document.getElementById('trackCountLabel').textContent = 'Tracklists';
+      document.getElementById('trackCount').textContent = data.tracklistUrls?.length || 0;
+      document.getElementById('sourceType').textContent = data.pageLabel || '1001Tracklists';
+      resultDiv.style.display = 'block';
+      sendBtn.style.display = 'block';
+      sendBtn.textContent = `📋 Queue ${data.tracklistUrls?.length || 0} Sets`;
+    } else {
+      document.getElementById('artistCount').textContent = data.artists?.length || 0;
+      document.getElementById('trackCountLabel').textContent = 'Tracks';
+      document.getElementById('trackCount').textContent = data.tracks?.length || 0;
+      document.getElementById('sourceType').textContent = getPlatformLabel(data.source);
+      resultDiv.style.display = 'block';
+      sendBtn.style.display = 'block';
+      sendBtn.textContent = "Send to TRACK'D";
+    }
     scrapedData = data;
   } else {
     resultDiv.style.display = 'none';
@@ -93,21 +105,49 @@ function showScrapeResults(data) {
   }
 }
 
+// Inject the content script if it's not already running, then send a message
+async function sendToContentScript(tabId, message) {
+  // First attempt
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (e) {
+    if (!e.message?.includes('Receiving end does not exist')) throw e;
+  }
+
+  // Content script not loaded — inject it now
+  const platform = currentPlatform;
+  const scriptFile = platform === 'beatport'       ? 'extractors/beatport.js'
+                   : platform === 'soundcloud'     ? 'extractors/soundcloud.js'
+                   : platform === '1001tracklists' ? 'extractors/1001tracklists.js'
+                   : null;
+  if (!scriptFile) throw new Error('No extractor for this page');
+
+  await chrome.scripting.executeScript({ target: { tabId }, files: [scriptFile] });
+  await chrome.scripting.insertCSS({ target: { tabId }, files: ['styles.css'] });
+
+  // Wait for the listener to register
+  await new Promise(r => setTimeout(r, 500));
+  return await chrome.tabs.sendMessage(tabId, message);
+}
+
 // Scrape the current page
 async function scrape() {
   const scrapeBtn = document.getElementById('scrapeBtn');
   scrapeBtn.disabled = true;
   scrapeBtn.innerHTML = '<span class="loading"></span>Scraping...';
   clearMessage();
-  
+
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    // Send message to content script to scrape
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'SCRAPE' });
-    
+
+    const response = await sendToContentScript(tab.id, { type: 'SCRAPE' });
+
     if (response && response.success) {
-      showMessage(`Found ${response.data.tracks?.length || 0} tracks, ${response.data.artists?.length || 0} artists`, 'success');
+      if (response.data.isBatchPage) {
+        showMessage(`Found ${response.data.tracklistUrls?.length || 0} tracklists — press Queue to import all`, 'info');
+      } else {
+        showMessage(`Found ${response.data.tracks?.length || 0} tracks, ${response.data.artists?.length || 0} artists`, 'success');
+      }
       showScrapeResults(response.data);
     } else {
       showMessage(response?.error || 'Failed to scrape page', 'error');
@@ -115,15 +155,10 @@ async function scrape() {
     }
   } catch (error) {
     console.error('Scrape error:', error);
-    // More helpful error message
-    if (error.message?.includes('Receiving end does not exist')) {
-      showMessage('Page needs refresh. Press Cmd+R then try again.', 'error');
-    } else {
-      showMessage(`Scrape failed: ${error.message || 'Try refreshing the page'}`, 'error');
-    }
+    showMessage(`Scrape failed: ${error.message || 'Try refreshing the page'}`, 'error');
     showScrapeResults(null);
   }
-  
+
   scrapeBtn.disabled = false;
   scrapeBtn.textContent = `Scrape from ${getPlatformLabel(currentPlatform)}`;
 }
@@ -131,18 +166,69 @@ async function scrape() {
 // Send scraped data to API
 async function sendToApi() {
   if (!scrapedData) return;
-  
+
   const sendBtn = document.getElementById('sendBtn');
+  clearMessage();
+
+  // Batch mode: start queue instead of sending data
+  if (scrapedData.isBatchPage) {
+    sendBtn.disabled = true;
+    sendBtn.innerHTML = '<span class="loading"></span>Starting...';
+
+    try {
+      const response = await chrome.runtime.sendMessage({
+        type: 'BATCH_START',
+        urls: scrapedData.tracklistUrls,
+        djName: scrapedData.pageLabel || '',
+      });
+
+      if (response.success) {
+        const total = response.total;
+        showMessage(`Queued ${total} sets — importing in background tabs`, 'success');
+        sendBtn.disabled = false;
+        sendBtn.textContent = `⏳ 0/${total} sets...`;
+
+        const pollId = setInterval(async () => {
+          try {
+            const status = await chrome.runtime.sendMessage({ type: 'BATCH_STATUS' });
+            if (!status.running) {
+              clearInterval(pollId);
+              const p = status.progress;
+              showMessage(`Done! ${p.success}/${p.total} sets imported`, 'success');
+              sendBtn.textContent = `📋 Queue ${scrapedData.tracklistUrls.length} Sets`;
+              sendBtn.disabled = false;
+            } else {
+              const p = status.progress;
+              sendBtn.textContent = `⏳ ${p.done}/${p.total} sets...`;
+            }
+          } catch (e) {
+            clearInterval(pollId);
+            sendBtn.disabled = false;
+          }
+        }, 2500);
+      } else {
+        showMessage('Failed to start batch', 'error');
+        sendBtn.disabled = false;
+        sendBtn.textContent = `📋 Queue ${scrapedData.tracklistUrls.length} Sets`;
+      }
+    } catch (error) {
+      console.error('Batch error:', error);
+      showMessage('Batch error: ' + error.message, 'error');
+      sendBtn.disabled = false;
+    }
+    return;
+  }
+
+  // Regular single-page send
   sendBtn.disabled = true;
   sendBtn.innerHTML = '<span class="loading"></span>Sending...';
-  clearMessage();
-  
+
   try {
     const response = await chrome.runtime.sendMessage({
       type: 'SEND_TO_API',
       data: scrapedData
     });
-    
+
     if (response.success) {
       const result = response.result;
       showMessage(
@@ -156,19 +242,23 @@ async function sendToApi() {
     console.error('API error:', error);
     showMessage('Could not connect to API', 'error');
   }
-  
+
   sendBtn.disabled = false;
-  sendBtn.textContent = 'Send to TRACK\\'D';
+  sendBtn.textContent = "Send to TRACK'D";
 }
 
 // Initialize popup
 async function init() {
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    // Race against a 2s timeout — chrome.tabs.query can hang on fresh installs
+    const queryPromise = chrome.tabs.query({ active: true, currentWindow: true });
+    const timeoutPromise = new Promise(resolve => setTimeout(() => resolve([undefined]), 2000));
+    const [tab] = await Promise.race([queryPromise, timeoutPromise]);
+
     const tabUrl = tab?.url || '';
     currentPlatform = detectPlatform(tabUrl);
     updateUI(currentPlatform, tabUrl);
-    
+
     // Check for existing scraped data
     chrome.storage.local.get(['lastScrape'], (result) => {
       if (result.lastScrape && result.lastScrape.source === currentPlatform) {
@@ -177,6 +267,7 @@ async function init() {
     });
   } catch (error) {
     console.error('Init error:', error);
+    updateUI(null, '');
   }
 }
 

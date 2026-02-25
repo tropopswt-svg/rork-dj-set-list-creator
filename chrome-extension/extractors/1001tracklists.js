@@ -739,19 +739,170 @@
       };
     }
 
-    // For DJ profile pages or unknown - just extract any tracks visible
-    const result = extractTracklist();
+    // For listing pages (DJ/venue profiles, any page with multiple tracklists)
+    const listingUrls = extractDjProfileUrls();
+    if (listingUrls.length > 0) {
+      const pageLabel =
+        getDjNameFromProfile() ||
+        document.title.replace(/ \| 1001Tracklists$/i, '').trim();
+      return {
+        source: '1001tracklists',
+        sourceUrl: currentUrl,
+        pageType: isDjProfilePage ? 'dj_profile' : 'listing',
+        isBatchPage: true,
+        tracklistUrls: listingUrls,
+        pageLabel,
+        scrapedAt: new Date().toISOString(),
+        tracks: [],
+        artists: [],
+      };
+    }
+
+    // Fallback: nothing useful on this page
     return {
       source: '1001tracklists',
-      sourceUrl: null, // Don't save URL for profile pages
-      pageType: isDjProfilePage ? 'dj_profile' : 'unknown',
+      sourceUrl: null,
+      pageType: 'unknown',
       scrapedAt: new Date().toISOString(),
-      tracks: result.tracks,
-      artists: result.artists,
-      // No setInfo - no set creation
+      tracks: [],
+      artists: [],
     };
   }
   
+  // ── DJ profile helpers ──────────────────────────────────────────────────────
+
+  function isDjProfilePage() {
+    return location.pathname.includes('/dj/') && !location.pathname.includes('/tracklist/');
+  }
+
+  function extractDjProfileUrls() {
+    const seen = new Set();
+    const urls = [];
+    document.querySelectorAll('a[href*="/tracklist/"]').forEach(a => {
+      // Strip query params / fragments; only keep the canonical path
+      const url = a.href.split('?')[0].split('#')[0];
+      if (url.includes('/tracklist/') && !seen.has(url)) {
+        seen.add(url);
+        urls.push(url);
+      }
+    });
+    return urls;
+  }
+
+  function getDjNameFromProfile() {
+    return (
+      document.querySelector('h1.djName')?.textContent?.trim() ||
+      document.querySelector('.djTitle')?.textContent?.trim() ||
+      document.querySelector('h1')?.textContent?.trim() ||
+      ''
+    );
+  }
+
+  // ── DJ profile batch-import button ──────────────────────────────────────────
+
+  function createDjProfileButton() {
+    if (document.getElementById('identified-btn')) return;
+
+    const urls   = extractDjProfileUrls();
+    const djName = getDjNameFromProfile();
+    if (urls.length === 0) return;
+
+    const btn = document.createElement('button');
+    btn.id        = 'identified-btn';
+    btn.innerHTML = `📋 Queue ${urls.length} Sets`;
+    btn.title     = `Batch-import all sets for ${djName || 'this DJ'}`;
+
+    // Live-update the count when the page loads more content (e.g. "See More" sidebar)
+    let countObserver = null;
+    function startCountObserver() {
+      if (countObserver) return;
+      countObserver = new MutationObserver(() => {
+        if (!btn.innerHTML.startsWith('⏳')) {
+          const n = extractDjProfileUrls().length;
+          btn.innerHTML = `📋 Queue ${n} Sets`;
+        }
+      });
+      countObserver.observe(document.body, { childList: true, subtree: true });
+    }
+    startCountObserver();
+
+    let pollInterval = null;
+
+    function stopPolling() {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+    }
+
+    function startPolling(total) {
+      stopPolling();
+      pollInterval = setInterval(async () => {
+        try {
+          const status = await chrome.runtime.sendMessage({ type: 'BATCH_STATUS' });
+          if (!status.running) {
+            stopPolling();
+            const p = status.progress;
+            btn.innerHTML = `✅ Done! ${p.success}/${p.total} imported`;
+            btn.disabled  = false;
+            setTimeout(() => { btn.innerHTML = `📋 Queue ${extractDjProfileUrls().length} Sets`; }, 6000);
+          } else {
+            const p = status.progress;
+            btn.innerHTML = `⏳ ${p.done}/${p.total} sets...`;
+          }
+        } catch (e) {
+          stopPolling();
+          btn.disabled  = false;
+          btn.innerHTML = `📋 Queue ${urls.length} Sets`;
+        }
+      }, 2500);
+    }
+
+    btn.addEventListener('click', async () => {
+      if (btn.innerHTML.startsWith('⏳')) {
+        // Second click while running → stop
+        try { await chrome.runtime.sendMessage({ type: 'BATCH_STOP' }); } catch {}
+        stopPolling();
+        btn.disabled  = false;
+        const fresh = extractDjProfileUrls();
+        btn.innerHTML = `📋 Queue ${fresh.length} Sets`;
+        return;
+      }
+
+      // Re-extract at click time — captures anything loaded by "Show More"
+      const urls   = extractDjProfileUrls();
+      const djName = getDjNameFromProfile();
+
+      if (urls.length === 0) {
+        btn.innerHTML = '⚠️ No sets found';
+        setTimeout(() => { btn.innerHTML = `📋 Queue Sets`; }, 2000);
+        return;
+      }
+
+      if (countObserver) { countObserver.disconnect(); countObserver = null; }
+      btn.disabled  = true;
+      btn.innerHTML = `Starting ${urls.length} sets...`;
+
+      try {
+        const resp = await chrome.runtime.sendMessage({
+          type:   'BATCH_START',
+          urls,
+          djName,
+        });
+        if (resp.success) {
+          btn.disabled  = false; // re-enable so click-to-stop works
+          btn.innerHTML = `⏳ 0/${urls.length} sets...`;
+          startPolling(urls.length);
+        } else {
+          btn.innerHTML = '❌ Failed to start';
+          btn.disabled  = false;
+        }
+      } catch (e) {
+        btn.innerHTML = '❌ Error: ' + e.message;
+        btn.disabled  = false;
+      }
+    });
+
+    document.body.appendChild(btn);
+  }
+
   // Listen for messages from popup
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'SCRAPE') {
@@ -772,11 +923,47 @@
   // Create floating button
   function createButton() {
     if (document.getElementById('identified-btn')) return;
-    
+
+    // On individual tracklist pages — create the single-scrape button right away
+    if (location.pathname.includes('/tracklist/')) {
+      _createSingleScrapeButton();
+      return;
+    }
+
+    // On listing pages (DJ profiles, genre pages, etc.) — wait for tracklist
+    // links to appear in the DOM (they load via JS after document_idle fires)
+    const urls = extractDjProfileUrls();
+    if (urls.length > 0) {
+      createDjProfileButton();
+      return;
+    }
+
+    // Not loaded yet — watch for them
+    const observer = new MutationObserver(() => {
+      if (document.getElementById('identified-btn')) { observer.disconnect(); return; }
+      if (extractDjProfileUrls().length > 0) {
+        observer.disconnect();
+        createDjProfileButton();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Belt-and-suspenders: also try after fixed delays
+    [2000, 5000].forEach(delay => {
+      setTimeout(() => {
+        if (!document.getElementById('identified-btn') && extractDjProfileUrls().length > 0) {
+          observer.disconnect();
+          createDjProfileButton();
+        }
+      }, delay);
+    });
+  }
+
+  function _createSingleScrapeButton() {
     const btn = document.createElement('button');
     btn.id = 'identified-btn';
-    btn.innerHTML = '✨ TRACK'D';
-    btn.title = 'Scrape and send tracklist to TRACK'D';
+    btn.innerHTML = "✨ TRACK'D";
+    btn.title = "Scrape and send tracklist to TRACK'D";
     
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -788,7 +975,7 @@
         if (data.tracks.length === 0 && data.artists?.length === 0) {
           btn.innerHTML = '⚠️ No tracks found';
           setTimeout(() => {
-            btn.innerHTML = '✨ TRACK'D';
+            btn.innerHTML = "✨ TRACK'D";
             btn.disabled = false;
           }, 2000);
           return;
@@ -822,7 +1009,7 @@
         }
 
         setTimeout(() => {
-          btn.innerHTML = '✨ TRACK'D';
+          btn.innerHTML = "✨ TRACK'D";
           btn.disabled = false;
         }, 4000);
 
@@ -830,7 +1017,7 @@
         console.error('[1001TL] Button error:', e);
         btn.innerHTML = '❌ Error';
         setTimeout(() => {
-          btn.innerHTML = '✨ TRACK'D';
+          btn.innerHTML = "✨ TRACK'D";
           btn.disabled = false;
         }, 3000);
       }
@@ -845,7 +1032,8 @@
     if (!result.autoScrape) return;
 
     console.log('[1001TL] Auto-scrape enabled, starting...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Wait for Cloudflare challenge to pass and page to fully render
+    await new Promise(resolve => setTimeout(resolve, 7000));
 
     const data = await extract();
     if (data.tracks.length === 0) {
@@ -892,7 +1080,12 @@
   // Initialize
   function init() {
     createButton();
-    setTimeout(autoScrape, 3000);
+    // DJ profile pages: no auto-scrape (batch button handles everything)
+    // Genre/chart pages: auto-scrape still fires to capture top tracks
+    // Tracklist pages: auto-scrape handles the set
+    if (!isDjProfilePage()) {
+      setTimeout(autoScrape, 3000);
+    }
   }
 
   if (document.readyState === 'loading') {

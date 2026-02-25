@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Animated, Dimensions, Easing, ScrollView, Modal, TextInput, KeyboardAvoidingView, Platform, Share } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Pressable, RefreshControl, ActivityIndicator, Animated, Dimensions, Easing, ScrollView, TextInput, Platform, Share, Keyboard, KeyboardAvoidingView } from 'react-native';
 
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import RAnimated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, Extrapolation, runOnJS } from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -357,35 +359,154 @@ function formatTimeAgo(dateString: string) {
 }
 
 // ── Comment Sheet ────────────────────────────────────────────────────────
-// TikTok-style bottom sheet for comments
+// TikTok-style bottom sheet for comments — Reanimated + Gesture Handler
+
+const SHEET_HEIGHT = SCREEN_HEIGHT * 0.6;
+
+function CommentRow({ comment, user, onReply, onDelete }: {
+  comment: CommentWithUser;
+  user: any;
+  onReply: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [liked, setLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(Math.floor(Math.random() * 20));
+
+  const toggleLike = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setLiked((prev) => !prev);
+    setLikeCount((prev) => liked ? prev - 1 : prev + 1);
+  };
+
+  return (
+    <View style={csStyles.commentRow}>
+      <Image
+        source={{ uri: comment.user?.avatar_url || 'https://via.placeholder.com/36' }}
+        style={csStyles.avatar}
+      />
+      <View style={csStyles.commentBody}>
+        <View style={csStyles.commentMeta}>
+          <Text style={csStyles.username}>
+            {comment.user?.display_name || comment.user?.username || 'User'}
+          </Text>
+          <Text style={csStyles.time}>{formatTimeAgo(comment.created_at)}</Text>
+        </View>
+        <Text style={csStyles.commentText}>{comment.content}</Text>
+        <View style={csStyles.actions}>
+          <Pressable
+            style={csStyles.action}
+            onPress={() => { Haptics.selectionAsync(); onReply(comment.id); }}
+          >
+            <Reply size={13} color="rgba(255,255,255,0.4)" />
+            <Text style={csStyles.actionText}>Reply</Text>
+          </Pressable>
+          {user?.id === comment.user_id && (
+            <Pressable
+              style={csStyles.action}
+              onPress={() => onDelete(comment.id)}
+            >
+              <Trash2 size={13} color="rgba(255,255,255,0.4)" />
+            </Pressable>
+          )}
+        </View>
+
+        {/* Replies */}
+        {comment.replies && comment.replies.length > 0 && (
+          <View style={csStyles.replies}>
+            {comment.replies.map((reply) => (
+              <View key={reply.id} style={csStyles.replyRow}>
+                <Image
+                  source={{ uri: reply.user?.avatar_url || 'https://via.placeholder.com/28' }}
+                  style={csStyles.replyAvatar}
+                />
+                <View style={{ flex: 1 }}>
+                  <View style={csStyles.commentMeta}>
+                    <Text style={csStyles.replyUsername}>
+                      {reply.user?.display_name || reply.user?.username || 'User'}
+                    </Text>
+                    <Text style={csStyles.time}>{formatTimeAgo(reply.created_at)}</Text>
+                  </View>
+                  <Text style={csStyles.replyText}>{reply.content}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* Heart like button — TikTok signature */}
+      <Pressable style={csStyles.commentLikeBtn} onPress={toggleLike} hitSlop={8}>
+        <Heart size={14} color={liked ? '#FF2D55' : 'rgba(255,255,255,0.35)'} fill={liked ? '#FF2D55' : 'none'} />
+        {likeCount > 0 && (
+          <Text style={[csStyles.commentLikeCount, liked && csStyles.commentLikeCountActive]}>{likeCount}</Text>
+        )}
+      </Pressable>
+    </View>
+  );
+}
+
 function CommentSheet({ visible, onClose, setId }: { visible: boolean; onClose: () => void; setId: string }) {
   const router = useRouter();
   const { isAuthenticated, user, profile } = useAuth();
   const { comments, isLoading, isSubmitting, addComment, deleteComment } = useComments(setId);
   const [text, setText] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
-  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const inputRef = useRef<TextInput>(null);
 
+  // Reanimated shared values
+  const translateY = useSharedValue(SHEET_HEIGHT);
+  const isOpen = useRef(false);
+
+  // Open/close driven by `visible` prop
   useEffect(() => {
     if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        speed: 14,
-        bounciness: 4,
-      }).start();
+      isOpen.current = true;
+      translateY.value = withSpring(0, { damping: 20, stiffness: 200, mass: 0.8 });
     } else {
-      slideAnim.setValue(SCREEN_HEIGHT);
+      isOpen.current = false;
+      translateY.value = SHEET_HEIGHT;
     }
   }, [visible]);
 
-  const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: SCREEN_HEIGHT,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => onClose());
-  };
+  const dismissJS = useCallback(() => {
+    Keyboard.dismiss();
+    setTimeout(() => onClose(), 10);
+  }, [onClose]);
+
+  const closeSheet = useCallback(() => {
+    Keyboard.dismiss();
+    translateY.value = withTiming(SHEET_HEIGHT, { duration: 250 });
+    setTimeout(() => onClose(), 260);
+  }, [onClose]);
+
+  // Pan gesture on handle/header
+  const panGesture = Gesture.Pan()
+    .onUpdate((e) => {
+      // Only allow dragging down (positive translateY)
+      translateY.value = Math.max(0, e.translationY);
+    })
+    .onEnd((e) => {
+      const shouldDismiss =
+        e.velocityY > 500 || // fast fling down
+        e.translationY > SHEET_HEIGHT * 0.3; // dragged past 30%
+
+      if (shouldDismiss) {
+        translateY.value = withTiming(SHEET_HEIGHT, { duration: 250 });
+        runOnJS(dismissJS)();
+      } else {
+        // Snap back
+        translateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+    });
+
+  // Animated styles
+  const sheetAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  const backdropAnimStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateY.value, [0, SHEET_HEIGHT], [0.4, 0], Extrapolation.CLAMP),
+  }));
 
   const handleSubmit = async () => {
     if (!text.trim()) return;
@@ -398,6 +519,7 @@ function CommentSheet({ visible, onClose, setId }: { visible: boolean; onClose: 
     if (!result?.error) {
       setText('');
       setReplyingTo(null);
+      Keyboard.dismiss();
     }
   };
 
@@ -409,107 +531,72 @@ function CommentSheet({ visible, onClose, setId }: { visible: boolean; onClose: 
   if (!visible) return null;
 
   return (
-    <Modal transparent visible={visible} animationType="none" onRequestClose={handleClose}>
-      <View style={csStyles.overlay}>
-        <Pressable style={csStyles.backdrop} onPress={handleClose} />
-        <Animated.View style={[csStyles.sheet, { transform: [{ translateY: slideAnim }] }]}>
-          {/* Glass background layers */}
-          <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
-          <View style={[StyleSheet.absoluteFill, csStyles.glassTint]} />
-          {/* Top light edge — glass refraction */}
-          <View style={csStyles.glassTopEdge} />
+    <View style={csStyles.overlay} pointerEvents="box-none">
+      {/* Backdrop — animated opacity tied to sheet translateY */}
+      <Pressable onPress={closeSheet} style={StyleSheet.absoluteFill}>
+        <RAnimated.View style={[csStyles.backdrop, backdropAnimStyle]} />
+      </Pressable>
 
-          {/* Handle bar */}
-          <View style={csStyles.handleBar}>
-            <View style={csStyles.handle} />
-          </View>
+      {/* Sheet */}
+      <RAnimated.View style={[csStyles.sheet, sheetAnimStyle]}>
+        {/* Glass background layers */}
+        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={[StyleSheet.absoluteFill, csStyles.glassTint]} />
+        {/* Top light edge — glass refraction */}
+        <View style={csStyles.glassTopEdge} />
 
-          {/* Header */}
-          <View style={csStyles.header}>
-            <Text style={csStyles.headerTitle}>
-              {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
-            </Text>
-            <Pressable onPress={handleClose} hitSlop={12}>
-              <X size={20} color="rgba(255,255,255,0.6)" />
-            </Pressable>
-          </View>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+          keyboardVerticalOffset={0}
+        >
+          {/* Handle bar + header — draggable area */}
+          <GestureDetector gesture={panGesture}>
+            <RAnimated.View>
+              <View style={csStyles.handleBar}>
+                <View style={csStyles.handle} />
+              </View>
+
+              <View style={csStyles.header}>
+                <Text style={csStyles.headerTitle}>
+                  {comments.length} {comments.length === 1 ? 'comment' : 'comments'}
+                </Text>
+                <Pressable onPress={closeSheet} hitSlop={12}>
+                  <X size={20} color="rgba(255,255,255,0.6)" />
+                </Pressable>
+              </View>
+            </RAnimated.View>
+          </GestureDetector>
 
           {/* Comments list */}
-          <ScrollView
+          <FlatList
+            data={isLoading ? [] : comments}
+            keyExtractor={(item) => item.id}
             style={csStyles.list}
             contentContainerStyle={csStyles.listContent}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
-          >
-            {isLoading ? (
-              <View style={csStyles.centered}>
-                <ActivityIndicator color="rgba(255,255,255,0.5)" />
-              </View>
-            ) : comments.length === 0 ? (
-              <View style={csStyles.centered}>
-                <Text style={csStyles.emptyText}>No comments yet</Text>
-                <Text style={csStyles.emptySubtext}>Start the conversation</Text>
-              </View>
-            ) : (
-              comments.map((comment) => (
-                <View key={comment.id} style={csStyles.commentRow}>
-                  <Image
-                    source={{ uri: comment.user?.avatar_url || 'https://via.placeholder.com/36' }}
-                    style={csStyles.avatar}
-                  />
-                  <View style={csStyles.commentBody}>
-                    <View style={csStyles.commentMeta}>
-                      <Text style={csStyles.username}>
-                        {comment.user?.display_name || comment.user?.username || 'User'}
-                      </Text>
-                      <Text style={csStyles.time}>{formatTimeAgo(comment.created_at)}</Text>
-                    </View>
-                    <Text style={csStyles.commentText}>{comment.content}</Text>
-                    <View style={csStyles.actions}>
-                      <Pressable
-                        style={csStyles.action}
-                        onPress={() => { Haptics.selectionAsync(); setReplyingTo(comment.id); }}
-                      >
-                        <Reply size={13} color="rgba(255,255,255,0.4)" />
-                        <Text style={csStyles.actionText}>Reply</Text>
-                      </Pressable>
-                      {user?.id === comment.user_id && (
-                        <Pressable
-                          style={csStyles.action}
-                          onPress={() => handleDelete(comment.id)}
-                        >
-                          <Trash2 size={13} color="rgba(255,255,255,0.4)" />
-                        </Pressable>
-                      )}
-                    </View>
-
-                    {/* Replies */}
-                    {comment.replies && comment.replies.length > 0 && (
-                      <View style={csStyles.replies}>
-                        {comment.replies.map((reply) => (
-                          <View key={reply.id} style={csStyles.replyRow}>
-                            <Image
-                              source={{ uri: reply.user?.avatar_url || 'https://via.placeholder.com/28' }}
-                              style={csStyles.replyAvatar}
-                            />
-                            <View style={{ flex: 1 }}>
-                              <View style={csStyles.commentMeta}>
-                                <Text style={csStyles.replyUsername}>
-                                  {reply.user?.display_name || reply.user?.username || 'User'}
-                                </Text>
-                                <Text style={csStyles.time}>{formatTimeAgo(reply.created_at)}</Text>
-                              </View>
-                              <Text style={csStyles.replyText}>{reply.content}</Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
+            ListEmptyComponent={
+              isLoading ? (
+                <View style={csStyles.centered}>
+                  <ActivityIndicator color="rgba(255,255,255,0.5)" />
                 </View>
-              ))
+              ) : (
+                <View style={csStyles.centered}>
+                  <Text style={csStyles.emptyText}>No comments yet</Text>
+                  <Text style={csStyles.emptySubtext}>Start the conversation</Text>
+                </View>
+              )
+            }
+            renderItem={({ item: comment }) => (
+              <CommentRow
+                comment={comment}
+                user={user}
+                onReply={setReplyingTo}
+                onDelete={handleDelete}
+              />
             )}
-          </ScrollView>
+          />
 
           {/* Reply indicator */}
           {replyingTo && (
@@ -522,63 +609,67 @@ function CommentSheet({ visible, onClose, setId }: { visible: boolean; onClose: 
           )}
 
           {/* Input */}
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={10}
-          >
-            <View style={csStyles.inputRow}>
-              <BlurView intensity={60} tint="dark" style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]} />
-              {isAuthenticated ? (
-                <>
-                  <Image
-                    source={{ uri: profile?.avatar_url || 'https://via.placeholder.com/32' }}
-                    style={csStyles.inputAvatar}
-                  />
-                  <TextInput
-                    style={csStyles.input}
-                    placeholder={replyingTo ? 'Reply...' : 'Add a comment...'}
-                    placeholderTextColor="rgba(255,255,255,0.3)"
-                    value={text}
-                    onChangeText={setText}
-                    multiline
-                    maxLength={1000}
-                  />
-                  <Pressable
-                    style={[csStyles.sendBtn, (!text.trim() || isSubmitting) && csStyles.sendBtnDisabled]}
-                    onPress={handleSubmit}
-                    disabled={!text.trim() || isSubmitting}
-                  >
-                    {isSubmitting ? (
-                      <ActivityIndicator size="small" color="#fff" />
-                    ) : (
-                      <Send size={16} color="#fff" />
-                    )}
-                  </Pressable>
-                </>
-              ) : (
-                <Pressable style={csStyles.loginBtn} onPress={() => router.push('/(auth)/login')}>
-                  <Text style={csStyles.loginBtnText}>Log in to comment</Text>
+          <View style={csStyles.inputRow}>
+            <BlurView intensity={60} tint="dark" style={[StyleSheet.absoluteFill, { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }]} />
+            {isAuthenticated ? (
+              <>
+                <Image
+                  source={{ uri: profile?.avatar_url || 'https://via.placeholder.com/32' }}
+                  style={csStyles.inputAvatar}
+                />
+                <TextInput
+                  ref={inputRef}
+                  style={csStyles.input}
+                  placeholder={replyingTo ? 'Reply...' : 'Add a comment...'}
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={text}
+                  onChangeText={setText}
+                  returnKeyType="send"
+                  onSubmitEditing={handleSubmit}
+                  blurOnSubmit={false}
+                  autoCorrect={true}
+                  maxLength={1000}
+                />
+                <Pressable
+                  style={[csStyles.sendBtn, (!text.trim() || isSubmitting) && csStyles.sendBtnDisabled]}
+                  onPress={handleSubmit}
+                  disabled={!text.trim() || isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Send size={16} color="#fff" />
+                  )}
                 </Pressable>
-              )}
-            </View>
-          </KeyboardAvoidingView>
-        </Animated.View>
-      </View>
-    </Modal>
+              </>
+            ) : (
+              <Pressable style={csStyles.loginBtn} onPress={() => router.push('/(auth)/login')}>
+                <Text style={csStyles.loginBtnText}>Log in to comment</Text>
+              </Pressable>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </RAnimated.View>
+    </View>
   );
 }
 
 // ── Comment Sheet Styles ─────────────────────────────────────────────────
 const csStyles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
+    zIndex: 100,
   },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,1)',
   },
   sheet: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     height: SCREEN_HEIGHT * 0.6,
     backgroundColor: 'rgba(20, 20, 20, 0.55)',
     borderTopLeftRadius: 24,
@@ -752,13 +843,27 @@ const csStyles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     padding: 12,
-    paddingBottom: 28, // extra padding for home indicator
+    paddingBottom: 28,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: 'rgba(255,255,255,0.08)',
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
     gap: 10,
     overflow: 'hidden',
     zIndex: 2,
+  },
+  commentLikeBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 8,
+    paddingTop: 4,
+  },
+  commentLikeCount: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 2,
+  },
+  commentLikeCountActive: {
+    color: '#FF2D55',
   },
   inputAvatar: {
     width: 30,
@@ -1437,7 +1542,7 @@ export default function FeedScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { sets } = useSets();
-  const { user, profile } = useAuth();
+  const { user, profile, isAuthenticated } = useAuth();
   const { followedArtists, isLoading: followingLoading } = useFollowing();
   const [refreshing, setRefreshing] = useState(false);
   const [followedArtistSets, setFollowedArtistSets] = useState<any[]>([]);
@@ -1506,7 +1611,6 @@ export default function FeedScreen() {
 
   // Keep openComments ref updated so memoized renderFeedCard always calls latest version
   openCommentsRef.current = (setId: string) => {
-    stopAudio();
     setCommentSheetSetId(setId);
   };
 
@@ -1691,6 +1795,7 @@ export default function FeedScreen() {
   // ── Visibility handling ──
 
   const handleSetBecameVisible = useCallback(async (setId: string) => {
+    if (!isAuthenticated) return;
     if (audioDisabledRef.current) return;
     if (visibleSetIdRef.current === setId && soundRef.current) return; // already playing this
 
@@ -2156,13 +2261,7 @@ export default function FeedScreen() {
       <CommentSheet
         visible={!!commentSheetSetId}
         setId={commentSheetSetId || ''}
-        onClose={() => {
-          setCommentSheetSetId(null);
-          // Resume audio for the visible card
-          if (visibleSetIdRef.current) {
-            handleSetBecameVisible(visibleSetIdRef.current);
-          }
-        }}
+        onClose={() => setCommentSheetSetId(null)}
       />
     </View>
   );

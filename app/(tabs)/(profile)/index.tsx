@@ -6,20 +6,25 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Modal,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles, Edit3 } from 'lucide-react-native';
+import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles, Edit3, Camera, Image as ImageIcon, Trash2, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { mockCurrentUser } from '@/mocks/tracks';
 import { useSets } from '@/contexts/SetsContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useContributions } from '@/hooks/useSocial';
+import { supabase } from '@/lib/supabase/client';
 
 const formatDate = (date: Date | string) => {
   return new Date(date).toLocaleDateString('en-US', {
@@ -95,8 +100,10 @@ const glassStyles = StyleSheet.create({
 export default function ProfileScreen() {
   const router = useRouter();
   const { sets } = useSets();
-  const { isAuthenticated, isLoading, profile } = useAuth();
+  const { isAuthenticated, isLoading, profile, updateProfile, user: authUser } = useAuth();
   const [contributionFilter, setContributionFilter] = useState<ContributionFilter>('all');
+  const [showAvatarModal, setShowAvatarModal] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const { contributions: rawContributions, isLoading: contribLoading } = useContributions();
 
   const mappedContributions = useMemo(() => {
@@ -140,6 +147,68 @@ export default function ProfileScreen() {
     if (contributionFilter === 'points') return (user.contributions || []).filter((c: any) => c.points > 0);
     return (user.contributions || []).filter((c: any) => c.status === contributionFilter);
   }, [user.contributions, contributionFilter]);
+
+  const pickAndUploadAvatar = async (useCamera: boolean) => {
+    try {
+      const permissionResult = useCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permissionResult.granted) {
+        Alert.alert('Permission needed', `Please allow access to your ${useCamera ? 'camera' : 'photo library'}.`);
+        return;
+      }
+
+      const result = useCamera
+        ? await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.7 });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      setShowAvatarModal(false);
+      setIsUploadingAvatar(true);
+
+      const asset = result.assets[0];
+      const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
+      const fileName = `${authUser?.id || 'user'}-${Date.now()}.${ext}`;
+
+      // Read as base64 and decode — reliable in React Native (avoids blob/ArrayBuffer issues)
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const binaryString = atob(base64);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, bytes, { contentType: `image/${ext}`, upsert: true });
+
+      if (uploadError) {
+        console.error('[Profile] Upload error:', uploadError);
+        Alert.alert('Upload failed', uploadError.message || 'Could not upload image. Please try again.');
+        setIsUploadingAvatar(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(fileName);
+      await updateProfile({ avatar_url: urlData.publicUrl });
+      setIsUploadingAvatar(false);
+    } catch (error) {
+      if (__DEV__) console.error('[Profile] Avatar upload error:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.');
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = async () => {
+    setShowAvatarModal(false);
+    setIsUploadingAvatar(true);
+    await updateProfile({ avatar_url: null });
+    setIsUploadingAvatar(false);
+  };
 
   const handleGenrePress = (genre: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -263,8 +332,14 @@ export default function ProfileScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {/* ── Avatar + Identity ── */}
           <View style={styles.profileHeader}>
-            {/* 3D Glass avatar ring */}
-            <View style={styles.avatarContainer}>
+            {/* 3D Glass avatar ring — pressable to change photo */}
+            <Pressable
+              style={styles.avatarContainer}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setShowAvatarModal(true);
+              }}
+            >
               <View style={styles.avatarGlow} />
               <View style={styles.avatarRing}>
                 <LinearGradient
@@ -275,7 +350,11 @@ export default function ProfileScreen() {
                 />
               </View>
               <View style={styles.avatarInner}>
-                {user.avatarUrl ? (
+                {isUploadingAvatar ? (
+                  <View style={[styles.avatar, styles.avatarPlaceholder]}>
+                    <ActivityIndicator size="small" color="#C41E3A" />
+                  </View>
+                ) : user.avatarUrl ? (
                   <Image
                     source={{ uri: user.avatarUrl }}
                     style={styles.avatar}
@@ -288,7 +367,11 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
-            </View>
+              {/* Camera overlay badge */}
+              <View style={styles.avatarCameraBadge}>
+                <Camera size={14} color="#fff" />
+              </View>
+            </Pressable>
 
             <Text style={styles.displayName}>{user.displayName}</Text>
             <Text style={styles.username}>@{user.username}</Text>
@@ -466,6 +549,66 @@ export default function ProfileScreen() {
         </ScrollView>
 
       </SafeAreaView>
+
+      {/* ── Change Avatar Modal ── */}
+      <Modal
+        visible={showAvatarModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAvatarModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAvatarModal(false)}>
+          <Pressable style={styles.modalContent} onPress={e => e.stopPropagation()}>
+            {/* Close button */}
+            <Pressable style={styles.modalClose} onPress={() => setShowAvatarModal(false)}>
+              <X size={20} color={Colors.dark.textMuted} />
+            </Pressable>
+
+            <Text style={styles.modalTitle}>Change Profile Photo</Text>
+
+            <Pressable
+              style={styles.modalOption}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                pickAndUploadAvatar(true);
+              }}
+            >
+              <View style={styles.modalOptionIcon}>
+                <Camera size={20} color="#C41E3A" />
+              </View>
+              <Text style={styles.modalOptionText}>Take Photo</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.modalOption}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                pickAndUploadAvatar(false);
+              }}
+            >
+              <View style={styles.modalOptionIcon}>
+                <ImageIcon size={20} color="#C41E3A" />
+              </View>
+              <Text style={styles.modalOptionText}>Choose from Library</Text>
+            </Pressable>
+
+            {user.avatarUrl && (
+              <Pressable
+                style={[styles.modalOption, styles.modalOptionDanger]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  handleRemoveAvatar();
+                }}
+              >
+                <View style={[styles.modalOptionIcon, styles.modalOptionIconDanger]}>
+                  <Trash2 size={20} color="#D32F2F" />
+                </View>
+                <Text style={styles.modalOptionTextDanger}>Remove Photo</Text>
+              </Pressable>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -959,6 +1102,118 @@ const styles = StyleSheet.create({
   addedDate: {
     fontSize: 11,
     color: Colors.dark.textMuted,
+  },
+
+  // ── Avatar Camera Badge ──
+  avatarCameraBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#C41E3A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#F5F0E8',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+
+  // ── Avatar Change Modal ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'flex-end',
+    padding: 16,
+    paddingBottom: 40,
+  },
+  modalContent: {
+    backgroundColor: 'rgba(245, 240, 232, 0.95)',
+    borderRadius: 24,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderTopColor: 'rgba(255, 255, 255, 0.9)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    zIndex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: Colors.dark.text,
+    letterSpacing: -0.3,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderTopColor: 'rgba(255, 255, 255, 0.9)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
+    marginBottom: 10,
+    shadowColor: 'rgba(0,0,0,0.06)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  modalOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderTopColor: 'rgba(255, 255, 255, 0.8)',
+  },
+  modalOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.dark.text,
+  },
+  modalOptionDanger: {
+    marginBottom: 0,
+  },
+  modalOptionIconDanger: {
+    backgroundColor: 'rgba(211, 47, 47, 0.06)',
+    borderColor: 'rgba(211, 47, 47, 0.15)',
+  },
+  modalOptionTextDanger: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#D32F2F',
   },
 
 });

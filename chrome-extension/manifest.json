@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
   "name": "TRACK'D - Auto Scraper",
-  "version": "3.5",
+  "version": "3.6",
   "description": "Scrape tracks and artists from Beatport, SoundCloud, and 1001Tracklists for the TRACK'D app",
   "permissions": [
     "activeTab",
     "clipboardWrite",
-    "storage"
+    "scripting",
+    "storage",
+    "tabs"
   ],
   "host_permissions": [
     "*://www.1001tracklists.com/*",
@@ -22,10 +24,7 @@
   "content_scripts": [
     {
       "matches": [
-        "*://www.1001tracklists.com/tracklist/*",
-        "*://www.1001tracklists.com/genre/*",
-        "*://www.1001tracklists.com/charts/*",
-        "*://www.1001tracklists.com/dj/*"
+        "*://www.1001tracklists.com/*"
       ],
       "js": [
         "extractors/1001tracklists.js"

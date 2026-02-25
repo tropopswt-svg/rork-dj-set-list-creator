@@ -304,6 +304,182 @@ const ringStyles = StyleSheet.create({
   },
 });
 
+// Animated loading ring for reanalyze state — dual spinning arcs in a glass circle
+function TrakingRing({ isActive, isComplete }: { isActive: boolean; isComplete: boolean }) {
+  const rotation1 = useRef(new RNAnimated.Value(0)).current;
+  const rotation2 = useRef(new RNAnimated.Value(0)).current;
+  const glowAnim = useRef(new RNAnimated.Value(0.3)).current;
+  const [dotText, setDotText] = useState('traking.');
+  const dotRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const size = 120;
+  const strokeWidth = 4;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const arcLength = circumference * 0.4;
+
+  useEffect(() => {
+    if (isActive && !isComplete) {
+      const loop1 = RNAnimated.loop(
+        RNAnimated.timing(rotation1, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      const loop2 = RNAnimated.loop(
+        RNAnimated.timing(rotation2, {
+          toValue: 1,
+          duration: 2000,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        })
+      );
+      loop1.start();
+      loop2.start();
+
+      RNAnimated.loop(
+        RNAnimated.sequence([
+          RNAnimated.timing(glowAnim, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          RNAnimated.timing(glowAnim, { toValue: 0.3, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        ])
+      ).start();
+
+      let dotIndex = 0;
+      const dots = ['traking.', 'traking..', 'traking...'];
+      dotRef.current = setInterval(() => {
+        dotIndex = (dotIndex + 1) % 3;
+        setDotText(dots[dotIndex]);
+      }, 500);
+
+      return () => {
+        rotation1.stopAnimation();
+        rotation2.stopAnimation();
+        glowAnim.stopAnimation();
+        if (dotRef.current) clearInterval(dotRef.current);
+      };
+    }
+  }, [isActive, isComplete]);
+
+  useEffect(() => {
+    if (isComplete) {
+      rotation1.stopAnimation();
+      rotation2.stopAnimation();
+      RNAnimated.sequence([
+        RNAnimated.timing(glowAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        RNAnimated.timing(glowAnim, { toValue: 0.5, duration: 500, useNativeDriver: true }),
+      ]).start();
+      if (dotRef.current) clearInterval(dotRef.current);
+      setDotText('trakd!');
+    }
+  }, [isComplete]);
+
+  const spin1 = rotation1.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+  const spin2 = rotation2.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '-360deg'],
+  });
+
+  return (
+    <View style={trakingRingStyles.container}>
+      <RNAnimated.View style={[trakingRingStyles.glowRing, { opacity: glowAnim }]} />
+      <View style={trakingRingStyles.glassFace}>
+        <Svg width={size} height={size} style={{ position: 'absolute' }}>
+          <Circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            stroke="rgba(255,255,255,0.08)"
+            strokeWidth={strokeWidth}
+            fill="none"
+          />
+        </Svg>
+        <RNAnimated.View style={{ position: 'absolute', transform: [{ rotate: spin1 }] }}>
+          <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke="#C41E3A"
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+              strokeLinecap="round"
+            />
+          </Svg>
+        </RNAnimated.View>
+        <RNAnimated.View style={{ position: 'absolute', transform: [{ rotate: spin2 }] }}>
+          <Svg width={size} height={size} style={{ transform: [{ rotate: '90deg' }] }}>
+            <Circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke="#C41E3A"
+              strokeWidth={strokeWidth}
+              fill="none"
+              strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+              strokeLinecap="round"
+            />
+          </Svg>
+        </RNAnimated.View>
+        <View style={trakingRingStyles.centerLabel}>
+          <Text style={trakingRingStyles.centerText}>{dotText}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const trakingRingStyles = StyleSheet.create({
+  container: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 140,
+    height: 140,
+  },
+  glowRing: {
+    position: 'absolute',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 12,
+  },
+  glassFace: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.3)',
+    borderBottomColor: 'rgba(255,255,255,0.05)',
+    overflow: 'hidden',
+  },
+  centerLabel: {
+    position: 'absolute',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  centerText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.5,
+  },
+});
+
 // Transform API set response into SetList type
 function transformApiSet(apiSet: any): SetList {
   return {
@@ -1308,8 +1484,9 @@ export default function SetDetailScreen() {
     );
   }
 
-  const verifiedCount = sortedTracks.filter(t => t.verified).length;
-  const communityCount = sortedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
+  const allIdentifiedTracks = [...sortedTracks, ...unplacedTracks];
+  const verifiedCount = allIdentifiedTracks.filter(t => t.verified).length;
+  const communityCount = allIdentifiedTracks.filter(t => t.source === 'social' || t.source === 'manual').length;
 
   // Parse multiple artists from name (handles &, and, vs, b2b, b3b patterns)
   const parseArtists = (artistString: string): string[] => {
@@ -1349,6 +1526,7 @@ export default function SetDetailScreen() {
   };
 
   const handleOpenSource = (link: SourceLink) => {
+    if (!isAuthenticated) { setShowAuthGate(true); return; }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     Linking.openURL(link.url);
   };
@@ -1602,6 +1780,7 @@ export default function SetDetailScreen() {
                   <Pressable
                     style={styles.saveButton}
                     onPress={() => {
+                      if (!isAuthenticated) { setShowAuthGate(true); return; }
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                       setShowIdentifyModal(true);
                     }}
@@ -1633,7 +1812,7 @@ export default function SetDetailScreen() {
                   <Text style={styles.quickStatDot}>•</Text>
                 </>
               ) : null}
-              <Text style={styles.quickStatText}>{sortedTracks.length} tracks</Text>
+              <Text style={styles.quickStatText}>{sortedTracks.length + unplacedTracks.length} tracks</Text>
               {estimatedMissingTracks > 0 && (
                 <Pressable
                   style={styles.missingTracksChip}
@@ -1747,7 +1926,7 @@ export default function SetDetailScreen() {
 
           {/* Completion chart with source buttons flanking */}
           {(() => {
-            const tracksWeHave = sortedTracks.length;
+            const tracksWeHave = sortedTracks.length + unplacedTracks.length;
             const estimatedTotal = tracksWeHave + estimatedMissingTracks;
             const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
             const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
@@ -1759,6 +1938,7 @@ export default function SetDetailScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
+                      if (!isAuthenticated) { setShowAuthGate(true); return; }
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       if (ytLink) {
                         handleOpenSource(ytLink);
@@ -1801,6 +1981,7 @@ export default function SetDetailScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
+                      if (!isAuthenticated) { setShowAuthGate(true); return; }
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       if (scLink) {
                         handleOpenSource(scLink);
@@ -1870,6 +2051,7 @@ export default function SetDetailScreen() {
               tracks={tracks}
               totalDuration={setList.totalDuration || 0}
               onGapPress={(timestamp) => {
+                if (!isAuthenticated) { setShowAuthGate(true); return; }
                 setFillGapTimestamp(timestamp);
                 setShowFillGapModal(true);
               }}
@@ -2013,7 +2195,7 @@ export default function SetDetailScreen() {
                           }
                         }}
                         onContributorPress={(username) => setSelectedContributor(username)}
-                        onListen={isUnidentified && audioSource ? () => {
+                        onListen={isUnidentified && audioSource && audioSource.platform === 'youtube' ? () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                           setAudioPreviewTrack(votedTrack);
                         } : undefined}
@@ -2022,6 +2204,7 @@ export default function SetDetailScreen() {
                         isPreviewLoading={currentTrackId === votedTrack.id && isPreviewLoading}
                         previewFailed={failedTrackId === votedTrack.id}
                         onPlayPreview={!isUnidentified && !votedTrack.isUnreleased && (votedTrack.previewUrl || votedTrack.isReleased) ? () => {
+                          if (!isAuthenticated) { setShowAuthGate(true); return; }
                           if (votedTrack.previewUrl) {
                             playPreview(votedTrack.id, votedTrack.previewUrl);
                           } else if (votedTrack.title && votedTrack.artist) {
@@ -2100,6 +2283,7 @@ export default function SetDetailScreen() {
                     isPreviewLoading={currentTrackId === track.id && isPreviewLoading}
                     previewFailed={failedTrackId === track.id}
                     onPlayPreview={!isUnidentified && !track.isUnreleased && (track.previewUrl || track.isReleased) ? () => {
+                      if (!isAuthenticated) { setShowAuthGate(true); return; }
                       if (track.previewUrl) {
                         playPreview(track.id, track.previewUrl);
                       } else if (track.title && track.artist) {
@@ -2122,7 +2306,7 @@ export default function SetDetailScreen() {
                 </Text>
                 <Pressable
                   style={styles.emptyAddButton}
-                  onPress={() => setShowAddModal(true)}
+                  onPress={() => { if (!isAuthenticated) { setShowAuthGate(true); return; } setShowAddModal(true); }}
                 >
                   <Plus size={16} color="#FFF" />
                   <Text style={styles.emptyAddButtonText}>Add First Track</Text>
@@ -2136,6 +2320,7 @@ export default function SetDetailScreen() {
                 <Pressable
                   style={styles.contributeButton}
                   onPress={() => {
+                    if (!isAuthenticated) { setShowAuthGate(true); return; }
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setShowAddModal(true);
                   }}
@@ -2191,6 +2376,7 @@ export default function SetDetailScreen() {
                       isPreviewLoading={currentTrackId === track.id && isPreviewLoading}
                       previewFailed={failedTrackId === track.id}
                       onPlayPreview={!isUnidentified && !track.isUnreleased && (track.previewUrl || track.isReleased) ? () => {
+                        if (!isAuthenticated) { setShowAuthGate(true); return; }
                         if (track.previewUrl) {
                           playPreview(track.id, track.previewUrl);
                         } else if (track.title && track.artist) {
@@ -2292,27 +2478,32 @@ export default function SetDetailScreen() {
             {/* Big ring at the top */}
             <View style={styles.chartModalRing}>
               <IdentificationRing
-                identified={sortedTracks.length}
-                total={sortedTracks.length + estimatedMissingTracks}
+                identified={sortedTracks.length + unplacedTracks.length}
+                total={sortedTracks.length + unplacedTracks.length + estimatedMissingTracks}
               />
             </View>
 
             <Text style={styles.chartModalTitle}>
-              {Math.round((sortedTracks.length / Math.max(sortedTracks.length + estimatedMissingTracks, 1)) * 100)}% Identified
+              {Math.round(((sortedTracks.length + unplacedTracks.length) / Math.max(sortedTracks.length + unplacedTracks.length + estimatedMissingTracks, 1)) * 100)}% Identified
             </Text>
             <Text style={styles.chartModalSubtitle}>
-              {sortedTracks.length} of ~{sortedTracks.length + estimatedMissingTracks} estimated tracks
+              {sortedTracks.length + unplacedTracks.length} of ~{sortedTracks.length + unplacedTracks.length + estimatedMissingTracks} estimated tracks
             </Text>
 
             <View style={styles.chartModalDivider} />
 
+            {analyzing ? (
+              <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                <TrakingRing isActive={analyzing} isComplete={false} />
+              </View>
+            ) : (<>
             <View style={styles.chartModalBadges}>
               {/* Trakd Badge */}
               <Pressable
                 style={styles.chartBadge3d}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setBadgeExplain({ type: 'trakd', count: setList.tracksIdentified || sortedTracks.length });
+                  setBadgeExplain({ type: 'trakd', count: setList.tracksIdentified || (sortedTracks.length + unplacedTracks.length) });
                   badgeExplainAnim.setValue(0);
                   RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
                 }}
@@ -2323,7 +2514,7 @@ export default function SetDetailScreen() {
                   <View style={[styles.chartBadge3dIcon, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
                     <Sparkles size={14} color="#00D4AA" />
                   </View>
-                  <Text style={styles.chartBadge3dValue}>{setList.tracksIdentified || sortedTracks.length}</Text>
+                  <Text style={styles.chartBadge3dValue}>{setList.tracksIdentified || (sortedTracks.length + unplacedTracks.length)}</Text>
                   <Text style={[styles.chartBadge3dLabel, { color: '#00D4AA' }]}>trakd</Text>
                 </View>
               </Pressable>
@@ -2398,6 +2589,7 @@ export default function SetDetailScreen() {
                   style={styles.chartModalReanalyze}
                   disabled={analyzing}
                   onPress={async () => {
+                    if (!isAuthenticated) { setShowAuthGate(true); return; }
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                     try {
                       setAnalyzing(true);
@@ -2506,10 +2698,11 @@ export default function SetDetailScreen() {
                   }}
                 >
                   <Sparkles size={14} color="#C41E3A" />
-                  <Text style={styles.chartModalReanalyzeText}>{analyzing ? 'Analyzing...' : 'Reanalyze Set'}</Text>
+                  <Text style={styles.chartModalReanalyzeText}>{analyzing ? 'traking...' : 'Reanalyze Set'}</Text>
                 </Pressable>
               );
             })()}
+            </>)}
 
             {/* Badge explanation overlay */}
             {badgeExplain && (
@@ -2608,23 +2801,16 @@ export default function SetDetailScreen() {
                             <Text style={styles.gapCardTime}>{timeStr}</Text>
                           </View>
                         </View>
-                        {audioSource && (
+                        {audioSource && audioSource.platform === 'youtube' && (
                           <Pressable
                             style={styles.gapCardPlayBtn}
                             onPress={() => {
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                               setGapMenuData(null);
-                              if (audioSource.platform === 'youtube') {
-                                const ytLink = (setList?.sourceLinks || []).find(l => l.platform === 'youtube');
-                                if (ytLink) {
-                                  const vid = extractYouTubeId(ytLink.url);
-                                  if (vid) {
-                                    Linking.openURL(`https://www.youtube.com/watch?v=${vid}&t=${ts}s`);
-                                  }
-                                }
-                              } else if (audioSource.platform === 'soundcloud') {
-                                Linking.openURL(audioSource.url);
-                              }
+                              // Use in-app player at this timestamp
+                              setCurrentTimestamp(ts);
+                              setShowPlayer(true);
+                              setPlayerMinimized(false);
                             }}
                           >
                             <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
@@ -2633,6 +2819,7 @@ export default function SetDetailScreen() {
                         <Pressable
                           style={styles.gapCardIdBtn}
                           onPress={() => {
+                            if (!isAuthenticated) { setShowAuthGate(true); return; }
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             setGapMenuData(null);
                             setFillGapTimestamp(ts);
@@ -2855,21 +3042,14 @@ export default function SetDetailScreen() {
           if (pendingTimestamp !== null) {
             const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
 
-            if (Platform.OS !== 'web' && youtubeLink) {
-              // On native, open YouTube app/browser at the timestamp
-              const videoId = extractYouTubeId(youtubeLink.url);
-              const ts = Math.floor(pendingTimestamp);
-              if (videoId) {
-                Linking.openURL(`https://www.youtube.com/watch?v=${videoId}&t=${ts}s`);
-              }
-            } else if (showPlayer) {
-              // Web: seek existing player to timestamp
+            if (showPlayer) {
+              // Seek existing player to timestamp
               setCurrentTimestamp(pendingTimestamp);
               if (playerMinimized) {
                 setPlayerMinimized(false);
               }
             } else if (youtubeLink) {
-              // Web: start the embedded player at the timestamp
+              // Start the embedded player at the timestamp
               setCurrentTimestamp(pendingTimestamp);
               setShowPlayer(true);
               setPlayerMinimized(false);
@@ -2920,8 +3100,7 @@ export default function SetDetailScreen() {
       <AuthGateModal
         visible={showAuthGate}
         onClose={() => setShowAuthGate(false)}
-        title="Sign Up to Like Sets"
-        message="Create a free account to save your favorite sets and build your music profile."
+        title="Sign up to continue"
       />
     </View>
   );

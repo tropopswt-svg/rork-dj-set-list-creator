@@ -4,6 +4,7 @@ import { StyleSheet, View, Pressable, Animated, Easing, Text } from 'react-nativ
 import React, { useRef, useEffect, useMemo, useState, useCallback, memo } from 'react';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import FABActionModal from '@/components/FABActionModal';
 import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 import SetRecordingModal from '@/components/SetRecordingModal';
@@ -15,101 +16,142 @@ import { AuthGateModal } from '@/components/AuthGate';
 import { useAuth } from '@/contexts/AuthContext';
 import { stopFeedAudio, refreshFeed } from '@/lib/feedAudioController';
 
-// Animated Vinyl FAB with "trackd" text in center — memoized to prevent animation restarts
+// Liquid glass FAB with BubbleGlassLogo — memoized to prevent animation restarts
 const VinylFAB = memo(({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const spinCircleOpacity = useRef(new Animated.Value(0)).current;
-  const spinCircleRotation = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0.3)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const innerRingAnim = useRef(new Animated.Value(0)).current;
+  const ringPulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    // Subtle pulse every 15 seconds
-    const pulseAnimation = Animated.loop(
+    // Continuous glow pulse — breathing red halo
+    const glowPulse = Animated.loop(
       Animated.sequence([
-        Animated.delay(15000),
-        Animated.timing(pulseAnim, {
-          toValue: 1.08,
-          duration: 200,
+        Animated.timing(glowAnim, {
+          toValue: 0.85,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowAnim, {
+          toValue: 0.25,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    glowPulse.start();
+
+    // Outer shimmer — continuous slow rotation
+    const shimmerSpin = Animated.loop(
+      Animated.timing(shimmerAnim, {
+        toValue: 1,
+        duration: 5000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    shimmerSpin.start();
+
+    // Inner ring — counter-rotation for depth
+    const innerSpin = Animated.loop(
+      Animated.timing(innerRingAnim, {
+        toValue: 1,
+        duration: 8000,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    innerSpin.start();
+
+    // Ring scale pulse — rings breathe in/out
+    const ringPulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(ringPulseAnim, {
+          toValue: 1.04,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(ringPulseAnim, {
+          toValue: 0.97,
+          duration: 2500,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    ringPulse.start();
+
+    // Glass face subtle scale pulse
+    const scalePulse = Animated.loop(
+      Animated.sequence([
+        Animated.delay(6000),
+        Animated.timing(scaleAnim, {
+          toValue: 1.05,
+          duration: 300,
           easing: Easing.out(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(pulseAnim, {
-          toValue: 0.95,
-          duration: 150,
+        Animated.timing(scaleAnim, {
+          toValue: 0.97,
+          duration: 200,
           easing: Easing.inOut(Easing.ease),
           useNativeDriver: true,
         }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulseAnimation.start();
-
-    // Every 30 seconds, show a spinning accent circle
-    const spinCircleAnimation = Animated.loop(
-      Animated.sequence([
-        Animated.delay(30000),
-        // Fade in
-        Animated.timing(spinCircleOpacity, {
+        Animated.timing(scaleAnim, {
           toValue: 1,
           duration: 200,
           useNativeDriver: true,
         }),
-        // Spin 3 times
-        Animated.timing(spinCircleRotation, {
-          toValue: 3,
-          duration: 1500,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        // Fade out
-        Animated.timing(spinCircleOpacity, {
-          toValue: 0,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        // Reset rotation
-        Animated.timing(spinCircleRotation, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
       ])
     );
-    spinCircleAnimation.start();
+    scalePulse.start();
 
     return () => {
-      pulseAnimation.stop();
-      spinCircleAnimation.stop();
+      glowPulse.stop();
+      shimmerSpin.stop();
+      innerSpin.stop();
+      ringPulse.stop();
+      scalePulse.stop();
     };
   }, []);
 
-  const spinCircleSpin = spinCircleRotation.interpolate({
-    inputRange: [0, 1, 2, 3],
-    outputRange: ['0deg', '360deg', '720deg', '1080deg'],
+  const shimmerRotate = shimmerAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const innerRingRotate = innerRingAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '-360deg'],
   });
 
   return (
     <Pressable style={styles.fab} onPress={onPress} onLongPress={onLongPress} delayLongPress={500}>
-      {/* Multiple vinyl grooves (static) */}
-      <View style={styles.vinylGroove1} />
-      <View style={styles.vinylGroove2} />
-      <View style={styles.vinylGroove3} />
-      {/* Spinning accent circle that appears every 30s */}
+      {/* Outer glow ring — breathing red pulse */}
+      <Animated.View style={[styles.glowRing, { opacity: glowAnim, transform: [{ scale: ringPulseAnim }] }]} />
+      {/* Outer spinning shimmer */}
       <Animated.View
         style={[
-          styles.spinCircle,
-          {
-            opacity: spinCircleOpacity,
-            transform: [{ rotate: spinCircleSpin }],
-          },
+          styles.shimmerRing,
+          { transform: [{ rotate: shimmerRotate }, { scale: ringPulseAnim }] },
         ]}
       />
-      {/* Center with trackd - pulses */}
-      <Animated.View style={[styles.fabCenter, { transform: [{ scale: pulseAnim }] }]}>
-        <Text style={styles.fabText}>trak<Text style={styles.fabTextD}>d</Text></Text>
+      {/* Inner counter-rotating accent ring */}
+      <Animated.View
+        style={[
+          styles.innerRing,
+          { transform: [{ rotate: innerRingRotate }] },
+        ]}
+      />
+      {/* 3D shadow */}
+      <View style={styles.shadowLayer} />
+      {/* Glass face with BubbleGlassLogo */}
+      <Animated.View style={[styles.glassFace, { transform: [{ scale: scaleAnim }] }]}>
+        <BubbleGlassLogo size="tiny" />
       </Animated.View>
     </Pressable>
   );
@@ -127,7 +169,6 @@ export default function TabLayout() {
   const [recordingStartTime, setRecordingStartTime] = useState<Date | null>(null);
   const [recordingTrackCount, setRecordingTrackCount] = useState(0);
   const [showAuthGate, setShowAuthGate] = useState(false);
-  const [authGateMessage, setAuthGateMessage] = useState('');
   const lastSessionIdRef = useRef<string | null>(null);
 
   // Admin menu trigger - tap Discover tab 3 times, hold on 3rd
@@ -165,7 +206,6 @@ export default function TabLayout() {
   const handleFABLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     if (!isAuthenticated) {
-      setAuthGateMessage('Sign up to identify tracks playing nearby.');
       setShowAuthGate(true);
       return;
     }
@@ -175,7 +215,6 @@ export default function TabLayout() {
   const handleAddSet = () => {
     setShowActionModal(false);
     if (!isAuthenticated) {
-      setAuthGateMessage('Sign up to submit and identify DJ sets.');
       setShowAuthGate(true);
       return;
     }
@@ -185,7 +224,6 @@ export default function TabLayout() {
   const handleIdentify = () => {
     setShowActionModal(false);
     if (!isAuthenticated) {
-      setAuthGateMessage('Sign up to identify tracks playing nearby.');
       setShowAuthGate(true);
       return;
     }
@@ -195,7 +233,6 @@ export default function TabLayout() {
   const handleRecordSet = () => {
     setShowActionModal(false);
     if (!isAuthenticated) {
-      setAuthGateMessage('Sign up to record and identify live sets.');
       setShowAuthGate(true);
       return;
     }
@@ -270,17 +307,12 @@ export default function TabLayout() {
 
   // Gate certain tabs for unauthenticated users
   const gatedTabs = ['(social)', '(profile)'];
-  const gateMessages: Record<string, string> = {
-    '(social)': 'Sign up to save tracks to your Crate and build your collection.',
-    '(profile)': 'Sign up to create your DJ profile and track your activity.',
-  };
 
   const handleTabPress = (tabName: string, e: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     if (gatedTabs.includes(tabName) && !isAuthenticated) {
       e.preventDefault();
-      setAuthGateMessage(gateMessages[tabName] || '');
       setShowAuthGate(true);
       return;
     }
@@ -288,6 +320,10 @@ export default function TabLayout() {
     if (tabName === '(feed)' && segments[1] === '(feed)') {
       // Already on feed — scroll to top and refresh
       refreshFeed();
+    } else if (tabName === '(discover)' && segments[1] === '(discover)' && segments.length > 2) {
+      // Already on discover but deep in stack — pop back to index
+      e.preventDefault();
+      router.replace('/(tabs)/(discover)');
     } else if (tabName !== '(feed)') {
       // Switching away from feed — stop audio
       stopFeedAudio();
@@ -419,7 +455,6 @@ export default function TabLayout() {
       <AuthGateModal
         visible={showAuthGate}
         onClose={() => setShowAuthGate(false)}
-        message={authGateMessage}
       />
     </View>
   );
@@ -446,66 +481,68 @@ const styles = StyleSheet.create({
     bottom: 50,
     alignSelf: 'center',
     zIndex: 100,
-    width: 66,
-    height: 66,
+    width: 82,
+    height: 82,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  vinylGroove1: {
+  glowRing: {
     position: 'absolute',
-    width: 66,
-    height: 66,
-    borderRadius: 33,
-    borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.25)',
-  },
-  vinylGroove2: {
-    position: 'absolute',
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.35)',
-  },
-  vinylGroove3: {
-    position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    borderWidth: 1,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'transparent',
+    borderWidth: 1.5,
     borderColor: 'rgba(196, 30, 58, 0.45)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
   },
-  spinCircle: {
+  shimmerRing: {
+    position: 'absolute',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+    borderTopColor: 'rgba(255,255,255,0.35)',
+    borderRightColor: 'rgba(196, 30, 58, 0.3)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.1)',
+  },
+  innerRing: {
     position: 'absolute',
     width: 70,
     height: 70,
     borderRadius: 35,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: 'transparent',
-    borderTopColor: Colors.dark.primary,
-    borderRightColor: 'rgba(196, 30, 58, 0.5)',
+    borderTopColor: 'rgba(196, 30, 58, 0.2)',
+    borderLeftColor: 'rgba(255,255,255,0.15)',
   },
-  fabCenter: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: Colors.dark.primary,
+  shadowLayer: {
+    position: 'absolute',
+    top: 11,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    backgroundColor: 'rgba(80, 10, 20, 0.4)',
+  },
+  glassFace: {
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
-    elevation: 8,
-  },
-  fabText: {
-    color: Colors.dark.background,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-  },
-  fabTextD: {
-    fontWeight: '900',
-    fontSize: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+    borderTopColor: 'rgba(255,255,255,0.25)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.1)',
+    backgroundColor: 'rgba(196, 30, 58, 0.08)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
 });
