@@ -116,9 +116,12 @@ function normalizeScores(scores) {
 // ── Query Builder ────────────────────────────────────────────────────────
 
 function buildBaseQuery(supabase, { dj, search } = {}) {
+  const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   let query = supabase
     .from('sets')
-    .select('*, artists:dj_id(image_url)', { count: 'exact' });
+    .select('*, artists:dj_id(image_url)', { count: 'exact' })
+    // Exclude future events — sets that haven't happened yet have no tracklists
+    .or(`event_date.is.null,event_date.lte.${today}`);
   if (dj) query = query.ilike('dj_name', `%${dj}%`);
   if (search) query = query.or(`title.ilike.%${search}%,dj_name.ilike.%${search}%,venue.ilike.%${search}%`);
   return query;
