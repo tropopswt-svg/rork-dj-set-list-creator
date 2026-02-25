@@ -19,7 +19,7 @@ interface AnimatedSetCardProps {
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 export const CARD_HEIGHT = 122; // Height of SetFeedCard (108px row + 14px margin)
 
-export default function AnimatedSetCard({
+const AnimatedSetCard = React.memo(function AnimatedSetCard({
   setList,
   index,
   scrollY,
@@ -96,7 +96,9 @@ export default function AnimatedSetCard({
       />
     </Animated.View>
   );
-}
+});
+
+export default AnimatedSetCard;
 
 const styles = StyleSheet.create({
   container: {

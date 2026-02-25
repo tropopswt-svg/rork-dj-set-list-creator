@@ -87,7 +87,7 @@ export default function ArtistProfileScreen() {
     return (
       <View style={styles.loadingContainer}>
         <Stack.Screen options={{ headerShown: false }} />
-        <ActivityIndicator size="large" color={Colors.dark.primary} />
+        <BubbleGlassLogo size="large" loading />
         <Text style={styles.loadingText}>Loading artist...</Text>
       </View>
     );

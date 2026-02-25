@@ -1,18 +1,32 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  Modal,
   Pressable,
   TextInput,
-  KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { X, Send, Volume2, ExternalLink, Youtube, Music2 } from 'lucide-react-native';
+import {
+  X,
+  Send,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Volume2,
+  VolumeX,
+  Youtube,
+  Music2,
+} from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import * as WebBrowser from 'expo-web-browser';
 import Colors from '@/constants/colors';
+import { extractYouTubeId, buildNativeHTML } from './YouTubePlayer';
+
+// Only import WebView on native
+const WebView = Platform.OS !== 'web'
+  ? require('react-native-webview').default
+  : null;
 
 interface AudioPreviewModalProps {
   visible: boolean;
@@ -23,6 +37,14 @@ interface AudioPreviewModalProps {
   timestamp: number; // in seconds
   trackArtist?: string; // pre-fill if we have partial ID
 }
+
+const formatTime = (seconds: number): string => {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 export default function AudioPreviewModal({
   visible,
@@ -35,69 +57,82 @@ export default function AudioPreviewModal({
 }: AudioPreviewModalProps) {
   const [artistInput, setArtistInput] = useState(trackArtist || '');
   const [titleInput, setTitleInput] = useState('');
-  const [hasListened, setHasListened] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(timestamp);
+  const webViewRef = useRef<any>(null);
 
-  // Reset inputs when modal opens
+  const videoId = sourceUrl && sourcePlatform === 'youtube'
+    ? extractYouTubeId(sourceUrl)
+    : null;
+
+  const isNative = Platform.OS !== 'web';
+  const isSoundCloud = sourcePlatform === 'soundcloud';
+
+  // Reset state when opening
   useEffect(() => {
     if (visible) {
       setArtistInput(trackArtist || '');
       setTitleInput('');
-      setHasListened(false);
+      setIsPlaying(false);
+      setIsMuted(false);
+      setCurrentTime(timestamp);
     }
-  }, [visible, trackArtist]);
+  }, [visible, trackArtist, timestamp]);
 
-  const formatTimestamp = (seconds: number) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    if (hrs > 0) {
-      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Send command to YouTube IFrame API via WebView
+  const sendCommand = useCallback((func: string, args?: any) => {
+    if (!isNative || !webViewRef.current) return;
+    const js = `window.handleCommand(${JSON.stringify({ func, args: args || [] })}); true;`;
+    webViewRef.current.injectJavaScript(js);
+  }, [isNative]);
 
-  // Get URL with timestamp for direct playback
-  const getPlaybackUrl = (): string | null => {
-    if (!sourceUrl || !sourcePlatform) return null;
-
-    if (sourcePlatform === 'youtube') {
-      // Convert to youtube.com/watch URL with timestamp
-      const patterns = [
-        /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-        /youtube\.com\/v\/([^&\n?#]+)/,
-      ];
-      for (const pattern of patterns) {
-        const match = sourceUrl.match(pattern);
-        if (match) {
-          const videoId = match[1];
-          return `https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(timestamp)}s`;
+  // Handle messages from YouTube IFrame API
+  const handleWebViewMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.event === 'onReady') {
+        setIsPlaying(true);
+      } else if (data.event === 'onStateChange') {
+        setIsPlaying(data.info === 1);
+      } else if (data.event === 'timeUpdate' && data.info) {
+        if (data.info.currentTime !== undefined) {
+          setCurrentTime(data.info.currentTime);
         }
       }
-      return sourceUrl;
-    }
+    } catch (e) {}
+  }, []);
 
-    if (sourcePlatform === 'soundcloud') {
-      // SoundCloud doesn't support timestamp in URL for sets easily
-      // Just return the URL and user can seek
-      return sourceUrl;
+  const togglePlay = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isPlaying) {
+      sendCommand('pauseVideo');
+    } else {
+      sendCommand('playVideo');
     }
-
-    return sourceUrl;
+    setIsPlaying(!isPlaying);
   };
 
-  const handleListen = async () => {
-    const url = getPlaybackUrl();
-    if (!url) return;
+  const toggleMute = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (isMuted) {
+      sendCommand('unMute');
+    } else {
+      sendCommand('mute');
+    }
+    setIsMuted(!isMuted);
+  };
 
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setHasListened(true);
+  const skipBack = () => {
+    const newTime = Math.max(0, currentTime - 15);
+    sendCommand('seekTo', [newTime, true]);
+    setCurrentTime(newTime);
+  };
 
-    // Open in in-app browser
-    await WebBrowser.openBrowserAsync(url, {
-      presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
-      controlsColor: Colors.dark.primary,
-      toolbarColor: Colors.dark.surface,
-    });
+  const skipForward = () => {
+    const newTime = currentTime + 15;
+    sendCommand('seekTo', [newTime, true]);
+    setCurrentTime(newTime);
   };
 
   const handleSubmit = () => {
@@ -105,7 +140,6 @@ export default function AudioPreviewModal({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       return;
     }
-
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     onSubmitIdentification(artistInput.trim(), titleInput.trim());
     onClose();
@@ -113,252 +147,271 @@ export default function AudioPreviewModal({
 
   const handleClose = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    sendCommand('pauseVideo');
     onClose();
   };
 
-  if (!sourceUrl || !sourcePlatform) {
-    return null;
-  }
+  if (!visible) return null;
+  if (!sourceUrl || !sourcePlatform) return null;
+  if (sourcePlatform === 'youtube' && !videoId) return null;
 
-  const PlatformIcon = sourcePlatform === 'youtube' ? Youtube : Music2;
-  const platformColor = sourcePlatform === 'youtube' ? '#FF0000' : '#FF5500';
-  const platformName = sourcePlatform === 'youtube' ? 'YouTube' : 'SoundCloud';
+  // SoundCloud: Widget API HTML with desktop context to avoid "listen in app"
+  const buildSoundCloudHTML = (url: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#1a1a2e;overflow:hidden}iframe{width:100%;height:100%;border:none}</style>
+</head>
+<body>
+  <iframe id="sc" allow="autoplay"
+    src="https://w.soundcloud.com/player/?url=${encodeURIComponent(url)}&auto_play=true&show_artwork=false&visual=false&color=%23C41E3A&buying=false&sharing=false&download=false&show_playcount=false&show_user=false"></iframe>
+  <script src="https://w.soundcloud.com/player/api.js"></script>
+  <script>
+    var widget=SC.Widget('sc');
+    widget.bind(SC.Widget.Events.READY,function(){
+      widget.play();
+      widget.setVolume(100);
+      window.ReactNativeWebView.postMessage(JSON.stringify({event:'onReady'}));
+    });
+    widget.bind(SC.Widget.Events.PLAY_PROGRESS,function(d){
+      window.ReactNativeWebView.postMessage(JSON.stringify({event:'timeUpdate',info:{currentTime:d.currentPosition/1000}}));
+    });
+    widget.bind(SC.Widget.Events.PLAY,function(){
+      window.ReactNativeWebView.postMessage(JSON.stringify({event:'onStateChange',info:1}));
+    });
+    widget.bind(SC.Widget.Events.PAUSE,function(){
+      window.ReactNativeWebView.postMessage(JSON.stringify({event:'onStateChange',info:2}));
+    });
+  </script>
+</body>
+</html>`;
+
+  const DESKTOP_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+  // SoundCloud widget URL for web fallback
+  const soundcloudWidgetUrl = isSoundCloud && sourceUrl
+    ? `https://w.soundcloud.com/player/?url=${encodeURIComponent(sourceUrl)}&auto_play=true&start_track=0&show_artwork=false&visual=false&color=%23C41E3A`
+    : null;
+
+  // Web YouTube embed URL
+  const webYoutubeEmbedUrl = videoId
+    ? `https://www.youtube.com/embed/${videoId}?start=${Math.floor(timestamp)}&autoplay=1&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3`
+    : null;
+
+  const renderPlayer = () => {
+    if (isNative && WebView) {
+      if (isSoundCloud) {
+        return (
+          <WebView
+            source={{ html: buildSoundCloudHTML(sourceUrl!), baseUrl: 'https://rork-dj-set-list-creator.vercel.app' }}
+            style={{ flex: 1, backgroundColor: '#1a1a2e' }}
+            userAgent={DESKTOP_UA}
+            allowsInlineMediaPlayback={true}
+            mediaPlaybackRequiresUserAction={false}
+            javaScriptEnabled={true}
+            domStorageEnabled={true}
+            scrollEnabled={false}
+            bounces={false}
+            onMessage={handleWebViewMessage}
+          />
+        );
+      }
+      // YouTube: use IFrame API with baseUrl for proper Referer
+      return (
+        <WebView
+          ref={webViewRef}
+          source={{ html: buildNativeHTML(videoId!, timestamp), baseUrl: 'https://rork-dj-set-list-creator.vercel.app' }}
+          style={{ flex: 1, backgroundColor: '#000' }}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsFullscreenVideo={false}
+          scrollEnabled={false}
+          bounces={false}
+          onMessage={handleWebViewMessage}
+        />
+      );
+    }
+
+    // Web: use iframe
+    const embedUrl = isSoundCloud ? soundcloudWidgetUrl! : webYoutubeEmbedUrl!;
+    return (
+      <iframe
+        src={embedUrl}
+        style={{ width: '100%', height: '100%', border: 'none' }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+      />
+    );
+  };
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent
-      onRequestClose={handleClose}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
-      >
-        <Pressable style={styles.backdrop} onPress={handleClose} />
-
-        <View style={styles.content}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <Volume2 size={20} color={Colors.dark.primary} />
-              <Text style={styles.headerTitle}>Identify Track</Text>
-            </View>
-            <Pressable onPress={handleClose} hitSlop={8}>
-              <X size={24} color={Colors.dark.textSecondary} />
-            </Pressable>
-          </View>
-
-          {/* Listen Button */}
-          <View style={styles.listenSection}>
-            <Text style={styles.listenLabel}>Step 1: Listen to the track</Text>
-            <Pressable style={styles.listenButton} onPress={handleListen}>
-              <View style={[styles.platformIcon, { backgroundColor: `${platformColor}20` }]}>
-                <PlatformIcon size={24} color={platformColor} />
-              </View>
-              <View style={styles.listenButtonContent}>
-                <Text style={styles.listenButtonTitle}>Open in {platformName}</Text>
-                <Text style={styles.listenButtonSubtitle}>
-                  Starts at {formatTimestamp(timestamp)}
-                </Text>
-              </View>
-              <ExternalLink size={20} color={Colors.dark.textMuted} />
-            </Pressable>
-            {hasListened && (
-              <View style={styles.listenedBadge}>
-                <Text style={styles.listenedText}>Opened - come back when you've identified it</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Identification Form */}
-          <View style={styles.formSection}>
-            <Text style={styles.formLabel}>Step 2: Enter track details</Text>
-            <View style={styles.form}>
-              <View style={styles.inputRow}>
-                <View style={[styles.inputContainer, styles.inputHalf]}>
-                  <Text style={styles.inputLabel}>Artist</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={artistInput}
-                    onChangeText={setArtistInput}
-                    placeholder="Artist name"
-                    placeholderTextColor={Colors.dark.textMuted}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
-
-                <View style={[styles.inputContainer, styles.inputHalf]}>
-                  <Text style={styles.inputLabel}>Track Title</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={titleInput}
-                    onChangeText={setTitleInput}
-                    placeholder="Track title"
-                    placeholderTextColor={Colors.dark.textMuted}
-                    autoCapitalize="words"
-                    autoCorrect={false}
-                  />
-                </View>
-              </View>
-
-              <Pressable
-                style={[
-                  styles.submitButton,
-                  (!artistInput.trim() || !titleInput.trim()) && styles.submitButtonDisabled,
-                ]}
-                onPress={handleSubmit}
-                disabled={!artistInput.trim() || !titleInput.trim()}
-              >
-                <Send size={18} color="#FFF" />
-                <Text style={styles.submitButtonText}>Submit Identification</Text>
-              </Pressable>
-            </View>
-          </View>
+    <View style={styles.container}>
+      {/* Header row: platform icon + time + close */}
+      <View style={styles.header}>
+        <View style={styles.headerLeft}>
+          {isSoundCloud
+            ? <Music2 size={16} color="#FF5500" />
+            : <Youtube size={16} color="#FF0000" />
+          }
+          <Text style={styles.headerTime}>Listening at {formatTime(currentTime)}</Text>
         </View>
-      </KeyboardAvoidingView>
-    </Modal>
+        <Pressable onPress={handleClose} hitSlop={8} style={styles.closeButton}>
+          <X size={18} color={Colors.dark.textSecondary} />
+        </Pressable>
+      </View>
+
+      {/* Player sliver */}
+      <View style={[styles.playerSliver, isSoundCloud && styles.playerSliverSC]}>
+        {renderPlayer()}
+      </View>
+
+      {/* Mini controls for YouTube */}
+      {!isSoundCloud && (
+        <View style={styles.miniControls}>
+          <Pressable style={styles.ctrlBtn} onPress={toggleMute}>
+            {isMuted
+              ? <VolumeX size={14} color={Colors.dark.textSecondary} />
+              : <Volume2 size={14} color={Colors.dark.text} />
+            }
+          </Pressable>
+          <Pressable style={styles.ctrlBtn} onPress={skipBack}>
+            <SkipBack size={14} color={Colors.dark.text} />
+          </Pressable>
+          <Pressable style={styles.playBtn} onPress={togglePlay}>
+            {isPlaying
+              ? <Pause size={14} color="#FFF" fill="#FFF" />
+              : <Play size={14} color="#FFF" fill="#FFF" />
+            }
+          </Pressable>
+          <Pressable style={styles.ctrlBtn} onPress={skipForward}>
+            <SkipForward size={14} color={Colors.dark.text} />
+          </Pressable>
+        </View>
+      )}
+
+      {/* Inline ID form */}
+      <View style={styles.formRow}>
+        <TextInput
+          style={styles.input}
+          value={artistInput}
+          onChangeText={setArtistInput}
+          placeholder="Artist"
+          placeholderTextColor={Colors.dark.textMuted}
+          autoCapitalize="words"
+          autoCorrect={false}
+        />
+        <TextInput
+          style={styles.input}
+          value={titleInput}
+          onChangeText={setTitleInput}
+          placeholder="Title"
+          placeholderTextColor={Colors.dark.textMuted}
+          autoCapitalize="words"
+          autoCorrect={false}
+        />
+        <Pressable
+          style={[styles.submitBtn, (!artistInput.trim() || !titleInput.trim()) && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={!artistInput.trim() || !titleInput.trim()}
+        >
+          <Send size={16} color="#FFF" />
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-  },
-  content: {
     backgroundColor: Colors.dark.surface,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingTop: 16,
-    paddingBottom: 34,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.dark.text,
-  },
-  listenSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
-  },
-  listenLabel: {
+  headerTime: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.dark.textSecondary,
-    marginBottom: 10,
+    color: Colors.dark.text,
   },
-  listenButton: {
+  closeButton: {
+    padding: 4,
+  },
+  playerSliver: {
+    height: 40,
+    marginHorizontal: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
+  playerSliverSC: {
+    height: 60,
+  },
+  miniControls: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.background,
-    borderRadius: 12,
-    padding: 14,
+    justifyContent: 'center',
     gap: 12,
-    borderWidth: 1,
-    borderColor: Colors.dark.border,
+    paddingVertical: 6,
   },
-  platformIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
+  ctrlBtn: {
+    padding: 6,
+  },
+  playBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listenButtonContent: {
-    flex: 1,
-  },
-  listenButtonTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: Colors.dark.text,
-  },
-  listenButtonSubtitle: {
-    fontSize: 13,
-    color: Colors.dark.textSecondary,
-    marginTop: 2,
-  },
-  listenedBadge: {
-    marginTop: 10,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  listenedText: {
-    fontSize: 12,
-    color: '#22C55E',
-    textAlign: 'center',
-  },
-  formSection: {
-    paddingHorizontal: 20,
-  },
-  formLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.dark.textSecondary,
-    marginBottom: 10,
-  },
-  form: {
-    gap: 12,
-  },
-  inputRow: {
+  formRow: {
     flexDirection: 'row',
-    gap: 10,
-  },
-  inputContainer: {
-    gap: 4,
-  },
-  inputHalf: {
-    flex: 1,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.dark.textMuted,
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingBottom: 10,
+    paddingTop: 4,
   },
   input: {
+    flex: 1,
     backgroundColor: Colors.dark.background,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
     color: Colors.dark.text,
     borderWidth: 1,
     borderColor: Colors.dark.border,
   },
-  submitButton: {
-    flexDirection: 'row',
+  submitBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: Colors.dark.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: Colors.dark.primary,
-    paddingVertical: 14,
-    borderRadius: 10,
   },
-  submitButtonDisabled: {
-    opacity: 0.5,
-  },
-  submitButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFF',
+  submitBtnDisabled: {
+    opacity: 0.4,
   },
 });

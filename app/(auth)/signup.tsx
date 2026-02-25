@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -17,10 +17,19 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
+import { stopFeedAudio } from '@/lib/feedAudioController';
+import { useAudioPreview } from '@/contexts/AudioPreviewContext';
 
 export default function SignupScreen() {
   const router = useRouter();
   const { signUp, signInWithGoogle, signInWithApple } = useAuth();
+  const { stop: stopPreviewAudio } = useAudioPreview();
+
+  // Stop any playing audio when signup screen mounts
+  useEffect(() => {
+    stopFeedAudio();
+    stopPreviewAudio();
+  }, []);
 
   const [displayName, setDisplayName] = useState('');
   const [username, setUsername] = useState('');

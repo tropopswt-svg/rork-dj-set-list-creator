@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Pressable, Dimensions, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
@@ -18,7 +18,8 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { ChevronUp } from 'lucide-react-native';
+import { ChevronUp, Heart, MessageCircle, Share2, CheckCircle, SkipForward, Music, Clock } from 'lucide-react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
@@ -35,77 +36,87 @@ interface MiniSet {
   coverUrl?: string;
 }
 
-// ─── Flying mini-card config ────────────────────────────────────────────
-const FLYING_COUNT = 5;
-const CIRCLE_RADIUS = 120;
+// ─── Filmstrip config ───────────────────────────────────────────────────
 const MINI_W = 100;
 const MINI_H = 130;
+const CARD_GAP = 24;
+const ROW_COUNT = 3;
+const CARDS_PER_ROW = Math.ceil(SCREEN_WIDTH / (MINI_W + CARD_GAP)) * 3;
+const ROW_TOTAL_WIDTH = CARDS_PER_ROW * (MINI_W + CARD_GAP);
+const ROW_Y_OFFSETS = [-140, 0, 140];
+const ROW_DIRECTIONS = [1, -1, 1];
+const TRAVEL_DISTANCE = ROW_TOTAL_WIDTH * 0.7;
 
-// Each card flies in from a different edge
-const FLYING_CONFIGS = Array.from({ length: FLYING_COUNT }, (_, i) => {
-  const side = i % 4;
-  const spread = (Math.random() - 0.5) * SCREEN_WIDTH * 0.5;
-  let startX: number, startY: number;
-  switch (side) {
-    case 0: startX = spread; startY = -SCREEN_HEIGHT * 0.55; break;
-    case 1: startX = SCREEN_WIDTH * 0.65; startY = spread; break;
-    case 2: startX = spread; startY = SCREEN_HEIGHT * 0.55; break;
-    default: startX = -SCREEN_WIDTH * 0.65; startY = spread; break;
-  }
-  const slotAngle = (i / FLYING_COUNT) * 2 * Math.PI;
-  return { startX, startY, slotAngle };
-});
+// Panel dimensions
+const PANEL_WIDTH = (SCREEN_WIDTH - 48) / 2;
+const PANEL_HEIGHT = 210;
 
-function FlyingMiniCard({
-  index,
-  set,
-  arrivalProg,
-  spinAngle,
-  fadeProg,
-}: {
-  index: number;
-  set?: MiniSet;
-  arrivalProg: SharedValue<number>;
-  spinAngle: SharedValue<number>;
-  fadeProg: SharedValue<number>;
-}) {
-  const { startX, startY, slotAngle } = FLYING_CONFIGS[index];
-
-  const style = useAnimatedStyle(() => {
-    const angle = slotAngle + spinAngle.value;
-    const cx = Math.cos(angle) * CIRCLE_RADIUS;
-    const cy = Math.sin(angle) * CIRCLE_RADIUS;
-
-    // Fly from off-screen to circle slot
-    const x = startX + (cx - startX) * arrivalProg.value;
-    const y = startY + (cy - startY) * arrivalProg.value;
-
-    const spinRot = (angle * 180) / Math.PI * 0.15;
-    const scale = interpolate(arrivalProg.value, [0, 1], [0.2, 1]);
-    const opacity = Math.min(arrivalProg.value, 1 - fadeProg.value);
-
-    return {
-      transform: [
-        { translateX: x },
-        { translateY: y },
-        { rotate: `${spinRot}deg` },
-        { scale },
-      ],
-      opacity: Math.max(0, opacity),
-    };
-  });
-
+// ─── Shazam-style S icon (flipped, red) ─────────────────────────────────
+function ShazamIcon({ size = 24 }: { size?: number }) {
   return (
-    <Animated.View style={[styles.miniCard, style]}>
+    <View style={{ transform: [{ rotate: '180deg' }] }}>
+      <Svg width={size} height={size * 1.17} viewBox="0 0 24 28">
+        <Path
+          d="M 6 2 C 18 2 18 14 12 14"
+          stroke="#C41E3A"
+          strokeWidth={3.5}
+          strokeLinecap="round"
+          fill="none"
+        />
+        <Path
+          d="M 18 26 C 6 26 6 14 12 14"
+          stroke="#C41E3A"
+          strokeWidth={3.5}
+          strokeLinecap="round"
+          fill="none"
+        />
+      </Svg>
+    </View>
+  );
+}
+
+// ─── Mini YouTube icon ──────────────────────────────────────────────────
+function YouTubeIcon() {
+  return (
+    <Svg width={22} height={16} viewBox="0 0 22 16">
+      <Path
+        d="M 3 1 L 19 1 Q 21 1 21 3 L 21 13 Q 21 15 19 15 L 3 15 Q 1 15 1 13 L 1 3 Q 1 1 3 1 Z"
+        fill="#FF0000"
+      />
+      <Path d="M 9 4.5 L 15.5 8 L 9 11.5 Z" fill="white" />
+    </Svg>
+  );
+}
+
+// ─── Mini SoundCloud icon ───────────────────────────────────────────────
+function SoundCloudIcon() {
+  return (
+    <Svg width={24} height={16} viewBox="0 0 24 16">
+      <Path
+        d="M 2 14 L 2 9 M 5 14 L 5 7 M 8 14 L 8 5 M 11 14 L 11 4 M 14 14 L 14 3 L 16 2 Q 20 1 22 3 Q 24 5 22 7 L 22 14 Z"
+        fill="#FF7700"
+        stroke="#FF7700"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+// ─── FilmstripCard ──────────────────────────────────────────────────────
+function FilmstripCard({ set }: { set?: MiniSet }) {
+  return (
+    <View style={styles.miniCard}>
       {set?.coverUrl ? (
         <Image
           source={{ uri: set.coverUrl }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { opacity: 0.55 }]}
           contentFit="cover"
         />
       ) : (
         <LinearGradient
-          colors={['#2A2A2A', '#1A1A1A']}
+          colors={['rgba(60,60,60,0.4)', 'rgba(30,30,30,0.3)']}
           style={StyleSheet.absoluteFill}
         />
       )}
@@ -117,6 +128,788 @@ function FlyingMiniCard({
           <Text style={styles.miniCardArtist} numberOfLines={1}>{set.artist}</Text>
         </View>
       )}
+    </View>
+  );
+}
+
+// ─── ShatterCard (card with individual shatter trajectory) ───────────
+function ShatterCard({
+  set,
+  index,
+  rowIndex,
+  shatterProgress,
+}: {
+  set?: MiniSet;
+  index: number;
+  rowIndex: number;
+  shatterProgress: SharedValue<number>;
+}) {
+  // Deterministic trajectory based on position
+  const seed = (index * 7 + rowIndex * 13) % 17;
+  const centerOffset = index - CARDS_PER_ROW / 2;
+  const flyX = centerOffset * (60 + seed * 12);
+  const flyY = ROW_Y_OFFSETS[rowIndex] < 0
+    ? -(180 + seed * 25)
+    : ROW_Y_OFFSETS[rowIndex] > 0
+      ? (180 + seed * 25)
+      : (seed % 2 === 0 ? -1 : 1) * (120 + seed * 20);
+  const flyRotate = (seed % 2 === 0 ? 1 : -1) * (20 + seed * 4);
+
+  const style = useAnimatedStyle(() => {
+    const p = shatterProgress.value;
+    return {
+      transform: [
+        { translateX: p * flyX },
+        { translateY: p * flyY },
+        { rotate: `${p * flyRotate}deg` },
+        { scale: interpolate(p, [0, 0.5, 1], [1, 0.8, 0.3]) },
+      ],
+      opacity: interpolate(p, [0, 0.6, 1], [1, 0.5, 0]),
+    };
+  });
+
+  return (
+    <Animated.View style={style}>
+      <FilmstripCard set={set} />
+    </Animated.View>
+  );
+}
+
+// ─── FilmstripRow ───────────────────────────────────────────────────────
+function FilmstripRow({
+  rowIndex,
+  sets,
+  translateX,
+  crawl,
+  shatterProgress,
+}: {
+  rowIndex: number;
+  sets: MiniSet[];
+  translateX: SharedValue<number>;
+  crawl: SharedValue<number>;
+  shatterProgress: SharedValue<number>;
+}) {
+  const direction = ROW_DIRECTIONS[rowIndex];
+  const yOffset = ROW_Y_OFFSETS[rowIndex];
+
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value * direction + crawl.value * direction }],
+  }));
+
+  return (
+    <Animated.View
+      style={[
+        styles.filmstripRow,
+        { top: '50%', marginTop: yOffset - MINI_H / 2 },
+        style,
+      ]}
+    >
+      {Array.from({ length: CARDS_PER_ROW }, (_, i) => (
+        <ShatterCard
+          key={i}
+          set={sets.length > 0 ? sets[i % sets.length] : undefined}
+          index={i}
+          rowIndex={rowIndex}
+          shatterProgress={shatterProgress}
+        />
+      ))}
+    </Animated.View>
+  );
+}
+
+// ─── Panel 1: Scroll the Feed (mini TikTok-style with scroll + double-tap) ─
+const FEED_CARD_H = PANEL_HEIGHT - 44; // minus footer
+const TRACK_NAMES = [
+  'Strobe — Deadmau5',
+  'ID — ID',
+  'Losing It — Fisher',
+];
+
+function FeedMiniCardContent({
+  set,
+  index,
+}: {
+  set: MiniSet | null;
+  index: number;
+}) {
+  return (
+    <View style={[StyleSheet.absoluteFill]}>
+      {set?.coverUrl ? (
+        <Image
+          source={{ uri: set.coverUrl }}
+          style={[StyleSheet.absoluteFill, { opacity: 0.6 }]}
+          contentFit="cover"
+        />
+      ) : (
+        <LinearGradient
+          colors={['#1A1A1A', '#111', '#0A0A0A']}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
+      <LinearGradient
+        colors={['rgba(0,0,0,0.5)', 'transparent']}
+        locations={[0, 0.4]}
+        style={[StyleSheet.absoluteFill, { height: '40%' }]}
+      />
+      <LinearGradient
+        colors={['transparent', 'rgba(0,0,0,0.8)']}
+        locations={[0.3, 1]}
+        style={[StyleSheet.absoluteFill, { top: '50%' }]}
+      />
+
+      {/* Artist badge */}
+      <View style={styles.feedArtistBadge}>
+        <View style={styles.feedMiniAvatar} />
+        <View>
+          <Text style={styles.feedArtistName} numberOfLines={1}>
+            {set?.artist || 'DJ Name'}
+          </Text>
+          <Text style={styles.feedArtistTime}>{index === 0 ? '2h ago' : '5h ago'}</Text>
+        </View>
+      </View>
+
+      {/* Skip button */}
+      <View style={styles.feedSkipWrap}>
+        <View style={styles.feedSkipGlow} />
+        <View style={styles.feedSkipBtn}>
+          <SkipForward size={10} color="rgba(255,255,255,0.9)" />
+        </View>
+      </View>
+
+      {/* Action column */}
+      <View style={styles.feedActionCol}>
+        <View style={styles.feedActionBtn}>
+          <Heart size={8} color="rgba(255,255,255,0.8)" />
+        </View>
+        <View style={styles.feedActionBtn}>
+          <MessageCircle size={8} color="rgba(255,255,255,0.8)" />
+        </View>
+        <View style={styles.feedActionBtn}>
+          <Share2 size={8} color="rgba(255,255,255,0.8)" />
+        </View>
+      </View>
+
+      {/* Bottom info */}
+      <View style={styles.feedInfoPanel}>
+        <Text style={styles.feedSetTitle} numberOfLines={1}>
+          {set?.name || 'Set Name'}
+        </Text>
+        <View style={styles.feedMetaRow}>
+          <View style={styles.feedMetaPill}>
+            <Music size={6} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.feedMetaText}>47 tracks</Text>
+          </View>
+          <View style={styles.feedMetaPill}>
+            <Clock size={6} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.feedMetaText}>2h 14m</Text>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function FeedDemoPanel({ delay, sets }: { delay: number; sets: MiniSet[] }) {
+  const panelOpacity = useSharedValue(0);
+  const panelTranslateY = useSharedValue(30);
+
+  // Track pill drift
+  const pill1X = useSharedValue(-40);
+  const pill2X = useSharedValue(-20);
+  const pill3X = useSharedValue(-35);
+
+  // Scroll between 2 cards
+  const cardScrollY = useSharedValue(0);
+
+  // Double-tap heart burst
+  const doubleTapScale = useSharedValue(0);
+  const doubleTapOpacity = useSharedValue(0);
+
+  const set0 = sets.length > 0 ? sets[0] : null;
+  const set1 = sets.length > 1 ? sets[1] : null;
+
+  useEffect(() => {
+    panelOpacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
+    panelTranslateY.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
+
+    const demoDelay = delay + 500;
+
+    // Track pills drift continuously
+    pill1X.value = withDelay(demoDelay, withRepeat(
+      withSequence(
+        withTiming(PANEL_WIDTH - 55, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-40, { duration: 5000, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+    pill2X.value = withDelay(demoDelay + 800, withRepeat(
+      withSequence(
+        withTiming(PANEL_WIDTH - 45, { duration: 4200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-20, { duration: 4200, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+    pill3X.value = withDelay(demoDelay + 1600, withRepeat(
+      withSequence(
+        withTiming(PANEL_WIDTH - 50, { duration: 4600, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-35, { duration: 4600, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+
+    // Cycle: show card 1, double-tap heart, scroll to card 2, pause, scroll back
+    const runCycle = () => {
+      // Reset
+      cardScrollY.value = 0;
+      doubleTapScale.value = 0;
+      doubleTapOpacity.value = 0;
+
+      // 2s: double-tap heart burst on card 1
+      doubleTapOpacity.value = withDelay(2000, withSequence(
+        withTiming(1, { duration: 150 }),
+        withDelay(800, withTiming(0, { duration: 300 })),
+      ));
+      doubleTapScale.value = withDelay(2000, withSequence(
+        withSpring(1, { damping: 6, stiffness: 150 }),
+        withDelay(800, withTiming(0, { duration: 300 })),
+      ));
+
+      // 3.5s: scroll up to card 2, then 6.5s: scroll back
+      cardScrollY.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(3500, withTiming(-FEED_CARD_H, {
+          duration: 600,
+          easing: Easing.out(Easing.cubic),
+        })),
+        withDelay(2400, withTiming(0, {
+          duration: 600,
+          easing: Easing.out(Easing.cubic),
+        })),
+      );
+    };
+
+    const initialTimeout = setTimeout(runCycle, demoDelay);
+    const interval = setInterval(runCycle, 9000);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslateY.value }],
+  }));
+
+  const pill1Style = useAnimatedStyle(() => ({
+    transform: [{ translateX: pill1X.value }],
+  }));
+  const pill2Style = useAnimatedStyle(() => ({
+    transform: [{ translateX: pill2X.value }],
+  }));
+  const pill3Style = useAnimatedStyle(() => ({
+    transform: [{ translateX: pill3X.value }],
+  }));
+
+  const cardScrollStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: cardScrollY.value }],
+  }));
+
+  const doubleTapStyle = useAnimatedStyle(() => ({
+    opacity: doubleTapOpacity.value,
+    transform: [{ scale: doubleTapScale.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.panelCard, panelStyle]}>
+      <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
+      <View style={styles.panelOverlay} />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.3)', 'transparent']}
+        style={styles.panelSheen}
+      />
+      <View style={styles.feedMiniCard}>
+        {/* Two cards stacked, scrolling */}
+        <Animated.View style={[styles.feedCardStack, cardScrollStyle]}>
+          {/* Card 1 */}
+          <View style={{ height: FEED_CARD_H, width: '100%' }}>
+            <FeedMiniCardContent set={set0} index={0} />
+
+            {/* Track pills with real names — on card 1 */}
+            <Animated.View style={[styles.feedTrackPill, { top: '30%' }, pill1Style]}>
+              <View style={styles.feedPillThumb} />
+              <Text style={styles.feedPillText} numberOfLines={1}>{TRACK_NAMES[0]}</Text>
+            </Animated.View>
+            <Animated.View style={[styles.feedTrackPill, styles.feedTrackPillGold, { top: '44%' }, pill2Style]}>
+              <View style={styles.feedPillThumb} />
+              <Text style={[styles.feedPillText, { color: 'rgba(255,215,0,0.95)' }]} numberOfLines={1}>{TRACK_NAMES[1]}</Text>
+            </Animated.View>
+            <Animated.View style={[styles.feedTrackPill, { top: '56%' }, pill3Style]}>
+              <View style={styles.feedPillThumb} />
+              <Text style={styles.feedPillText} numberOfLines={1}>{TRACK_NAMES[2]}</Text>
+            </Animated.View>
+
+            {/* Double-tap heart burst */}
+            <Animated.View style={[styles.feedDoubleTapHeart, doubleTapStyle]}>
+              <Heart size={28} color="#EF4444" fill="#EF4444" />
+            </Animated.View>
+          </View>
+
+          {/* Card 2 */}
+          <View style={{ height: FEED_CARD_H, width: '100%' }}>
+            <FeedMiniCardContent set={set1} index={1} />
+          </View>
+        </Animated.View>
+      </View>
+
+      <View style={styles.panelFooter}>
+        <Text style={styles.panelTitle}>Scroll the Feed</Text>
+        <Text style={styles.panelSubtitle}>Swipe through sets. See every track.</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── Panel 2: Identify Tracks (Shazam S inside ring + unreleased) ───────
+function IdentifyDemoPanel({ delay }: { delay: number }) {
+  const panelOpacity = useSharedValue(0);
+  const panelTranslateY = useSharedValue(30);
+  const ringScale = useSharedValue(1);
+  const ringOpacity = useSharedValue(0.6);
+  const bar1 = useSharedValue(12);
+  const bar2 = useSharedValue(20);
+  const bar3 = useSharedValue(8);
+  const bar4 = useSharedValue(16);
+  const bar5 = useSharedValue(10);
+  const resultY = useSharedValue(40);
+  const resultOpacity = useSharedValue(0);
+  const unreleasedY = useSharedValue(30);
+  const unreleasedOpacity = useSharedValue(0);
+  const [showUnreleased, setShowUnreleased] = useState(false);
+
+  useEffect(() => {
+    panelOpacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
+    panelTranslateY.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
+
+    const demoDelay = delay + 500;
+
+    // Ring pulse
+    ringScale.value = withDelay(demoDelay, withRepeat(
+      withSequence(
+        withTiming(1.25, { duration: 1560, easing: Easing.inOut(Easing.ease) }),
+        withTiming(1, { duration: 1560, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+    ringOpacity.value = withDelay(demoDelay, withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1560, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.4, { duration: 1560, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+
+    // Waveform bars
+    const animateBar = (sv: SharedValue<number>, min: number, max: number, dur: number) => {
+      sv.value = withDelay(demoDelay, withRepeat(
+        withSequence(
+          withTiming(max, { duration: dur, easing: Easing.inOut(Easing.ease) }),
+          withTiming(min, { duration: dur, easing: Easing.inOut(Easing.ease) }),
+        ), -1, true,
+      ));
+    };
+    animateBar(bar1, 6, 28, 520);
+    animateBar(bar2, 8, 32, 715);
+    animateBar(bar3, 4, 24, 455);
+    animateBar(bar4, 10, 30, 624);
+    animateBar(bar5, 5, 26, 546);
+
+    // Alternate between "Identified!" and "Unreleased ID!" every cycle
+    let isUnreleased = false;
+
+    const showResult = () => {
+      resultOpacity.value = 0;
+      resultY.value = 40;
+      unreleasedOpacity.value = 0;
+      unreleasedY.value = 30;
+
+      if (isUnreleased) {
+        setShowUnreleased(true);
+        unreleasedOpacity.value = withDelay(3900, withSpring(1, { damping: 12, stiffness: 100 }));
+        unreleasedY.value = withDelay(3900, withSpring(0, { damping: 12, stiffness: 100 }));
+      } else {
+        setShowUnreleased(false);
+        resultOpacity.value = withDelay(3900, withSpring(1, { damping: 12, stiffness: 100 }));
+        resultY.value = withDelay(3900, withSpring(0, { damping: 12, stiffness: 100 }));
+      }
+      isUnreleased = !isUnreleased;
+    };
+
+    const initialTimeout = setTimeout(showResult, demoDelay);
+    const interval = setInterval(showResult, 6500);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslateY.value }],
+  }));
+
+  const ringStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ringScale.value }],
+    opacity: ringOpacity.value,
+  }));
+
+  const barStyle = (sv: SharedValue<number>) =>
+    useAnimatedStyle(() => ({ height: sv.value }));
+
+  const resultStyle = useAnimatedStyle(() => ({
+    opacity: resultOpacity.value,
+    transform: [{ translateY: resultY.value }],
+  }));
+
+  const unreleasedStyle = useAnimatedStyle(() => ({
+    opacity: unreleasedOpacity.value,
+    transform: [{ translateY: unreleasedY.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.panelCard, panelStyle]}>
+      <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
+      <View style={styles.panelOverlay} />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.3)', 'transparent']}
+        style={styles.panelSheen}
+      />
+      <View style={[styles.panelDemo, { alignItems: 'center' }]}>
+        {/* Pulsing ring with Shazam S centered inside */}
+        <Animated.View style={[styles.identifyRingWrap, ringStyle]}>
+          <View style={styles.identifyRing} />
+          <View style={styles.identifyIconCenter}>
+            <ShazamIcon size={22} />
+          </View>
+        </Animated.View>
+
+        {/* Waveform bars */}
+        <View style={styles.waveformContainer}>
+          {[bar1, bar2, bar3, bar4, bar5].map((bar, i) => (
+            <Animated.View key={i} style={[styles.waveformBar, barStyle(bar)]} />
+          ))}
+        </View>
+
+        {/* Result cards — alternate between identified and unreleased */}
+        <Animated.View style={[styles.identifyResult, resultStyle]}>
+          <CheckCircle size={11} color="#4CAF50" />
+          <Text style={styles.identifyResultText}>Identified!</Text>
+        </Animated.View>
+
+        <Animated.View style={[styles.identifyResultGold, unreleasedStyle]}>
+          <Text style={styles.identifyGoldLabel}>Unreleased ID</Text>
+        </Animated.View>
+      </View>
+      <View style={styles.panelFooter}>
+        <Text style={styles.panelTitle}>Identify Tracks</Text>
+        <Text style={styles.panelSubtitle}>Even unreleased & IDs. Instantly.</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── Panel 3: Import Any Set (logos fly into bar → progress → result) ───
+function ImportDemoPanel({ delay }: { delay: number }) {
+  const panelOpacity = useSharedValue(0);
+  const panelTranslateY = useSharedValue(30);
+
+  // Logo animations — each value gets ONE withSequence so no overwrites
+  const ytX = useSharedValue(-50);
+  const ytOpacity = useSharedValue(0);
+  const scX = useSharedValue(50);
+  const scOpacity = useSharedValue(0);
+
+  // Bar + progress
+  const barOpacity = useSharedValue(0);
+  const progress = useSharedValue(0);
+  const scanOpacity = useSharedValue(0);
+
+  // Result
+  const resultOpacity = useSharedValue(0);
+  const resultScale = useSharedValue(0.5);
+
+  useEffect(() => {
+    panelOpacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
+    panelTranslateY.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
+
+    const demoDelay = delay + 500;
+
+    const runCycle = () => {
+      // Each shared value gets a single withSequence — no overwrite bugs
+      // YouTube: fly in from left → hold → fade out
+      ytX.value = withSequence(
+        withTiming(-50, { duration: 0 }),
+        withSpring(0, { damping: 12, stiffness: 90 }),
+        withDelay(800, withTiming(-10, { duration: 400 })),
+      );
+      ytOpacity.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withTiming(1, { duration: 400 }),
+        withDelay(1200, withTiming(0, { duration: 300 })),
+      );
+
+      // SoundCloud: fly in from right → hold → fade out (slightly staggered)
+      scX.value = withSequence(
+        withTiming(50, { duration: 0 }),
+        withDelay(250, withSpring(0, { damping: 12, stiffness: 90 })),
+        withDelay(600, withTiming(10, { duration: 400 })),
+      );
+      scOpacity.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(250, withTiming(1, { duration: 400 })),
+        withDelay(950, withTiming(0, { duration: 300 })),
+      );
+
+      // Bar: appear after logos converge
+      barOpacity.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(1800, withTiming(1, { duration: 400 })),
+      );
+
+      // Progress: fill after bar appears
+      progress.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(2200, withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.ease) })),
+      );
+
+      // Scan label
+      scanOpacity.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(2000, withTiming(1, { duration: 300 })),
+        withDelay(3000, withTiming(0, { duration: 200 })),
+      );
+
+      // Result pops in after progress completes
+      resultOpacity.value = withSequence(
+        withTiming(0, { duration: 0 }),
+        withDelay(5400, withSpring(1, { damping: 10, stiffness: 120 })),
+      );
+      resultScale.value = withSequence(
+        withTiming(0.5, { duration: 0 }),
+        withDelay(5400, withSpring(1, { damping: 8, stiffness: 120 })),
+      );
+    };
+
+    const initialTimeout = setTimeout(runCycle, demoDelay);
+    const interval = setInterval(runCycle, 7500);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslateY.value }],
+  }));
+
+  const ytStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: ytX.value }],
+    opacity: ytOpacity.value,
+  }));
+
+  const scStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: scX.value }],
+    opacity: scOpacity.value,
+  }));
+
+  const importBarStyle = useAnimatedStyle(() => ({
+    opacity: barOpacity.value,
+  }));
+
+  const progressBarStyle = useAnimatedStyle(() => ({
+    width: `${progress.value * 100}%`,
+  }));
+
+  const scanStyle = useAnimatedStyle(() => ({
+    opacity: scanOpacity.value,
+  }));
+
+  const resultStyle = useAnimatedStyle(() => ({
+    opacity: resultOpacity.value,
+    transform: [{ scale: resultScale.value }],
+  }));
+
+  return (
+    <Animated.View style={[styles.panelCard, panelStyle]}>
+      <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
+      <View style={styles.panelOverlay} />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.3)', 'transparent']}
+        style={styles.panelSheen}
+      />
+      <View style={[styles.panelDemo, { alignItems: 'center', justifyContent: 'center' }]}>
+        {/* Flying platform logos — large and visible */}
+        <View style={styles.importLogosRow}>
+          <Animated.View style={[styles.importLogoBadge, ytStyle]}>
+            <YouTubeIcon />
+            <Text style={styles.importLogoLabel}>YouTube</Text>
+          </Animated.View>
+          <Animated.View style={[styles.importLogoBadge, scStyle]}>
+            <SoundCloudIcon />
+            <Text style={styles.importLogoLabel}>SoundCloud</Text>
+          </Animated.View>
+        </View>
+
+        {/* Import progress bar */}
+        <Animated.View style={[styles.importBar, importBarStyle]}>
+          <View style={styles.importBarTrack}>
+            <Animated.View style={[styles.importBarFill, progressBarStyle]} />
+          </View>
+        </Animated.View>
+
+        {/* Scanning text */}
+        <Animated.Text style={[styles.importScanText, scanStyle]}>
+          Scanning tracks...
+        </Animated.Text>
+
+        {/* Result pop-in */}
+        <Animated.View style={[styles.importResultBadge, resultStyle]}>
+          <CheckCircle size={12} color="#4CAF50" />
+          <Text style={styles.importResultText}>34 tracks found!</Text>
+        </Animated.View>
+      </View>
+      <View style={styles.panelFooter}>
+        <Text style={styles.panelTitle}>Import Any Set</Text>
+        <Text style={styles.panelSubtitle}>Paste a link. Get every track.</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── Panel 4: Build Your Crate ──────────────────────────────────────────
+function CrateDemoPanel({ delay }: { delay: number }) {
+  const panelOpacity = useSharedValue(0);
+  const panelTranslateY = useSharedValue(30);
+  const newCardX = useSharedValue(80);
+  const newCardOpacity = useSharedValue(0);
+  const heartBurst = useSharedValue(0);
+  const counterOpacity = useSharedValue(1);
+  const [count, setCount] = useState(3);
+
+  useEffect(() => {
+    panelOpacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
+    panelTranslateY.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
+
+    const demoDelay = delay + 500;
+
+    const runCycle = () => {
+      newCardX.value = 80;
+      newCardOpacity.value = 0;
+      heartBurst.value = 0;
+
+      newCardOpacity.value = withTiming(1, { duration: 260 });
+      newCardX.value = withSpring(0, { damping: 10, stiffness: 80 });
+
+      setTimeout(() => {
+        heartBurst.value = withSequence(
+          withSpring(1.3, { damping: 6, stiffness: 120 }),
+          withSpring(0, { damping: 8, stiffness: 100 }),
+        );
+        counterOpacity.value = withSequence(
+          withTiming(0.3, { duration: 200 }),
+          withTiming(1, { duration: 200 }),
+        );
+        setCount(prev => {
+          const next = prev + 1;
+          return next > 6 ? 3 : next;
+        });
+      }, 800);
+    };
+
+    const initialTimeout = setTimeout(runCycle, demoDelay);
+    const interval = setInterval(runCycle, 3900);
+
+    return () => {
+      clearTimeout(initialTimeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: panelOpacity.value,
+    transform: [{ translateY: panelTranslateY.value }],
+  }));
+
+  const newCardStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: newCardX.value }],
+    opacity: newCardOpacity.value,
+  }));
+
+  const heartStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartBurst.value }],
+    opacity: heartBurst.value > 0 ? 1 : 0,
+  }));
+
+  const counterStyle = useAnimatedStyle(() => ({
+    opacity: counterOpacity.value,
+  }));
+
+  return (
+    <Animated.View style={[styles.panelCard, panelStyle]}>
+      <BlurView intensity={50} tint="light" style={StyleSheet.absoluteFill} />
+      <View style={styles.panelOverlay} />
+      <LinearGradient
+        colors={['rgba(255,255,255,0.3)', 'transparent']}
+        style={styles.panelSheen}
+      />
+      <View style={[styles.panelDemo, { alignItems: 'center', justifyContent: 'center' }]}>
+        {/* Fanned stack of cards */}
+        <View style={styles.crateStack}>
+          {[
+            { rotate: '-6deg', left: -4 },
+            { rotate: '-2deg', left: 0 },
+            { rotate: '3deg', left: 4 },
+          ].map((cardStyle, i) => (
+            <View
+              key={i}
+              style={[
+                styles.crateCard,
+                {
+                  transform: [{ rotate: cardStyle.rotate }],
+                  left: cardStyle.left,
+                  zIndex: i,
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={['rgba(100,60,60,0.5)', 'rgba(60,40,40,0.4)']}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+          ))}
+
+          {/* New card flying in */}
+          <Animated.View style={[styles.crateCard, styles.crateNewCard, newCardStyle]}>
+            <LinearGradient
+              colors={['rgba(196,30,58,0.5)', 'rgba(140,20,40,0.4)']}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+
+          {/* Heart burst */}
+          <Animated.View style={[styles.heartBurst, heartStyle]}>
+            <Heart size={16} color="#C41E3A" fill="#C41E3A" />
+          </Animated.View>
+        </View>
+
+        {/* Counter */}
+        <Animated.Text style={[styles.crateCounter, counterStyle]}>
+          {count} sets
+        </Animated.Text>
+      </View>
+      <View style={styles.panelFooter}>
+        <Text style={styles.panelTitle}>Build Your Crate</Text>
+        <Text style={styles.panelSubtitle}>Save. Collect. Share.</Text>
+      </View>
     </Animated.View>
   );
 }
@@ -124,31 +917,31 @@ function FlyingMiniCard({
 // ─── Landing Screen ─────────────────────────────────────────────────────
 export default function LandingScreen() {
   const router = useRouter();
-  const [miniSets, setMiniSets] = useState<MiniSet[]>([]);
+  const [rowSets, setRowSets] = useState<MiniSet[][]>([[], [], []]);
+  const [introComplete, setIntroComplete] = useState(false);
 
-  // Fetch sets for the flying cards
+  // Fetch sets for the filmstrip
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/sets?limit=30&sort=popular`);
+        const res = await fetch(`${API_BASE_URL}/api/sets?limit=50&sort=popular`);
         const data = await res.json();
         if (data.success && data.sets?.length) {
-          const withYtThumbs = data.sets.filter(
-            (s: any) => s.coverUrl && s.coverUrl.includes('img.youtube.com'),
-          );
-          const source = withYtThumbs.length >= FLYING_COUNT
-            ? withYtThumbs.slice(0, FLYING_COUNT)
-            : withYtThumbs.concat(
-                data.sets.filter((s: any) => s.coverUrl && !s.coverUrl.includes('img.youtube.com')),
-              ).slice(0, FLYING_COUNT);
-          setMiniSets(
-            source.map((s: any) => ({
-              id: s.id,
-              name: s.name,
-              artist: s.artist,
-              coverUrl: s.coverUrl,
-            })),
-          );
+          const all: MiniSet[] = data.sets.map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            artist: s.artist,
+            coverUrl: s.coverUrl,
+          }));
+          const shuffle = (arr: MiniSet[]) => {
+            const a = [...arr];
+            for (let i = a.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [a[i], a[j]] = [a[j], a[i]];
+            }
+            return a;
+          };
+          setRowSets([shuffle(all), shuffle(all), shuffle(all)]);
         }
       } catch {
         // silent
@@ -156,20 +949,27 @@ export default function LandingScreen() {
     })();
   }, []);
 
-  // Logo
-  const logoScale = useSharedValue(0);
-  const logoTranslateY = useSharedValue(-60);
-  const logoRotate = useSharedValue(-15);
+  // Logo path — swoops around screen then up through filmstrip
+  const logoX = useSharedValue(SCREEN_WIDTH * 0.5);   // start off-screen right
+  const logoY = useSharedValue(SCREEN_HEIGHT * 0.4);   // start below
+  const logoScale = useSharedValue(0.3);               // start small (far away)
   const logoOpacity = useSharedValue(0);
+  const logoRotate = useSharedValue(15);               // slight tilt during flight
 
-  // "hot sets" label
-  const hotSetsLabelOpacity = useSharedValue(0);
-  const hotSetsLabelTranslateY = useSharedValue(20);
+  // Filmstrip — runs continuously, fast
+  const filmstripTranslateX = useSharedValue(-TRAVEL_DISTANCE);
+  const filmstripCrawl = useSharedValue(0);
 
-  // Per-card staggered arrival to circle
-  const arrivalProgs = Array.from({ length: FLYING_COUNT }, () => useSharedValue(0));
-  const spinAngle = useSharedValue(0);
-  const fadeProg = useSharedValue(0);
+  // Shatter
+  const shatterProgress = useSharedValue(0);
+  const flashOpacity = useSharedValue(0);
+
+  // Animation area height
+  const animationAreaHeight = useSharedValue(SCREEN_HEIGHT * 0.48);
+
+  // Header
+  const headerOpacity = useSharedValue(0);
+  const taglineOpacity = useSharedValue(0);
 
   // Button
   const bottomSlide = useSharedValue(120);
@@ -177,43 +977,98 @@ export default function LandingScreen() {
   const chevronY = useSharedValue(0);
 
   useEffect(() => {
-    // 1. Logo
-    logoOpacity.value = withDelay(150, withTiming(1, { duration: 500 }));
-    logoScale.value = withDelay(150, withSpring(1, { damping: 6, stiffness: 120, mass: 0.7 }));
-    logoTranslateY.value = withDelay(150, withSpring(0, { damping: 10, stiffness: 120 }));
-    logoRotate.value = withDelay(150, withSequence(
-      withSpring(6, { damping: 5, stiffness: 200 }),
-      withSpring(-3, { damping: 6, stiffness: 180 }),
-      withSpring(0, { damping: 10, stiffness: 140 }),
-    ));
-
-    // 2. Cards arrive one at a time (500ms apart, 600ms each)
-    arrivalProgs.forEach((ap, i) => {
-      ap.value = withDelay(500 + i * 500,
-        withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) }),
-      );
-    });
-
-    // 3. Slow spin
-    spinAngle.value = withDelay(500,
-      withTiming(Math.PI * 2, { duration: 5000, easing: Easing.out(Easing.quad) }),
+    // ─── 1. Filmstrip: constant fast scroll, never slows down ───
+    filmstripTranslateX.value = withRepeat(
+      withSequence(
+        withTiming(-TRAVEL_DISTANCE, { duration: 0 }),
+        withTiming(0, { duration: 4000, easing: Easing.linear }),
+      ), -1,
     );
 
-    // 4. "hot sets" label
-    hotSetsLabelOpacity.value = withDelay(3200, withTiming(1, { duration: 500 }));
-    hotSetsLabelTranslateY.value = withDelay(3200, withSpring(0, { damping: 14, stiffness: 120 }));
+    // ─── 2. Logo swoops around screen then up through filmstrip ───
+    // Starts tiny and far away (bottom-right), drifts in slowly, arcs around,
+    // then accelerates upward through the filmstrip center
+    //
+    // Phase A (800-2200ms): appear far away bottom-right, slowly drift to bottom-left
+    // Phase B (2200-3000ms): arc smoothly up the left side
+    // Phase C (3000-3500ms): accelerate up through center of filmstrip (IMPACT)
+    // Phase D (3500-4200ms): continue up to header, settle
 
-    // 5. Cards fade out
-    fadeProg.value = withDelay(4200, withTiming(1, { duration: 500 }));
+    // X path: far right → drift left → arc center-left → center → hold
+    logoX.value = withSequence(
+      withTiming(SCREEN_WIDTH * 0.6, { duration: 0 }),
+      withDelay(800, withTiming(-SCREEN_WIDTH * 0.3, { duration: 1400, easing: Easing.inOut(Easing.ease) })),
+      withTiming(-SCREEN_WIDTH * 0.15, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+      withTiming(0, { duration: 800 }),
+    );
 
-    // 6. Button flies in from bottom
-    bottomOpacity.value = withDelay(4400, withTiming(1, { duration: 300 }));
-    bottomSlide.value = withDelay(4400,
+    // Y path: far below → drift up slightly → arc to center → shoot UP → header
+    logoY.value = withSequence(
+      withTiming(SCREEN_HEIGHT * 0.5, { duration: 0 }),
+      withDelay(800, withTiming(SCREEN_HEIGHT * 0.25, { duration: 1400, easing: Easing.inOut(Easing.ease) })),
+      withTiming(SCREEN_HEIGHT * 0.05, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      withTiming(-(SCREEN_HEIGHT * 0.06), { duration: 500, easing: Easing.in(Easing.quad) }),
+      withSpring(-(SCREEN_HEIGHT * 0.18), { damping: 18, stiffness: 60 }),
+    );
+
+    // Scale: tiny (far away) → slowly growing → full at impact → settle to header
+    logoScale.value = withSequence(
+      withTiming(0.12, { duration: 0 }),
+      withDelay(800, withTiming(0.35, { duration: 1400, easing: Easing.inOut(Easing.ease) })),
+      withTiming(0.65, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      withTiming(1.15, { duration: 500, easing: Easing.in(Easing.quad) }),
+      withTiming(1.0, { duration: 300, easing: Easing.out(Easing.ease) }),
+      withSpring(0.7, { damping: 18, stiffness: 60 }),
+    );
+
+    // Rotation: gentle tilt during flight → gradually straighten
+    logoRotate.value = withSequence(
+      withTiming(10, { duration: 0 }),
+      withDelay(800, withTiming(-5, { duration: 1400, easing: Easing.inOut(Easing.ease) })),
+      withTiming(-2, { duration: 800, easing: Easing.inOut(Easing.ease) }),
+      withTiming(0, { duration: 500, easing: Easing.inOut(Easing.ease) }),
+    );
+
+    // Opacity: very gradual fade in — tiny dot first, fully visible by impact
+    logoOpacity.value = withSequence(
+      withTiming(0, { duration: 0 }),
+      withDelay(800, withTiming(0.25, { duration: 700 })),
+      withTiming(0.55, { duration: 700 }),
+      withTiming(0.85, { duration: 800 }),
+      withTiming(1, { duration: 300 }),
+    );
+
+    // ─── 3. IMPACT at ~3200ms — shatter + flash ───
+    // Logo passes through center of filmstrip heading upward
+    shatterProgress.value = withDelay(3150,
+      withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }),
+    );
+    flashOpacity.value = withSequence(
+      withTiming(0, { duration: 0 }),
+      withDelay(3100, withTiming(0.85, { duration: 80 })),
+      withTiming(0, { duration: 500, easing: Easing.out(Easing.ease) }),
+    );
+
+    // ─── 4. Animation area collapses after shatter clears ───
+    animationAreaHeight.value = withDelay(3800,
+      withTiming(0, { duration: 800, easing: Easing.inOut(Easing.ease) }));
+
+    // ─── 5. Header/tagline appears ───
+    headerOpacity.value = withDelay(3800, withTiming(1, { duration: 600 }));
+    taglineOpacity.value = withDelay(4100, withTiming(1, { duration: 500 }));
+
+    // ─── 6. Panels stagger in ───
+    // Panel delays passed as props: 4300, 4500, 4700, 4900
+
+    // ─── 7. Button slides up at 5400ms ───
+    bottomOpacity.value = withDelay(5400, withTiming(1, { duration: 300 }));
+    bottomSlide.value = withDelay(5400,
       withTiming(0, { duration: 450, easing: Easing.out(Easing.cubic) }),
     );
 
-    // 7. Chevron bounces forever
-    chevronY.value = withDelay(5000, withRepeat(
+    // ─── 8. Chevron bounce at 5900ms ───
+    chevronY.value = withDelay(5900, withRepeat(
       withSequence(
         withTiming(-8, { duration: 600, easing: Easing.inOut(Easing.ease) }),
         withTiming(0, { duration: 600, easing: Easing.inOut(Easing.ease) }),
@@ -221,20 +1076,36 @@ export default function LandingScreen() {
       -1,
       true,
     ));
+
+    // Enable scrolling after intro
+    setTimeout(() => setIntroComplete(true), 5700);
   }, []);
 
   const logoStyle = useAnimatedStyle(() => ({
     opacity: logoOpacity.value,
     transform: [
-      { translateY: logoTranslateY.value },
+      { translateX: logoX.value },
+      { translateY: logoY.value },
       { scale: logoScale.value },
       { rotate: `${logoRotate.value}deg` },
     ],
   }));
 
-  const hotSetsLabelStyle = useAnimatedStyle(() => ({
-    opacity: hotSetsLabelOpacity.value,
-    transform: [{ translateY: hotSetsLabelTranslateY.value }],
+  const animationAreaStyle = useAnimatedStyle(() => ({
+    height: animationAreaHeight.value,
+    overflow: 'hidden' as const,
+  }));
+
+  const flashStyle = useAnimatedStyle(() => ({
+    opacity: flashOpacity.value,
+  }));
+
+  const headerStyle = useAnimatedStyle(() => ({
+    opacity: headerOpacity.value,
+  }));
+
+  const taglineStyle = useAnimatedStyle(() => ({
+    opacity: taglineOpacity.value,
   }));
 
   const bottomStyle = useAnimatedStyle(() => ({
@@ -257,8 +1128,6 @@ export default function LandingScreen() {
     }
   });
 
-  const flyingIndices = useMemo(() => Array.from({ length: FLYING_COUNT }, (_, i) => i), []);
-
   return (
     <GestureDetector gesture={swipeUp}>
       <View style={styles.container}>
@@ -270,45 +1139,66 @@ export default function LandingScreen() {
           <BlurView intensity={60} tint="light" style={StyleSheet.absoluteFill} />
         </View>
 
-        <SafeAreaView style={styles.safeArea} edges={['top']}>
-          {/* Logo */}
-          <Animated.Text style={[styles.logo, logoStyle]}>trakd</Animated.Text>
+        <ScrollView
+          bounces
+          scrollEnabled={introComplete}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <SafeAreaView edges={['top']}>
+            {/* Animation area: filmstrip + logo flying in + shatter */}
+            <Animated.View style={[styles.animationArea, animationAreaStyle]}>
+              <View style={styles.filmstripContainer} pointerEvents="none">
+                {Array.from({ length: ROW_COUNT }, (_, i) => (
+                  <FilmstripRow
+                    key={i}
+                    rowIndex={i}
+                    sets={rowSets[i]}
+                    translateX={filmstripTranslateX}
+                    crawl={filmstripCrawl}
+                    shatterProgress={shatterProgress}
+                  />
+                ))}
+              </View>
 
-          {/* Animation area */}
-          <View style={styles.animationArea}>
-            {/* Flying mini-cards */}
-            <View style={styles.flyingCardsCenter} pointerEvents="none">
-              {flyingIndices.map((i) => (
-                <FlyingMiniCard
-                  key={i}
-                  index={i}
-                  set={miniSets[i]}
-                  arrivalProg={arrivalProgs[i]}
-                  spinAngle={spinAngle}
-                  fadeProg={fadeProg}
-                />
-              ))}
+              {/* Impact flash */}
+              <Animated.View style={[styles.impactFlash, flashStyle]} pointerEvents="none" />
+
+              {/* Logo flies in from behind, through the filmstrip */}
+              <Animated.Text style={[styles.logo, styles.logoOverFilmstrip, logoStyle]}>
+                trakd
+              </Animated.Text>
+            </Animated.View>
+
+            {/* Header (logo's final position) */}
+            <Animated.View style={[styles.headerWrap, headerStyle]}>
+              <Text style={styles.headerLogo}>trakd</Text>
+              <Animated.Text style={[styles.tagline, taglineStyle]}>
+                Every track. Every set.
+              </Animated.Text>
+            </Animated.View>
+
+            {/* 2x2 Marketing Panels Grid */}
+            <View style={styles.panelsGrid}>
+              <FeedDemoPanel delay={4300} sets={rowSets[0]} />
+              <IdentifyDemoPanel delay={4500} />
+              <ImportDemoPanel delay={4700} />
+              <CrateDemoPanel delay={4900} />
             </View>
 
-            {/* "hot sets" label */}
-            <Animated.View style={[styles.hotSetsLabelWrap, hotSetsLabelStyle]}>
-              <Text style={styles.hotSetsLabel}>hot sets</Text>
-              <View style={styles.hotSetsLine} />
-            </Animated.View>
-          </View>
+            {/* CTA */}
+            <Animated.View style={[styles.buttonArea, bottomStyle]}>
+              <Pressable style={styles.exploreButton} onPress={navigateToDiscover}>
+                <Text style={styles.exploreButtonText}>Explore Sets</Text>
+              </Pressable>
 
-          {/* Explore button — the main CTA */}
-          <Animated.View style={[styles.buttonArea, bottomStyle]}>
-            <Pressable style={styles.exploreButton} onPress={navigateToDiscover}>
-              <Text style={styles.exploreButtonText}>Explore Sets</Text>
-            </Pressable>
-
-            <Animated.View style={[styles.swipeHint, chevronStyle]}>
-              <ChevronUp size={24} color="rgba(0,0,0,0.3)" />
+              <Animated.View style={[styles.swipeHint, chevronStyle]}>
+                <ChevronUp size={24} color="rgba(0,0,0,0.3)" />
+              </Animated.View>
+              <Text style={styles.swipeHintText}>swipe up to explore</Text>
             </Animated.View>
-            <Text style={styles.swipeHintText}>swipe up to explore</Text>
-          </Animated.View>
-        </SafeAreaView>
+          </SafeAreaView>
+        </ScrollView>
       </View>
     </GestureDetector>
   );
@@ -349,6 +1239,9 @@ const styles = StyleSheet.create({
     left: -20,
     backgroundColor: 'rgba(50, 100, 200, 0.1)',
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   safeArea: {
     flex: 1,
     justifyContent: 'center',
@@ -364,48 +1257,57 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 4 },
     textShadowRadius: 12,
   },
-  animationArea: {
-    height: SCREEN_HEIGHT * 0.2,
-    width: '100%',
-    overflow: 'visible',
+  logoOverFilmstrip: {
+    zIndex: 10,
+    alignSelf: 'center',
   },
-  flyingCardsCenter: {
+  animationArea: {
+    width: '100%',
+    justifyContent: 'center',
+  },
+  filmstripContainer: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    zIndex: 1,
+  },
+  filmstripRow: {
     position: 'absolute',
-    top: '42%',
-    left: '50%',
-    width: 0,
-    height: 0,
-    zIndex: 15,
+    flexDirection: 'row',
+    gap: CARD_GAP,
+    left: -(ROW_TOTAL_WIDTH - SCREEN_WIDTH) / 2,
+  },
+  impactFlash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#fff',
+    zIndex: 5,
   },
   miniCard: {
-    position: 'absolute',
     width: MINI_W,
     height: MINI_H,
-    marginLeft: -MINI_W / 2,
-    marginTop: -MINI_H / 2,
     borderRadius: 16,
     borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.55)',
-    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderColor: 'rgba(255,255,255,0.45)',
+    borderTopColor: 'rgba(255,255,255,0.7)',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    elevation: 10,
-    backgroundColor: '#1a1a1a',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
   miniCardGlass: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   miniCardShine: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '35%',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    height: '40%',
+    backgroundColor: 'rgba(255,255,255,0.3)',
     borderBottomLeftRadius: 40,
     borderBottomRightRadius: 40,
   },
@@ -417,7 +1319,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingBottom: 6,
     paddingTop: 14,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
   },
   miniCardName: {
     fontSize: 9,
@@ -431,29 +1333,405 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     marginTop: 2,
   },
-  hotSetsLabelWrap: {
+
+  // ─── Header ──────────────────────────────────────────────────────────
+  headerWrap: {
     alignItems: 'center',
-    paddingTop: 4,
-    paddingBottom: 4,
-    zIndex: 10,
+    marginBottom: 16,
+    paddingTop: 8,
   },
-  hotSetsLabel: {
-    fontSize: 14,
+  headerLogo: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#C41E3A',
+    letterSpacing: -1.5,
+    textShadowColor: 'rgba(196, 30, 58, 0.3)',
+    textShadowOffset: { width: 0, height: 3 },
+    textShadowRadius: 8,
+  },
+  tagline: {
+    fontSize: 13,
+    color: 'rgba(0,0,0,0.4)',
+    letterSpacing: 1,
+    marginTop: 4,
+    fontWeight: '500',
+  },
+
+  // ─── Panels Grid ─────────────────────────────────────────────────────
+  panelsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    gap: 16,
+    justifyContent: 'center',
+    marginBottom: 24,
+  },
+  panelCard: {
+    width: PANEL_WIDTH,
+    height: PANEL_HEIGHT,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    borderTopColor: 'rgba(255,255,255,0.65)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  panelOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  panelSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    zIndex: 1,
+  },
+  panelDemo: {
+    flex: 1,
+    padding: 12,
+    overflow: 'hidden',
+  },
+  panelFooter: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  panelTitle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: 'rgba(0,0,0,0.7)',
+  },
+  panelSubtitle: {
+    fontSize: 9,
+    fontWeight: '500',
+    color: 'rgba(0,0,0,0.4)',
+    marginTop: 2,
+  },
+
+  // ─── Panel 1: Feed Demo (mini TikTok card) ────────────────────────────
+  feedMiniCard: {
+    flex: 1,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    margin: 6,
+    position: 'relative',
+  },
+  feedCardStack: {
+    width: '100%',
+  },
+  feedDoubleTapHeart: {
+    position: 'absolute',
+    top: '35%',
+    alignSelf: 'center',
+    zIndex: 20,
+  },
+  feedArtistBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 5,
+    paddingVertical: 3,
+    borderRadius: 10,
+    zIndex: 5,
+  },
+  feedMiniAvatar: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+  },
+  feedArtistName: {
+    fontSize: 6,
     fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+    maxWidth: 50,
+  },
+  feedArtistTime: {
+    fontSize: 5,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  feedTrackPill: {
+    position: 'absolute',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 8,
+    zIndex: 4,
+  },
+  feedTrackPillGold: {
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,215,0,0.4)',
+  },
+  feedPillThumb: {
+    width: 12,
+    height: 12,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  feedPillText: {
+    fontSize: 5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.85)',
+    maxWidth: 40,
+  },
+  feedSkipWrap: {
+    position: 'absolute',
+    top: '58%',
+    alignSelf: 'center',
+    width: 26,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
+  feedSkipGlow: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 13,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.3)',
+    opacity: 0.5,
+  },
+  feedSkipBtn: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedActionCol: {
+    position: 'absolute',
+    right: 5,
+    bottom: 30,
+    gap: 6,
+    zIndex: 5,
+  },
+  feedActionBtn: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  feedInfoPanel: {
+    position: 'absolute',
+    bottom: 5,
+    left: 5,
+    right: 28,
+    zIndex: 5,
+  },
+  feedSetTitle: {
+    fontSize: 7,
+    fontWeight: '800',
+    color: '#fff',
+    marginBottom: 3,
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  feedMetaRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  feedMetaPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 3,
+    paddingVertical: 1.5,
+    borderRadius: 5,
+  },
+  feedMetaText: {
+    fontSize: 5,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.75)',
+  },
+
+  // ─── Panel 2: Identify Demo ──────────────────────────────────────────
+  identifyRingWrap: {
+    width: 54,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  identifyRing: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 27,
+    borderWidth: 3,
+    borderColor: '#C41E3A',
+  },
+  identifyIconCenter: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 4,
+    height: 28,
+    marginBottom: 6,
+  },
+  waveformBar: {
+    width: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(196,30,58,0.5)',
+  },
+  identifyResult: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  identifyResultText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+  identifyResultGold: {
+    position: 'absolute',
+    bottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,215,0,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,215,0,0.4)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  identifyGoldLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: 'rgba(255,185,0,1)',
+    letterSpacing: 0.3,
+  },
+
+  // ─── Panel 3: Import Demo ────────────────────────────────────────────
+  importLogosRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    marginBottom: 14,
+    height: 32,
+  },
+  importLogoBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 10,
+    padding: 6,
+  },
+  importLogoLabel: {
+    fontSize: 6,
+    fontWeight: '700',
+    color: 'rgba(0,0,0,0.45)',
+    marginTop: 3,
+  },
+  importBar: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  importBarTrack: {
+    width: '100%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+  },
+  importBarFill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: '#C41E3A',
+  },
+  importScanText: {
+    fontSize: 9,
+    fontWeight: '500',
     color: 'rgba(0,0,0,0.35)',
-    letterSpacing: 3,
-    textTransform: 'uppercase',
+    marginBottom: 4,
   },
-  hotSetsLine: {
-    width: 40,
-    height: 2,
-    borderRadius: 1,
-    backgroundColor: 'rgba(196, 30, 58, 0.3)',
-    marginTop: 6,
+  importResultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(76,175,80,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(76,175,80,0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 2,
   },
+  importResultText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#4CAF50',
+  },
+
+  // ─── Panel 4: Crate Demo ─────────────────────────────────────────────
+  crateStack: {
+    width: 70,
+    height: 60,
+    position: 'relative',
+    marginBottom: 8,
+  },
+  crateCard: {
+    position: 'absolute',
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    top: 0,
+  },
+  crateNewCard: {
+    zIndex: 10,
+    left: 8,
+  },
+  heartBurst: {
+    position: 'absolute',
+    top: -14,
+    left: 20,
+    zIndex: 20,
+  },
+  crateCounter: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(0,0,0,0.5)',
+  },
+
+  // ─── Button Area ──────────────────────────────────────────────────────
   buttonArea: {
     alignItems: 'center',
-    paddingTop: 0,
+    paddingTop: 8,
+    paddingBottom: 16,
   },
   exploreButton: {
     backgroundColor: '#C41E3A',

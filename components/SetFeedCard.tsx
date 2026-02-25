@@ -264,7 +264,7 @@ const VENUE_LOCATIONS: Record<string, string> = {
   'FUSE': 'London, UK',
 };
 
-export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, solidness, fillProgress, fillDirection }: SetFeedCardProps) {
+const SetFeedCard = React.memo(function SetFeedCard({ setList, onPress, onLongPress, onArtistPress, onEventPress, isSelected = false, accentOpacity, solidness, fillProgress, fillDirection }: SetFeedCardProps) {
   const [showArtistPicker, setShowArtistPicker] = useState(false);
 
   // Calculate dynamic font sizes based on content length and venue presence
@@ -1445,7 +1445,12 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
       </Modal>
     </Pressable>
   );
-}
+}, (prev, next) =>
+  prev.setList.id === next.setList.id &&
+  prev.isSelected === next.isSelected
+);
+
+export default SetFeedCard;
 
 const styles = StyleSheet.create({
   container: {

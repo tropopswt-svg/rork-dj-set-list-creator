@@ -13,8 +13,8 @@ import { stopSetRecording, getRecordingStatus, IdentifiedTrack } from '@/compone
 
 const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 import { AuthGateModal } from '@/components/AuthGate';
-import { useAuth } from '@/contexts/AuthContext';
 import { stopFeedAudio, refreshFeed } from '@/lib/feedAudioController';
+import { supabase } from '@/lib/supabase/client';
 
 // Liquid glass FAB with BubbleGlassLogo — memoized to prevent animation restarts
 const VinylFAB = memo(({ onPress, onLongPress }: { onPress: () => void; onLongPress?: () => void }) => {
@@ -160,7 +160,18 @@ const VinylFAB = memo(({ onPress, onLongPress }: { onPress: () => void; onLongPr
 export default function TabLayout() {
   const router = useRouter();
   const segments = useSegments();
-  const { isAuthenticated } = useAuth();
+  // Use ref for isAuthenticated — only needed in event handlers, not render output.
+  // Avoids re-rendering the entire tab navigator on every auth state change.
+  const isAuthenticatedRef = useRef(false);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      isAuthenticatedRef.current = !!session?.user;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      isAuthenticatedRef.current = !!session?.user;
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const [showActionModal, setShowActionModal] = useState(false);
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
   const [showContinuousIdentifyModal, setShowContinuousIdentifyModal] = useState(false);
@@ -205,16 +216,16 @@ export default function TabLayout() {
 
   const handleFABLongPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    if (!isAuthenticated) {
+    if (!isAuthenticatedRef.current) {
       setShowAuthGate(true);
       return;
     }
     setShowContinuousIdentifyModal(true);
-  }, [isAuthenticated]);
+  }, []);
 
   const handleAddSet = () => {
     setShowActionModal(false);
-    if (!isAuthenticated) {
+    if (!isAuthenticatedRef.current) {
       setShowAuthGate(true);
       return;
     }
@@ -223,7 +234,7 @@ export default function TabLayout() {
 
   const handleIdentify = () => {
     setShowActionModal(false);
-    if (!isAuthenticated) {
+    if (!isAuthenticatedRef.current) {
       setShowAuthGate(true);
       return;
     }
@@ -232,7 +243,7 @@ export default function TabLayout() {
 
   const handleRecordSet = () => {
     setShowActionModal(false);
-    if (!isAuthenticated) {
+    if (!isAuthenticatedRef.current) {
       setShowAuthGate(true);
       return;
     }
@@ -311,7 +322,7 @@ export default function TabLayout() {
   const handleTabPress = (tabName: string, e: any) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
-    if (gatedTabs.includes(tabName) && !isAuthenticated) {
+    if (gatedTabs.includes(tabName) && !isAuthenticatedRef.current) {
       e.preventDefault();
       setShowAuthGate(true);
       return;

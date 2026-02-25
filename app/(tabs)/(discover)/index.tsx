@@ -12,7 +12,7 @@ import { SetList } from '@/types';
 import { useDebounce } from '@/utils/hooks';
 import { ImportResult } from '@/services/importService';
 import { useSets } from '@/contexts/SetsContext';
-import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase/client';
 import * as socialService from '@/lib/supabase/socialService';
 import DoubleTapHeart from '@/components/DoubleTapHeart';
 import { detectEvent, getEventLabel } from '@/components/EventBadge';
@@ -240,6 +240,49 @@ const extractYear = (date: Date | string): string => {
   return d.getFullYear().toString();
 };
 
+// Memoized list item — avoids inline closures that defeat React.memo on AnimatedSetCard.
+// Without this, every renderItem call creates new onPress/onLongPress function refs,
+// causing AnimatedSetCard + SetFeedCard (2000-line component with heavy regex) to
+// re-render for every visible card on each scroll frame.
+const SetCardItem = React.memo(function SetCardItem({
+  item,
+  index,
+  scrollY,
+  onCardTap,
+  onLongPress,
+  onArtistPress,
+  onEventPress,
+}: {
+  item: SetList;
+  index: number;
+  scrollY: Animated.Value;
+  onCardTap: (id: string) => void;
+  onLongPress: (set: SetList) => void;
+  onArtistPress: (artist: string) => void;
+  onEventPress: (eventId: string) => void;
+}) {
+  const handlePress = useCallback(() => onCardTap(item.id), [item.id, onCardTap]);
+  const handleLongPress = useCallback(() => onLongPress(item), [item, onLongPress]);
+
+  return (
+    <AnimatedSetCard
+      setList={item}
+      index={index}
+      scrollY={scrollY}
+      centerOffset={0}
+      onPress={handlePress}
+      onLongPress={handleLongPress}
+      onArtistPress={onArtistPress}
+      onEventPress={onEventPress}
+    />
+  );
+}, (prev, next) =>
+  prev.item.id === next.item.id &&
+  prev.index === next.index &&
+  prev.onCardTap === next.onCardTap &&
+  prev.onLongPress === next.onLongPress
+);
+
 export default function DiscoverScreen() {
   const router = useRouter();
   const { refreshSetsMetadata } = useSets();
@@ -251,8 +294,8 @@ export default function DiscoverScreen() {
   const [headerAreaHeight, setHeaderAreaHeight] = useState(HEADER_AREA_ESTIMATE);
   // Visible scroll area = screen minus safe area, header, and tab bar
   const visibleScrollHeight = windowHeight - insets.top - headerAreaHeight - totalTabBarHeight;
-  const scrollPaddingTop = Math.max(0, Math.round(visibleScrollHeight / 2 - CARD_HEIGHT / 2));
-  const scrollPaddingBottom = scrollPaddingTop + totalTabBarHeight;
+  const scrollPaddingTop = useMemo(() => Math.max(0, Math.round(visibleScrollHeight / 2 - CARD_HEIGHT / 2)), [visibleScrollHeight]);
+  const scrollPaddingBottom = useMemo(() => scrollPaddingTop + totalTabBarHeight, [scrollPaddingTop, totalTabBarHeight]);
   const [setLists, setSetLists] = useState<SetList[]>([]);
   const [dbSets, setDbSets] = useState<SetList[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -265,9 +308,17 @@ export default function DiscoverScreen() {
   const flatListRef = useRef<FlatList<SetList>>(null);
   const lastCenteredIndex = useRef(-1);
   const lastHapticTime = useRef(0);
-  const { user } = useAuth();
-  const userRef = useRef(user);
-  useEffect(() => { userRef.current = user; }, [user]);
+  // Subscribe to auth via ref only — avoids re-rendering this component on auth changes
+  const userRef = useRef<any>(null);
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      userRef.current = session?.user ?? null;
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      userRef.current = session?.user ?? null;
+    });
+    return () => subscription.unsubscribe();
+  }, []);
   const lastTapRef = useRef<Record<string, number>>({});
   const tapTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
@@ -654,30 +705,27 @@ export default function DiscoverScreen() {
   // Track whether user is actively dragging (not programmatic scroll)
   const isUserDragging = useRef(false);
 
-  // Track centered card index and provide haptic feedback during user drag
-  useEffect(() => {
-    const listenerId = scrollY.addListener(({ value }) => {
-      const centeredIndex = Math.round(value / CARD_HEIGHT);
+  // Track centered card index and provide haptic feedback during user drag.
+  // Uses the Animated.event listener callback instead of scrollY.addListener
+  // to avoid bridging the animated value from native→JS on every animation frame.
+  const handleScrollEvent = useCallback((event: any) => {
+    const offsetY = event.nativeEvent.contentOffset.y;
+    const centeredIndex = Math.round(offsetY / CARD_HEIGHT);
 
-      if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
-        lastCenteredIndex.current = centeredIndex;
-        selectedIndexRef.current = centeredIndex;
+    if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
+      lastCenteredIndex.current = centeredIndex;
+      selectedIndexRef.current = centeredIndex;
 
-        // Haptic feedback only during user drag
-        if (isUserDragging.current) {
-          const now = Date.now();
-          if (now - lastHapticTime.current > 120) {
-            lastHapticTime.current = now;
-            Haptics.selectionAsync();
-          }
+      // Haptic feedback only during user drag, throttled
+      if (isUserDragging.current) {
+        const now = Date.now();
+        if (now - lastHapticTime.current > 200) {
+          lastHapticTime.current = now;
+          Haptics.selectionAsync();
         }
       }
-    });
-
-    return () => {
-      scrollY.removeListener(listenerId);
-    };
-  }, [scrollY]);
+    }
+  }, []);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -982,19 +1030,52 @@ export default function DiscoverScreen() {
   }), []);
 
   const renderSetCard = useCallback(({ item, index }: { item: SetList; index: number }) => (
-    <AnimatedSetCard
-      setList={item}
+    <SetCardItem
+      item={item}
       index={index}
       scrollY={scrollY}
-      centerOffset={0}
-      onPress={() => handleCardTap(item.id)}
-      onLongPress={() => handleSetLongPress(item)}
+      onCardTap={handleCardTap}
+      onLongPress={handleSetLongPress}
       onArtistPress={handleArtistNavPress}
       onEventPress={handleEventFilter}
     />
   ), [scrollY, handleCardTap, handleSetLongPress, handleArtistNavPress, handleEventFilter]);
 
   const keyExtractor = useCallback((item: SetList) => item.id, []);
+
+  // Stable scroll handlers — avoids re-attaching native scroll listener on re-render
+  const onScroll = useMemo(
+    () => Animated.event(
+      [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+      { useNativeDriver: true, listener: handleScrollEvent }
+    ),
+    [scrollY, handleScrollEvent]
+  );
+
+  const resetInactivityTimerRef = useRef(resetInactivityTimer);
+  resetInactivityTimerRef.current = resetInactivityTimer;
+
+  const onScrollBeginDrag = useCallback(() => {
+    isUserDragging.current = true;
+    resetInactivityTimerRef.current();
+  }, []);
+
+  const onScrollEndDrag = useCallback(() => {
+    isUserDragging.current = false;
+  }, []);
+
+  const onMomentumScrollEnd = useCallback(() => {
+    isUserDragging.current = false;
+  }, []);
+
+  const onTouchStart = useCallback(() => {
+    resetInactivityTimerRef.current();
+  }, []);
+
+  const contentContainerMemoStyle = useMemo(
+    () => [styles.scrollContent, { paddingTop: scrollPaddingTop, paddingBottom: scrollPaddingBottom }],
+    [scrollPaddingTop, scrollPaddingBottom]
+  );
 
   const listEmptyComponent = useMemo(() => (
     <View style={styles.emptyState}>
@@ -1010,7 +1091,7 @@ export default function DiscoverScreen() {
 
   const listLoadingComponent = useMemo(() => (
     <View style={styles.loadingState}>
-      <ActivityIndicator size="large" color={Colors.dark.primary} />
+      <BubbleGlassLogo size="large" loading />
       <Text style={styles.loadingText}>Loading sets...</Text>
     </View>
   ), []);
@@ -1040,7 +1121,7 @@ export default function DiscoverScreen() {
               <ActivityIndicator size="small" color={Colors.dark.primary} />
             )}
           </Pressable>
-          <BubbleGlassLogo />
+          <BubbleGlassLogo loading={isLoading} />
           <View style={styles.headerSpacer} />
         </View>
 
@@ -1263,7 +1344,7 @@ export default function DiscoverScreen() {
             keyExtractor={keyExtractor}
             getItemLayout={getItemLayout}
             style={styles.scrollView}
-            contentContainerStyle={[styles.scrollContent, { paddingTop: scrollPaddingTop, paddingBottom: scrollPaddingBottom }]}
+            contentContainerStyle={contentContainerMemoStyle}
             showsVerticalScrollIndicator={false}
             contentInsetAdjustmentBehavior="never"
             automaticallyAdjustContentInsets={false}
@@ -1272,21 +1353,11 @@ export default function DiscoverScreen() {
             snapToInterval={CARD_HEIGHT}
             snapToAlignment="start"
             initialScrollIndex={filteredSets.length > 0 ? middleIndex : undefined}
-            onScroll={Animated.event(
-              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: true }
-            )}
-            onScrollBeginDrag={() => {
-              isUserDragging.current = true;
-              resetInactivityTimer();
-            }}
-            onScrollEndDrag={() => {
-              isUserDragging.current = false;
-            }}
-            onMomentumScrollEnd={() => {
-              isUserDragging.current = false;
-            }}
-            onTouchStart={resetInactivityTimer}
+            onScroll={onScroll}
+            onScrollBeginDrag={onScrollBeginDrag}
+            onScrollEndDrag={onScrollEndDrag}
+            onMomentumScrollEnd={onMomentumScrollEnd}
+            onTouchStart={onTouchStart}
             refreshControl={
               <RefreshControl
                 refreshing={refreshing}
@@ -1295,9 +1366,9 @@ export default function DiscoverScreen() {
               />
             }
             ListEmptyComponent={listEmptyComponent}
-            removeClippedSubviews={true}
+            removeClippedSubviews={Platform.OS === 'android'}
             maxToRenderPerBatch={5}
-            windowSize={5}
+            windowSize={7}
             onScrollToIndexFailed={(info) => {
               flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
             }}

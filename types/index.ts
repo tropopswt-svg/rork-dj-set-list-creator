@@ -80,6 +80,7 @@ export interface SetList {
   gapCount?: number;
   plays?: number;
   sourcePlatform?: string;
+  source?: string; // Platform tracklist was built from ('1001tracklists' | 'youtube' | 'soundcloud')
   // Multi-source merging
   conflicts?: TrackConflict[]; // Unresolved track conflicts needing votes
   // TRACK'D matching state

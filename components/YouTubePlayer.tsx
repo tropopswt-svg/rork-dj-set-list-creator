@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,11 @@ import {
   Platform,
   Dimensions,
 } from 'react-native';
-import { 
-  Play, 
-  Pause, 
-  SkipBack, 
-  SkipForward, 
-  Minimize2, 
-  Maximize2,
+import {
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
   Volume2,
   VolumeX,
   X,
@@ -23,6 +21,11 @@ import {
 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
+
+// Only import WebView on native — it's not needed on web and would break SSR
+const WebView = Platform.OS !== 'web'
+  ? require('react-native-webview').default
+  : null;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -53,6 +56,78 @@ const formatTime = (seconds: number): string => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
+// HTML template for native WebView — loads YouTube IFrame API and bridges
+// messages back to React Native via window.ReactNativeWebView.postMessage.
+export const buildNativeHTML = (videoId: string, startTime: number) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    html,body{width:100%;height:100%;background:#000;overflow:hidden}
+    #player{width:100%;height:100%}
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+  <script>
+    var tag=document.createElement('script');
+    tag.src="https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    var player;
+    var pollId;
+
+    function onYouTubeIframeAPIReady(){
+      player=new YT.Player('player',{
+        videoId:'${videoId}',
+        playerVars:{
+          playsinline:1,
+          start:${Math.floor(startTime)},
+          rel:0,
+          modestbranding:1,
+          iv_load_policy:3,
+          controls:0,
+          origin:'https://rork-dj-set-list-creator.vercel.app'
+        },
+        events:{
+          onReady:function(){
+            player.unMute();player.setVolume(100);player.playVideo();
+            var dur=player.getDuration()||0;
+            window.ReactNativeWebView.postMessage(JSON.stringify({event:'onReady',info:{duration:dur}}));
+            pollId=setInterval(function(){
+              if(player&&player.getCurrentTime){
+                window.ReactNativeWebView.postMessage(JSON.stringify({
+                  event:'timeUpdate',
+                  info:{currentTime:player.getCurrentTime(),duration:player.getDuration()}
+                }));
+              }
+            },500);
+          },
+          onStateChange:function(e){
+            window.ReactNativeWebView.postMessage(JSON.stringify({event:'onStateChange',info:e.data}));
+          }
+        }
+      });
+    }
+
+    window.handleCommand=function(cmd){
+      if(!player)return;
+      try{
+        switch(cmd.func){
+          case 'playVideo':player.playVideo();break;
+          case 'pauseVideo':player.pauseVideo();break;
+          case 'seekTo':player.seekTo(cmd.args[0],cmd.args[1]);break;
+          case 'mute':player.mute();break;
+          case 'unMute':player.unMute();break;
+        }
+      }catch(e){}
+    };
+  </script>
+</body>
+</html>`;
+
 export default function YouTubePlayer({
   videoId,
   initialTimestamp = 0,
@@ -67,20 +142,47 @@ export default function YouTubePlayer({
   const [isMuted, setIsMuted] = useState(false);
   const [playerReady, setPlayerReady] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const webViewRef = useRef<any>(null);
   const slideAnim = useRef(new Animated.Value(minimized ? 0 : 1)).current;
 
-  // Send command to YouTube iframe
-  const sendCommand = (func: string, args?: any) => {
-    if (Platform.OS !== 'web' || !iframeRef.current?.contentWindow) return;
-    
-    const message = JSON.stringify({
-      event: 'command',
-      func,
-      args: args || [],
-    });
-    
-    iframeRef.current.contentWindow.postMessage(message, 'https://www.youtube.com');
-  };
+  const isNative = Platform.OS !== 'web';
+
+  // Send command to YouTube player (works on both web + native)
+  const sendCommand = useCallback((func: string, args?: any) => {
+    if (isNative) {
+      if (!webViewRef.current) return;
+      const js = `window.handleCommand(${JSON.stringify({ func, args: args || [] })}); true;`;
+      webViewRef.current.injectJavaScript(js);
+    } else {
+      if (!iframeRef.current?.contentWindow) return;
+      const message = JSON.stringify({ event: 'command', func, args: args || [] });
+      iframeRef.current.contentWindow.postMessage(message, 'https://www.youtube.com');
+    }
+  }, [isNative]);
+
+  // Handle messages from the player (native WebView)
+  const handleWebViewMessage = useCallback((event: any) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      if (data.event === 'onReady') {
+        setPlayerReady(true);
+        if (data.info?.duration) setDuration(data.info.duration);
+      } else if (data.event === 'onStateChange') {
+        // YT states: -1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering
+        setIsPlaying(data.info === 1);
+      } else if (data.event === 'timeUpdate' && data.info) {
+        if (data.info.currentTime !== undefined) {
+          setCurrentTime(data.info.currentTime);
+          onTimestampChange?.(Math.floor(data.info.currentTime));
+        }
+        if (data.info.duration !== undefined && data.info.duration > 0) {
+          setDuration(data.info.duration);
+        }
+      }
+    } catch (e) {
+      // Not a JSON message
+    }
+  }, [onTimestampChange]);
 
   // Animate minimize/maximize
   useEffect(() => {
@@ -102,20 +204,19 @@ export default function YouTubePlayer({
       setCurrentTime(initialTimestamp);
       setIsPlaying(true);
     }
-  }, [initialTimestamp, playerReady]);
+  }, [initialTimestamp, playerReady, sendCommand]);
 
-  // Listen for messages from the YouTube iframe
+  // Listen for messages from the YouTube iframe (web only)
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
+    if (isNative) return;
 
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== 'https://www.youtube.com') return;
-      
+
       try {
         const data = JSON.parse(event.data);
-        
+
         if (data.event === 'onStateChange') {
-          // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: cued
           setIsPlaying(data.info === 1);
         } else if (data.event === 'onReady') {
           setPlayerReady(true);
@@ -135,7 +236,7 @@ export default function YouTubePlayer({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [onTimestampChange]);
+  }, [isNative, onTimestampChange]);
 
   const togglePlay = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -185,7 +286,7 @@ export default function YouTubePlayer({
   // Calculate animated styles
   const playerHeight = slideAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [60, 220],
+    outputRange: [60, 100],
   });
 
   const videoOpacity = slideAnim.interpolate({
@@ -198,39 +299,53 @@ export default function YouTubePlayer({
     outputRange: [0, 0, 1],
   });
 
-  // YouTube embed URL with API enabled
-  const embedUrl = `https://www.youtube.com/embed/${videoId}?start=${initialTimestamp}&enablejsapi=1&origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
+  // Native: full YouTube mobile page (no embed restrictions)
+  // Web: embed URL with JS API for custom controls
+  const nativeUrl = `https://m.youtube.com/watch?v=${videoId}&t=${Math.floor(initialTimestamp)}s`;
+  const webEmbedUrl = `https://www.youtube.com/embed/${videoId}?start=${initialTimestamp}&enablejsapi=1&origin=${encodeURIComponent(typeof window !== 'undefined' ? window.location.origin : '')}&playsinline=1&rel=0&modestbranding=1&iv_load_policy=3`;
 
-  if (Platform.OS !== 'web') {
-    // For native, we'd use WebView - for now show a placeholder
+  // ── Video element (platform-specific) ──────────────────────────────
+  const renderVideo = () => {
+    if (isNative && WebView) {
+      return (
+        <WebView
+          ref={webViewRef}
+          source={{ html: buildNativeHTML(videoId, initialTimestamp), baseUrl: 'https://rork-dj-set-list-creator.vercel.app' }}
+          style={{ flex: 1, backgroundColor: '#000' }}
+          allowsInlineMediaPlayback={true}
+          mediaPlaybackRequiresUserAction={false}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+          allowsFullscreenVideo={false}
+          scrollEnabled={false}
+          bounces={false}
+          onMessage={handleWebViewMessage}
+        />
+      );
+    }
+
+    // Web: use iframe directly
     return (
-      <View style={styles.nativeContainer}>
-        <Text style={styles.nativeText}>YouTube player available on web</Text>
-        <Pressable style={styles.nativeButton} onPress={onClose}>
-          <Text style={styles.nativeButtonText}>Close</Text>
-        </Pressable>
-      </View>
+      <iframe
+        ref={iframeRef as any}
+        src={webEmbedUrl}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          borderRadius: 12,
+        }}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+      />
     );
-  }
+  };
 
   return (
     <Animated.View style={[styles.container, { height: playerHeight }]}>
-      {/* Video iframe */}
+      {/* Video */}
       <Animated.View style={[styles.videoContainer, { opacity: videoOpacity }]}>
-        {!minimized && (
-          <iframe
-            ref={iframeRef as any}
-            src={embedUrl}
-            style={{
-              width: '100%',
-              height: '100%',
-              border: 'none',
-              borderRadius: 12,
-            }}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
-        )}
+        {!minimized && renderVideo()}
       </Animated.View>
 
       {/* Minimized bar */}
@@ -246,11 +361,11 @@ export default function YouTubePlayer({
           <View style={styles.miniInfo}>
             <Text style={styles.miniTimeText}>{formatTime(currentTime)}</Text>
             <View style={styles.miniProgressBg}>
-              <View 
+              <View
                 style={[
-                  styles.miniProgressFill, 
+                  styles.miniProgressFill,
                   { width: duration ? `${(currentTime / duration) * 100}%` : '0%' }
-                ]} 
+                ]}
               />
             </View>
           </View>
@@ -263,70 +378,51 @@ export default function YouTubePlayer({
         </View>
       )}
 
-      {/* Full controls */}
+      {/* Compact single-row controls */}
       {!minimized && (
         <Animated.View style={[styles.controls, { opacity: controlsOpacity }]}>
-          {/* Progress bar */}
-          <View style={styles.progressContainer}>
-            <Text style={styles.timeText}>{formatTime(currentTime)}</Text>
-            <View style={styles.progressBar}>
-              <View 
-                style={[
-                  styles.progressFill, 
-                  { width: duration ? `${(currentTime / duration) * 100}%` : '0%' }
-                ]} 
-              />
-              <Pressable
-                style={[
-                  styles.progressHandle,
-                  { left: duration ? `${(currentTime / duration) * 100}%` : '0%' }
-                ]}
-                onPress={() => {
-                  // Could implement drag here
-                }}
-              />
-            </View>
-            <Text style={styles.timeText}>{formatTime(duration)}</Text>
-          </View>
-
-          {/* Control buttons */}
           <View style={styles.controlButtons}>
             <Pressable style={styles.controlButton} onPress={toggleMute}>
               {isMuted ? (
-                <VolumeX size={20} color={Colors.dark.textSecondary} />
+                <VolumeX size={16} color={Colors.dark.textSecondary} />
               ) : (
-                <Volume2 size={20} color={Colors.dark.text} />
+                <Volume2 size={16} color={Colors.dark.text} />
               )}
             </Pressable>
 
-            <View style={styles.mainControls}>
-              <Pressable style={styles.skipButton} onPress={skipBack}>
-                <SkipBack size={22} color={Colors.dark.text} />
-                <Text style={styles.skipText}>15</Text>
-              </Pressable>
+            <Pressable style={styles.controlButton} onPress={skipBack}>
+              <SkipBack size={16} color={Colors.dark.text} />
+            </Pressable>
 
-              <Pressable style={styles.playButton} onPress={togglePlay}>
-                {isPlaying ? (
-                  <Pause size={28} color={Colors.dark.background} fill={Colors.dark.background} />
-                ) : (
-                  <Play size={28} color={Colors.dark.background} fill={Colors.dark.background} />
-                )}
-              </Pressable>
+            <Pressable style={styles.compactPlayButton} onPress={togglePlay}>
+              {isPlaying ? (
+                <Pause size={18} color={Colors.dark.background} fill={Colors.dark.background} />
+              ) : (
+                <Play size={18} color={Colors.dark.background} fill={Colors.dark.background} />
+              )}
+            </Pressable>
 
-              <Pressable style={styles.skipButton} onPress={skipForward}>
-                <SkipForward size={22} color={Colors.dark.text} />
-                <Text style={styles.skipText}>15</Text>
-              </Pressable>
+            <Pressable style={styles.controlButton} onPress={skipForward}>
+              <SkipForward size={16} color={Colors.dark.text} />
+            </Pressable>
+
+            <Text style={styles.compactTimeText}>{formatTime(currentTime)}</Text>
+
+            <View style={styles.compactProgressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: duration ? `${(currentTime / duration) * 100}%` : '0%' }
+                ]}
+              />
             </View>
 
-            <View style={styles.rightControls}>
-              <Pressable style={styles.controlButton} onPress={handleMinimize}>
-                <ChevronDown size={20} color={Colors.dark.textSecondary} />
-              </Pressable>
-              <Pressable style={styles.controlButton} onPress={handleClose}>
-                <X size={20} color={Colors.dark.textSecondary} />
-              </Pressable>
-            </View>
+            <Pressable style={styles.controlButton} onPress={handleMinimize}>
+              <ChevronDown size={16} color={Colors.dark.textSecondary} />
+            </Pressable>
+            <Pressable style={styles.controlButton} onPress={handleClose}>
+              <X size={16} color={Colors.dark.textSecondary} />
+            </Pressable>
           </View>
         </Animated.View>
       )}
@@ -343,35 +439,47 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   videoContainer: {
-    flex: 1,
-    borderRadius: 12,
+    height: 40,
+    borderRadius: 8,
     overflow: 'hidden',
-    margin: 8,
-    marginBottom: 0,
+    marginHorizontal: 8,
+    marginTop: 6,
   },
   controls: {
-    padding: 12,
-    paddingTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
-  progressContainer: {
+  controlButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
+    gap: 2,
   },
-  timeText: {
-    fontSize: 11,
+  controlButton: {
+    padding: 6,
+  },
+  compactPlayButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.dark.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  compactTimeText: {
+    fontSize: 10,
     fontWeight: '600',
     color: Colors.dark.textMuted,
     fontVariant: ['tabular-nums'],
-    minWidth: 45,
+    marginHorizontal: 4,
+    minWidth: 36,
   },
-  progressBar: {
+  compactProgressBar: {
     flex: 1,
-    height: 4,
+    height: 3,
     backgroundColor: Colors.dark.surfaceLight,
-    borderRadius: 2,
+    borderRadius: 1.5,
     position: 'relative',
+    overflow: 'hidden',
   },
   progressFill: {
     position: 'absolute',
@@ -379,51 +487,7 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     backgroundColor: Colors.dark.primary,
-    borderRadius: 2,
-  },
-  progressHandle: {
-    position: 'absolute',
-    top: -6,
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    backgroundColor: Colors.dark.primary,
-    marginLeft: -8,
-  },
-  controlButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  controlButton: {
-    padding: 8,
-  },
-  mainControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  skipButton: {
-    alignItems: 'center',
-    padding: 8,
-  },
-  skipText: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: Colors.dark.textMuted,
-    marginTop: -4,
-  },
-  playButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.dark.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderRadius: 1.5,
   },
   // Minimized state
   minimizedBar: {
@@ -461,30 +525,5 @@ const styles = StyleSheet.create({
   },
   miniButton: {
     padding: 8,
-  },
-  // Native fallback
-  nativeContainer: {
-    padding: 20,
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginHorizontal: 16,
-    marginBottom: 12,
-  },
-  nativeText: {
-    fontSize: 14,
-    color: Colors.dark.textSecondary,
-    marginBottom: 12,
-  },
-  nativeButton: {
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  nativeButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: Colors.dark.background,
   },
 });

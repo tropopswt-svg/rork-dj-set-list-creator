@@ -719,6 +719,7 @@ const styles = StyleSheet.create({
   },
   featuredSetInfo: {
     flex: 1,
+    marginTop: -4,
   },
   featuredSetName: {
     fontSize: 13,

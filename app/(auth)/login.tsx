@@ -18,11 +18,14 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
+import { stopFeedAudio } from '@/lib/feedAudioController';
+import { useAudioPreview } from '@/contexts/AudioPreviewContext';
 
 export default function LoginScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { signIn, signInWithGoogle, signInWithApple } = useAuth();
+  const { stop: stopPreviewAudio } = useAudioPreview();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -30,6 +33,12 @@ export default function LoginScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showVerifiedModal, setShowVerifiedModal] = useState(false);
+
+  // Stop any playing audio when login screen mounts
+  useEffect(() => {
+    stopFeedAudio();
+    stopPreviewAudio();
+  }, []);
 
   // Check if user just verified their email
   useEffect(() => {

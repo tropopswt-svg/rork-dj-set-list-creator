@@ -134,14 +134,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Guard against duplicate profile fetches for the same user
   const fetchedProfileForRef = useRef<string | null>(null);
 
-  // Refresh profile data (explicit refresh — allowed even if already fetched)
+  // Ref for user so refreshProfile doesn't depend on user state (avoids re-render cascade)
+  const userRef = useRef<User | null>(null);
+  userRef.current = user;
+
+  // Refresh profile data — stable callback (no user dependency)
   const refreshProfile = useCallback(async () => {
-    if (user) {
-      fetchedProfileForRef.current = user.id;
-      const profileData = await fetchProfile(user.id);
+    const currentUser = userRef.current;
+    if (currentUser) {
+      fetchedProfileForRef.current = currentUser.id;
+      const profileData = await fetchProfile(currentUser.id);
       setProfile(profileData);
     }
-  }, [user, fetchProfile]);
+  }, [fetchProfile]);
 
   // Initialize auth state
   useEffect(() => {
@@ -162,6 +167,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Single listener handles all auth changes (INITIAL_SESSION, SIGNED_IN, SIGNED_OUT, etc.)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (__DEV__) console.log('[Auth] Auth state changed:', event);
+
+      // TOKEN_REFRESHED only updates the JWT — skip state updates to avoid re-render cascade
+      if (event === 'TOKEN_REFRESHED') {
+        return;
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
 
@@ -366,14 +377,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isAuthenticated = !!user;
-
   const value = useMemo<AuthContextType>(() => ({
     user,
     session,
     profile,
     isLoading,
-    isAuthenticated,
+    isAuthenticated: !!user,
     signUp,
     signIn,
     signInWithGoogle,
@@ -383,7 +392,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deleteAccount,
     updateProfile,
     refreshProfile,
-  }), [user, session, profile, isLoading, isAuthenticated, refreshProfile]);
+  }), [user, session, profile, isLoading, refreshProfile]);
 
   return (
     <AuthContext.Provider value={value}>

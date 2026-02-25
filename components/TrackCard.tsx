@@ -317,11 +317,15 @@ export default function TrackCard({
   return (
     <>
       <Pressable style={[styles.container, isUnidentified && styles.unidentifiedContainer]} onPress={handlePress}>
-        {showTimestamp && track.timestamp !== undefined && (
-          <View style={[styles.timestampBadge, isUnidentified && styles.unidentifiedTimestamp]}>
-            <Text style={styles.timestampText}>{formatTimestamp(track.timestamp)}</Text>
-          </View>
-        )}
+        {showTimestamp && track.timestamp !== undefined && (() => {
+          const ts = formatTimestamp(track.timestamp);
+          const hasHours = ts.length > 5;
+          return (
+            <View style={[styles.timestampBadge, hasHours && styles.timestampBadgeWide, isUnidentified && styles.unidentifiedTimestamp]}>
+              <Text style={[styles.timestampText, hasHours && styles.timestampTextSmall]} numberOfLines={1}>{ts}</Text>
+            </View>
+          );
+        })()}
         {showIndex !== undefined && !showTimestamp && (
           <Text style={styles.index}>{showIndex}</Text>
         )}
@@ -578,13 +582,17 @@ const styles = StyleSheet.create({
   },
   timestampBadge: {
     backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
     marginRight: 10,
-    minWidth: 56,
+    minWidth: 52,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  timestampBadgeWide: {
+    minWidth: 52,
+    paddingHorizontal: 6,
   },
   timestampText: {
     color: '#FFFFFF',
@@ -592,6 +600,10 @@ const styles = StyleSheet.create({
     fontWeight: '800' as const,
     fontVariant: ['tabular-nums'],
     letterSpacing: 0.5,
+  },
+  timestampTextSmall: {
+    fontSize: 10.5,
+    letterSpacing: 0,
   },
   index: {
     color: Colors.dark.textMuted,

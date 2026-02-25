@@ -189,8 +189,12 @@ export const [UserProvider, useUser] = createContextHook(() => {
         setPoints(emptyPoints);
         await savePoints(emptyPoints);
 
-        // Refresh profile to get updated totals from database
-        await refreshProfile();
+        // Defer profile refresh — profile was just fetched during login,
+        // so avoid triggering an immediate re-render cascade across all consumers.
+        // The profile will be refreshed on next explicit user action.
+        InteractionManager.runAfterInteractions(() => {
+          refreshProfile();
+        });
 
         setSyncState('synced');
       } else {
@@ -280,8 +284,10 @@ export const [UserProvider, useUser] = createContextHook(() => {
 
       if (result.success) {
         if (__DEV__) console.log('[UserContext] Points synced to database:', amount, reason);
-        // Refresh profile to update displayed totals
-        refreshProfile();
+        // Defer profile refresh to avoid blocking the current interaction
+        InteractionManager.runAfterInteractions(() => {
+          refreshProfile();
+        });
       } else {
         if (__DEV__) console.error('[UserContext] Failed to sync points:', result.error);
         // Points are still saved locally, will sync on next login
