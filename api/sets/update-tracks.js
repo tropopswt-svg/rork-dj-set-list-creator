@@ -142,17 +142,34 @@ export default async function handler(req, res) {
       let bestMatch = null;
       let bestScore = 0;
 
+      let bestStrategy = 'normal';
+
       for (const existingTrack of existingTracks) {
-        // Calculate match score based on title and artist
+        // Strategy 1: Normal — title↔title, artist↔artist
         const titleScore = similarity(scrapedTrack.title, existingTrack.track_title);
         const artistScore = similarity(scrapedTrack.artist, existingTrack.artist_name);
+        const normalScore = titleScore * 0.7 + artistScore * 0.3;
 
-        // Weight title higher than artist
-        const score = titleScore * 0.7 + artistScore * 0.3;
+        // Strategy 2: Swapped — title↔artist, artist↔title (×0.9 penalty)
+        const swapTitleScore = similarity(scrapedTrack.title, existingTrack.artist_name);
+        const swapArtistScore = similarity(scrapedTrack.artist, existingTrack.track_title);
+        const swapScore = (swapTitleScore * 0.7 + swapArtistScore * 0.3) * 0.9;
+
+        // Strategy 3: Combined — pool all words into one string (×0.95 penalty)
+        const scrapedCombined = `${scrapedTrack.title || ''} ${scrapedTrack.artist || ''}`.trim();
+        const existingCombined = `${existingTrack.track_title || ''} ${existingTrack.artist_name || ''}`.trim();
+        const combinedScore = similarity(scrapedCombined, existingCombined) * 0.95;
+
+        // Take the best strategy
+        let score = normalScore;
+        let strategy = 'normal';
+        if (swapScore > score) { score = swapScore; strategy = 'swap'; }
+        if (combinedScore > score) { score = combinedScore; strategy = 'combined'; }
 
         if (score > bestScore && score >= matchThreshold) {
           bestScore = score;
           bestMatch = existingTrack;
+          bestStrategy = strategy;
         }
       }
 
@@ -189,7 +206,7 @@ export default async function handler(req, res) {
             console.log(`[Update Tracks] Update error for track ${bestMatch.id}:`, updateError);
             errorCount++;
           } else {
-            console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, ts: ${timestamp}s)`);
+            console.log(`[Update Tracks] Matched "${scrapedTrack.title}" → "${bestMatch.track_title}" (score: ${bestScore.toFixed(2)}, strategy: ${bestStrategy}, ts: ${timestamp}s)`);
           }
         } else {
           console.log(`[Update Tracks] Confirmed "${scrapedTrack.title}" → "${bestMatch.track_title}" (no changes needed)`);
@@ -199,9 +216,22 @@ export default async function handler(req, res) {
         // to catch near-duplicates like "Be Good to Me" vs "Be Good 2 Me"
         let isNearDuplicate = false;
         for (const existingTrack of existingTracks) {
+          // Title-only check (original)
           const titleSim = similarity(scrapedTrack.title, existingTrack.track_title);
-          if (titleSim >= 0.5) {
-            console.log(`[Update Tracks] Near-duplicate: "${scrapedTrack.title}" ≈ "${existingTrack.track_title}" (title=${titleSim.toFixed(2)}), skipping insert`);
+          // Swap check: scraped title vs existing artist, scraped artist vs existing title
+          const swapTitleSim = similarity(scrapedTrack.title, existingTrack.artist_name);
+          const swapArtistSim = similarity(scrapedTrack.artist, existingTrack.track_title);
+          const swapSim = swapTitleSim * 0.7 + swapArtistSim * 0.3;
+          // Combined check: pool all fields
+          const scrapedAll = `${scrapedTrack.title || ''} ${scrapedTrack.artist || ''}`.trim();
+          const existingAll = `${existingTrack.track_title || ''} ${existingTrack.artist_name || ''}`.trim();
+          const combinedSim = similarity(scrapedAll, existingAll);
+
+          const dupScore = Math.max(titleSim, swapSim, combinedSim);
+          const dupStrategy = dupScore === titleSim ? 'title' : dupScore === swapSim ? 'swap' : 'combined';
+
+          if (dupScore >= 0.5) {
+            console.log(`[Update Tracks] Near-duplicate: "${scrapedTrack.title}" ≈ "${existingTrack.track_title}" (${dupStrategy}=${dupScore.toFixed(2)}), skipping insert`);
             isNearDuplicate = true;
             confirmedCount++;
             break;
