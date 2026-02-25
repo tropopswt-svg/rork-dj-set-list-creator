@@ -402,9 +402,11 @@ function CrateStack({
               },
             ]}
           >
-            <BlurView intensity={60} tint="dark" style={styles.crateModalBlur}>
-              {/* Glass top edge highlight */}
+            <BlurView intensity={25} tint="systemThinMaterialDark" style={styles.crateModalBlur}>
+              {/* Glass top specular highlight */}
               <View style={styles.crateModalGlassEdge} />
+              {/* Inner glow edge */}
+              <View style={styles.crateModalInnerGlow} />
 
               {/* Drag handle */}
               <View style={styles.crateModalHandle} />
@@ -1583,40 +1585,59 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
   },
 
-  // ─── Crate Modal (Liquid Glass) ───
+  // ─── Crate Modal (Bubbly Liquid Glass) ───
   crateModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-end',
   },
   crateModalContainer: {
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     maxHeight: '92%',
     minHeight: '70%',
     overflow: 'hidden',
+    // Outer bubble shadow
+    shadowColor: 'rgba(255,255,255,0.15)',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 1,
+    shadowRadius: 20,
+    // Glass border
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderTopColor: 'rgba(255,255,255,0.35)',
+    borderBottomWidth: 0,
   },
   crateModalBlur: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.25)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: 'rgba(40,40,50,0.12)',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
     overflow: 'hidden',
   },
   crateModalGlassEdge: {
     position: 'absolute',
     top: 0,
-    left: 16,
-    right: 16,
+    left: 24,
+    right: 24,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.4)',
+    borderRadius: 1,
+  },
+  crateModalInnerGlow: {
+    position: 'absolute',
+    top: 1,
+    left: 40,
+    right: 40,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderRadius: 1,
   },
   crateModalHandle: {
-    width: 40,
+    width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.3)',
     alignSelf: 'center',
     marginTop: 10,
   },
@@ -1636,26 +1657,26 @@ const styles = StyleSheet.create({
   crateModalTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#fff',
+    color: 'rgba(255,255,255,0.9)',
     letterSpacing: -0.5,
   },
   crateModalClose: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.12)',
-    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.22)',
   },
   crateModalCloseText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
+    color: 'rgba(255,255,255,0.6)',
   },
   crateModalSubtitle: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
+    color: 'rgba(255,255,255,0.35)',
     paddingHorizontal: 20,
     marginTop: 4,
     marginBottom: 16,
@@ -1669,22 +1690,23 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   crateModalRecord: {
-    borderRadius: 14,
+    borderRadius: 16,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    shadowColor: 'rgba(0,0,0,0.3)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 14,
     elevation: 4,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(255,255,255,0.04)',
   },
   crateModalRecordImage: {
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.06)',
   },
   crateModalRecordVinylHole: {
     position: 'absolute',
@@ -1693,23 +1715,23 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     marginTop: -7,
     marginLeft: -7,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
   crateModalRecordTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#fff',
+    color: 'rgba(255,255,255,0.9)',
     paddingHorizontal: 10,
     paddingTop: 10,
   },
   crateModalRecordArtist: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.4)',
     paddingHorizontal: 10,
     paddingTop: 2,
     paddingBottom: 10,
