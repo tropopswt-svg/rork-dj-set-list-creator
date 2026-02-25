@@ -2421,11 +2421,13 @@ export default function SetDetailScreen() {
                         const timestamped = updateData.updatedCount || 0;
                         const verified = updateData.confirmedCount || 0;
                         const added = updateData.newTracksAdded || 0;
+                        const errors = updateData.errorCount || 0;
                         const parts: string[] = [];
                         if (timestamped > 0) parts.push(`${timestamped} timestamped`);
                         if (verified > 0) parts.push(`${verified} verified`);
                         if (added > 0) parts.push(`${added} new`);
-                        const resultType = (timestamped > 0 || added > 0) ? 'success' : (verified > 0 ? 'success' : 'empty');
+                        if (errors > 0) parts.push(`${errors} failed`);
+                        const resultType = errors > 0 ? 'error' : (timestamped > 0 || added > 0) ? 'success' : (verified > 0 ? 'success' : 'empty');
                         const msg = parts.length > 0
                           ? parts.join(', ')
                           : 'No changes made';
