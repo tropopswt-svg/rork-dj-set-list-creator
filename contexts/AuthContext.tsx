@@ -99,6 +99,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return null;
       }
 
+      // Profile exists but has null username/display_name — backfill from user metadata
+      if (data && userData && (!data.username || !data.display_name)) {
+        const updates: Record<string, string> = {};
+        if (!data.username) {
+          updates.username = userData.user_metadata?.username || userData.email?.split('@')[0] || null;
+        }
+        if (!data.display_name) {
+          updates.display_name = userData.user_metadata?.full_name || userData.user_metadata?.name || userData.email?.split('@')[0] || null;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          if (__DEV__) console.log('[Auth] Backfilling profile fields:', updates);
+          const { data: updated, error: updateError } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', userId)
+            .select()
+            .single();
+
+          if (!updateError && updated) {
+            return updated as Profile;
+          }
+        }
+      }
+
       return data as Profile;
     } catch (error) {
       if (__DEV__) console.error('[Auth] Error fetching profile:', error);
@@ -120,10 +145,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize auth state
   useEffect(() => {
-    // Get initial session — only sets auth state, profile fetch handled by onAuthStateChange
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Get initial session and fetch profile before clearing loading state
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      if (session?.user) {
+        fetchedProfileForRef.current = session.user.id;
+        const profileData = await fetchProfile(session.user.id, session.user);
+        setProfile(profileData);
+      }
+
       setIsLoading(false);
     });
 

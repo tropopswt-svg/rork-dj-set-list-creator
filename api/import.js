@@ -3088,7 +3088,7 @@ async function handleChromeExtensionImport(req, res, data) {
       const { data: artistData } = await supabase.from('artists').select('id').eq('slug', generateSlug(artistName)).single();
       if (artistData) artistId = artistData.id;
       
-      const { error } = await supabase.from('tracks').insert({
+      const { data: newTrack, error } = await supabase.from('tracks').insert({
         title: track.title,
         title_normalized: titleNormalized,
         artist_id: artistId,
@@ -3102,12 +3102,21 @@ async function handleChromeExtensionImport(req, res, data) {
         beatport_url: track.beatport_url || null,
         soundcloud_url: track.soundcloud_url || null,
         times_played: 0,
-      });
-      
+      }).select('id').single();
+
       if (error && !error.message.includes('duplicate')) {
         console.error(`Track error: ${track.title}`, error.message);
       }
       error ? results.tracksSkipped++ : results.tracksCreated++;
+
+      // Enqueue new track for Spotify validation (fire-and-forget)
+      if (!error && newTrack?.id) {
+        supabase.rpc('enqueue_track_validation', {
+          p_track_id: newTrack.id,
+          p_provider: 'spotify',
+          p_priority: 50,
+        }).catch(() => {});
+      }
     }
   }
   

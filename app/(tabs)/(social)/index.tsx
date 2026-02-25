@@ -30,7 +30,7 @@ import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCoverImageUrl } from '@/utils/coverImage';
+import { getSetCoverUrl } from '@/utils/coverImage';
 import { useLikedSets, useContributions } from '@/hooks/useSocial';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -301,7 +301,7 @@ function CrateStack({
   const renderCrateRecord = ({ item, index }: { item: any; index: number }) => {
     const set = item.set;
     if (!set) return null;
-    const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
+    const coverUrl = getSetCoverUrl(set);
     const anim = recordAnims[index] || new Animated.Value(1);
 
     return (
@@ -346,10 +346,10 @@ function CrateStack({
           />
           <View style={styles.crateModalRecordVinylHole} />
           <Text style={styles.crateModalRecordTitle} numberOfLines={1}>
-            {set.name}
+            {set.title}
           </Text>
           <Text style={styles.crateModalRecordArtist} numberOfLines={1}>
-            {set.artist_name}
+            {set.dj_name}
           </Text>
         </Animated.View>
       </PressableCard>
@@ -379,7 +379,7 @@ function CrateStack({
                 const offset = i * 14;
                 const rotation = (i - 2) * 3;
                 const zIndex = covers.length - i;
-                const coverUrl = getCoverImageUrl(set.cover_url, set.id, set.venue);
+                const coverUrl = getSetCoverUrl(set);
 
                 return (
                   <View
@@ -994,7 +994,7 @@ function IdentifiedTrackCard({
           <View style={styles.trackSetRow}>
             <Disc size={11} color="rgba(0,0,0,0.35)" />
             <Text style={styles.trackSetName} numberOfLines={1}>
-              {contribution.set.name}
+              {contribution.set.title}
             </Text>
           </View>
         )}
@@ -1019,7 +1019,7 @@ function SavedSetCard({
       <BlurView intensity={50} tint="light" style={styles.savedSetGlass}>
         <View style={styles.savedSetGlassEdge} />
         <Image
-          source={{ uri: getCoverImageUrl(set.cover_url, set.id, set.venue) }}
+          source={{ uri: getSetCoverUrl(set) }}
           style={styles.savedSetImage}
           contentFit="cover"
           placeholder={{ blurhash: 'L6PZfSi_.AyE_3t7t7R**0o#DgR4' }}
@@ -1027,10 +1027,10 @@ function SavedSetCard({
         />
         <View style={styles.savedSetInfo}>
           <Text style={styles.savedSetName} numberOfLines={1}>
-            {set.name}
+            {set.title}
           </Text>
           <Text style={styles.savedSetArtist} numberOfLines={1}>
-            {set.artist_name}
+            {set.dj_name}
           </Text>
           <Text style={styles.savedSetDate}>
             {formatTimeAgo(savedSet.created_at)}

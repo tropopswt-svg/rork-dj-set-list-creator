@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ChevronLeft,
   User,
@@ -38,8 +38,11 @@ type SettingSection = 'main' | 'edit-profile' | 'privacy' | 'notifications';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ section?: string }>();
   const { user, profile: authProfile, signOut, updateProfile, deleteAccount } = useAuth();
-  const [currentSection, setCurrentSection] = useState<SettingSection>('main');
+  const [currentSection, setCurrentSection] = useState<SettingSection>(
+    (params.section as SettingSection) || 'main'
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   const [profile, setProfile] = useState({
@@ -507,17 +510,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   backButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.7)',
+    borderTopColor: 'rgba(255,255,255,0.9)',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 2,
   },
   headerTitle: {
     fontSize: 18,
@@ -548,25 +558,43 @@ const styles = StyleSheet.create({
   settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.45)',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    shadowColor: 'rgba(0,0,0,0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
   },
   settingIcon: {
     width: 36,
     height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255, 85, 0, 0.1)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderBottomColor: 'rgba(0,0,0,0.04)',
+    shadowColor: 'rgba(0,0,0,0.06)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   settingIconDanger: {
-    backgroundColor: 'rgba(211, 47, 47, 0.1)',
+    backgroundColor: 'rgba(211, 47, 47, 0.06)',
+    borderColor: 'rgba(211, 47, 47, 0.15)',
+    borderTopColor: 'rgba(255,255,255,0.5)',
   },
   settingLabel: {
     flex: 1,
@@ -585,13 +613,20 @@ const styles = StyleSheet.create({
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255,255,255,0.45)',
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+    shadowColor: 'rgba(0,0,0,0.06)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
+    elevation: 2,
   },
   toggleContent: {
     flex: 1,
@@ -647,22 +682,26 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
     color: Colors.dark.text,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   usernameInput: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.surface,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.5)',
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: Colors.dark.border,
+    borderColor: 'rgba(255,255,255,0.6)',
+    borderTopColor: 'rgba(255,255,255,0.8)',
+    borderBottomColor: 'rgba(0,0,0,0.05)',
   },
   usernamePrefix: {
     fontSize: 16,
@@ -682,10 +721,19 @@ const styles = StyleSheet.create({
   saveButton: {
     marginHorizontal: 16,
     marginTop: 8,
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 12,
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+    borderTopColor: 'rgba(255, 100, 120, 0.2)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.3)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
   saveButtonText: {
     fontSize: 16,

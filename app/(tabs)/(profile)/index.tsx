@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles } from 'lucide-react-native';
+import { Settings, Award, Clock, CheckCircle, AlertCircle, ChevronRight, User, Sparkles, Edit3 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import Colors from '@/constants/colors';
 import BubbleGlassLogo from '@/components/BubbleGlassLogo';
@@ -293,6 +293,18 @@ export default function ProfileScreen() {
             <Text style={styles.displayName}>{user.displayName}</Text>
             <Text style={styles.username}>@{user.username}</Text>
             {user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+
+            {/* ── Edit Profile Button ── */}
+            <Pressable
+              style={styles.editProfileButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push({ pathname: '/(tabs)/(profile)/settings', params: { section: 'edit-profile' } });
+              }}
+            >
+              <Edit3 size={14} color={Colors.dark.text} />
+              <Text style={styles.editProfileText}>Edit Profile</Text>
+            </Pressable>
 
             {/* ── Glass follower pills ── */}
             <View style={styles.followRow}>
@@ -668,6 +680,32 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
 
+  // ── Edit Profile Button ──
+  editProfileButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.7)',
+    borderTopColor: 'rgba(255, 255, 255, 0.9)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.05)',
+    marginBottom: 16,
+    shadowColor: 'rgba(0,0,0,0.08)',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  editProfileText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.dark.text,
+  },
+
   // ── Glass Follower Pills ──
   followRow: {
     flexDirection: 'row',
@@ -682,18 +720,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
-    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
-    shadowColor: '#000',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderTopColor: 'rgba(255, 255, 255, 0.8)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    shadowColor: 'rgba(0,0,0,0.1)',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOpacity: 1,
+    shadowRadius: 12,
     elevation: 3,
   },
   followPillTint: {
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
   },
   followPillLightEdge: {
     position: 'absolute',
@@ -701,7 +739,7 @@ const styles = StyleSheet.create({
     left: 8,
     right: 8,
     height: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderRadius: 1,
     zIndex: 2,
   },
@@ -720,7 +758,7 @@ const styles = StyleSheet.create({
   followDivider: {
     width: 1,
     height: 28,
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.1)',
   },
 
   // ── Glass Genre Tags ──

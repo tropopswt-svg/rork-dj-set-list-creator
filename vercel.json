@@ -15,6 +15,10 @@
     {
       "path": "/api/musicbrainz-drip",
       "schedule": "15 * * * *"
+    },
+    {
+      "path": "/api/validate-tracks",
+      "schedule": "*/10 * * * *"
     }
   ],
   "rewrites": [

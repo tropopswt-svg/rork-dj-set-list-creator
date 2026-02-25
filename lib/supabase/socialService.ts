@@ -336,12 +336,12 @@ export async function hasLikedSet(userId: string, setId: string) {
 
 // Get user's liked sets
 export async function getLikedSets(userId: string, limit = 50) {
-  // Try FK join first
+  // Try FK join first — include artist image for cover fallback
   const { data, error } = await supabase
     .from('likes')
     .select(`
       *,
-      set:sets(*)
+      set:sets(*, artist:dj_id(image_url))
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -369,7 +369,7 @@ export async function getLikedSets(userId: string, limit = 50) {
 
   const { data: sets } = await supabase
     .from('sets')
-    .select('*')
+    .select('*, artist:dj_id(image_url)')
     .in('id', setIds);
 
   const setsMap = new Map((sets || []).map((s: any) => [s.id, s]));
@@ -582,7 +582,7 @@ export async function getSavedSets(userId: string, limit = 50) {
     .from('saved_sets')
     .select(`
       *,
-      set:sets(*)
+      set:sets(*, artist:dj_id(image_url))
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -684,7 +684,7 @@ export async function getUserContributions(userId: string, limit = 50) {
     .from('contributions')
     .select(`
       *,
-      set:sets(id, name, artist_name, cover_url)
+      set:sets(id, title, dj_name, cover_url, youtube_url)
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
@@ -771,7 +771,7 @@ export async function getFeed(userId: string, limit = 50, offset = 0) {
     .select(`
       *,
       user:profiles!user_id(id, username, display_name, avatar_url),
-      set:sets(id, name, artist_name, cover_url),
+      set:sets(id, title, dj_name, cover_url, youtube_url),
       artist:artists(id, name, slug, image_url),
       target_user:profiles!target_user_id(id, username, display_name, avatar_url)
     `)
@@ -800,7 +800,7 @@ export async function getUserActivity(userId: string, limit = 50) {
     .select(`
       *,
       user:profiles!user_id(id, username, display_name, avatar_url),
-      set:sets(id, name, artist_name, cover_url),
+      set:sets(id, title, dj_name, cover_url, youtube_url),
       artist:artists(id, name, slug, image_url)
     `)
     .eq('user_id', userId)

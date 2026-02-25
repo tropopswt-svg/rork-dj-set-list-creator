@@ -275,6 +275,11 @@ export default async function handler(req, res) {
       setCoverUrl = await fetchSoundCloudArtwork(set.soundcloud_url);
     }
 
+    // Persist generated cover URL back to DB so crate/social pages have it (fire-and-forget)
+    if (setCoverUrl && !set.cover_url) {
+      supabase.from('sets').update({ cover_url: setCoverUrl }).eq('id', set.id).then(() => {});
+    }
+
     // Transform set to match app's SetList type
     const artistImageUrl = set.artist?.image_url || null;
     const transformedSet = {
