@@ -9,239 +9,132 @@ import {
   Animated,
   Easing,
 } from 'react-native';
-import { X, Youtube, Music2, Check, AlertCircle, AlertTriangle } from 'lucide-react-native';
+import { X, Youtube, Music2, AlertCircle, AlertTriangle } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import Colors from '@/constants/colors';
 
-// Animated scanning waveform for ID logo
-const ScanningWaveform = ({
-  width = 60,
-  height = 32,
-  barCount = 14,
-  color = Colors.dark.primary,
-  isScanning = false,
-}: {
-  width?: number;
-  height?: number;
-  barCount?: number;
-  color?: string;
-  isScanning?: boolean;
-}) => {
-  const animations = useRef(
-    Array.from({ length: barCount }, () => new Animated.Value(0.3))
-  ).current;
-  const scanLineAnim = useRef(new Animated.Value(0)).current;
+// Transparent liquid glass progress bar that fills up
+const GlassFillBar = ({ active = false, complete = false }: { active?: boolean; complete?: boolean }) => {
+  const fillAnim = useRef(new Animated.Value(0)).current;
+  const shimmerAnim = useRef(new Animated.Value(0)).current;
+  const glowAnim = useRef(new Animated.Value(0.2)).current;
 
   useEffect(() => {
-    if (isScanning) {
-      // Animate each bar with staggered timing
-      const barAnimations = animations.map((anim, index) => {
-        return Animated.loop(
-          Animated.sequence([
-            Animated.delay(index * 50),
-            Animated.timing(anim, {
-              toValue: 0.3 + Math.random() * 0.7,
-              duration: 200 + Math.random() * 300,
-              useNativeDriver: true,
-            }),
-            Animated.timing(anim, {
-              toValue: 0.3,
-              duration: 200 + Math.random() * 300,
-              useNativeDriver: true,
-            }),
-          ])
-        );
-      });
+    if (complete) {
+      Animated.timing(fillAnim, {
+        toValue: 1,
+        duration: 400,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: false,
+      }).start();
+      glowAnim.setValue(0.6);
+      return;
+    }
+    if (active) {
+      // Slow fill to ~85%
+      Animated.timing(fillAnim, {
+        toValue: 0.85,
+        duration: 8000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
 
-      // Scan line animation
-      const scanLine = Animated.loop(
+      // Shimmer sweep
+      const shimmerLoop = Animated.loop(
+        Animated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        })
+      );
+      shimmerLoop.start();
+
+      // Glow pulse
+      const glowLoop = Animated.loop(
         Animated.sequence([
-          Animated.timing(scanLineAnim, {
-            toValue: 1,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scanLineAnim, {
-            toValue: 0,
-            duration: 1500,
-            easing: Easing.inOut(Easing.ease),
-            useNativeDriver: true,
-          }),
+          Animated.timing(glowAnim, { toValue: 0.6, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+          Animated.timing(glowAnim, { toValue: 0.2, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
         ])
       );
-
-      barAnimations.forEach(anim => anim.start());
-      scanLine.start();
+      glowLoop.start();
 
       return () => {
-        barAnimations.forEach(anim => anim.stop());
-        scanLine.stop();
+        shimmerLoop.stop();
+        glowLoop.stop();
       };
+    } else {
+      fillAnim.setValue(0);
     }
-  }, [isScanning]);
+  }, [active, complete]);
 
-  const barWidth = Math.max(2, (width - (barCount - 1) * 2) / barCount);
-
-  const scanLineTranslateX = scanLineAnim.interpolate({
+  const shimmerTranslate = shimmerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [-10, width + 10],
+    outputRange: [-50, 300],
+  });
+
+  const fillWidth = fillAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0%', '100%'],
   });
 
   return (
-    <View style={{ width, height, overflow: 'hidden', position: 'relative' }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', height, gap: 2 }}>
-        {animations.map((anim, idx) => (
+    <View style={fillBarStyles.wrapper}>
+      <View style={fillBarStyles.track}>
+        <Animated.View style={[fillBarStyles.fill, { width: fillWidth }]}>
           <Animated.View
-            key={idx}
-            style={{
-              width: barWidth,
-              height: height * 0.8,
-              backgroundColor: color,
-              borderRadius: 2,
-              transform: [{ scaleY: anim }],
-              opacity: isScanning ? 1 : 0.4,
-            }}
+            style={[fillBarStyles.shimmer, { transform: [{ translateX: shimmerTranslate }] }]}
           />
-        ))}
+        </Animated.View>
       </View>
-      {isScanning && (
-        <Animated.View
-          style={{
-            position: 'absolute',
-            top: 0,
-            bottom: 0,
-            width: 3,
-            backgroundColor: '#fff',
-            opacity: 0.8,
-            borderRadius: 2,
-            transform: [{ translateX: scanLineTranslateX }],
-            shadowColor: '#fff',
-            shadowOffset: { width: 0, height: 0 },
-            shadowOpacity: 1,
-            shadowRadius: 8,
-          }}
-        />
-      )}
+      <Animated.View style={[fillBarStyles.glow, { opacity: glowAnim }]} />
     </View>
   );
 };
 
-// Animated ID Logo for scanning states
-const ScanningIDLogo = ({ isScanning = false, isComplete = false }: { isScanning?: boolean; isComplete?: boolean }) => {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const glowAnim = useRef(new Animated.Value(0.3)).current;
-  const completeScaleAnim = useRef(new Animated.Value(1)).current;
-  const checkScaleAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (isScanning) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(glowAnim, { toValue: 0.8, duration: 800, useNativeDriver: true }),
-          Animated.timing(glowAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-        ])
-      ).start();
-
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scaleAnim, { toValue: 1.05, duration: 1000, useNativeDriver: true }),
-          Animated.timing(scaleAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        ])
-      ).start();
-    } else {
-      glowAnim.setValue(0.5);
-      scaleAnim.setValue(1);
-    }
-  }, [isScanning]);
-
-  useEffect(() => {
-    if (isComplete) {
-      // Success burst animation
-      Animated.sequence([
-        Animated.timing(completeScaleAnim, { toValue: 1.3, duration: 200, useNativeDriver: true }),
-        Animated.timing(completeScaleAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-      ]).start();
-
-      Animated.spring(checkScaleAnim, {
-        toValue: 1,
-        tension: 200,
-        friction: 10,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      checkScaleAnim.setValue(0);
-      completeScaleAnim.setValue(1);
-    }
-  }, [isComplete]);
-
-  return (
-    <Animated.View style={{ transform: [{ scale: isComplete ? completeScaleAnim : scaleAnim }] }}>
-      <View style={logoStyles.container}>
-        <Animated.View style={[logoStyles.glowBg, { opacity: glowAnim }]} />
-        <View style={logoStyles.waveformContainer}>
-          <ScanningWaveform
-            width={56}
-            height={28}
-            barCount={12}
-            color={Colors.dark.primary}
-            isScanning={isScanning}
-          />
-        </View>
-        <Text style={logoStyles.idText}>ID</Text>
-        {isComplete && (
-          <Animated.View style={[logoStyles.checkOverlay, { transform: [{ scale: checkScaleAnim }] }]}>
-            <Check size={24} color="#fff" strokeWidth={3} />
-          </Animated.View>
-        )}
-      </View>
-    </Animated.View>
-  );
-};
-
-const logoStyles = StyleSheet.create({
-  container: {
-    width: 80,
-    height: 50,
-    justifyContent: 'center',
+const fillBarStyles = StyleSheet.create({
+  wrapper: {
+    width: '100%',
     alignItems: 'center',
-    position: 'relative',
-    borderRadius: 12,
+    marginTop: 20,
+  },
+  track: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(255,255,255,0.03)',
     overflow: 'hidden',
   },
-  glowBg: {
-    position: 'absolute',
-    width: 74,
-    height: 44,
-    backgroundColor: Colors.dark.primary,
-    borderRadius: 10,
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: 'rgba(196, 30, 58, 0.45)',
+    overflow: 'hidden',
   },
-  waveformContainer: {
+  shimmer: {
     position: 'absolute',
-    zIndex: 1,
+    top: 0,
+    bottom: 0,
+    width: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
   },
-  idText: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#FFFFFF',
-    letterSpacing: -1,
-    zIndex: 2,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
-  },
-  checkOverlay: {
+  glow: {
     position: 'absolute',
-    zIndex: 3,
-    backgroundColor: Colors.dark.success,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    bottom: -5,
-    right: -5,
+    bottom: 0,
+    width: '60%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'transparent',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 10,
   },
 });
 
@@ -469,7 +362,7 @@ export default function AddSourceModal({
               {getPlatformIcon()}
             </View>
             <Pressable style={styles.closeButton} onPress={handleClose}>
-              <X size={20} color={Colors.dark.textMuted} />
+              <X size={20} color="rgba(245, 230, 211, 0.4)" />
             </Pressable>
           </View>
 
@@ -478,13 +371,13 @@ export default function AddSourceModal({
             <>
               <Text style={styles.title}>Add {getPlatformName()} Link</Text>
               <Text style={styles.subtitle}>
-                Link the {getPlatformName()} source{setArtist ? ` for ${setArtist}'s set` : ''} and we'll run IDentification automatically
+                Link the {getPlatformName()} source{setArtist ? ` for ${setArtist}'s set` : ''} and we'll trak it automatically
               </Text>
 
               <TextInput
                 style={styles.input}
                 placeholder={getPlaceholder()}
-                placeholderTextColor={Colors.dark.textMuted}
+                placeholderTextColor="rgba(245, 230, 211, 0.3)"
                 value={url}
                 onChangeText={setUrl}
                 autoCapitalize="none"
@@ -493,11 +386,8 @@ export default function AddSourceModal({
               />
 
               <View style={styles.infoBox}>
-                <View style={styles.miniIdBadge}>
-                  <Text style={styles.miniIdText}>ID</Text>
-                </View>
                 <Text style={styles.infoText}>
-                  Our IDentification engine uses advanced audio fingerprinting and multi-source matching to identify tracks.
+                  Our engine uses advanced audio fingerprinting and multi-source matching to identify tracks.
                   Earn +25 points for contributing!
                 </Text>
               </View>
@@ -514,13 +404,11 @@ export default function AddSourceModal({
 
           {step === 'validating' && (
             <View style={styles.centerContent}>
-              <View style={styles.scanningContainer}>
-                <ScanningIDLogo isScanning={true} />
-              </View>
-              <Text style={styles.importingTitle}>Verifying Source...</Text>
+              <Text style={styles.importingTitle}>Verifying Source</Text>
               <Text style={styles.importingSubtitle}>
-                Checking if this matches the set
+                checking if this matches the set
               </Text>
+              <GlassFillBar active />
             </View>
           )}
 
@@ -545,27 +433,18 @@ export default function AddSourceModal({
 
           {step === 'importing' && (
             <View style={styles.centerContent}>
-              <View style={styles.scanningContainer}>
-                <ScanningIDLogo isScanning={true} />
-              </View>
-              <Text style={styles.importingTitle}>Running IDentification...</Text>
+              <Text style={styles.importingTitle}>Analyzing</Text>
               <Text style={styles.importingSubtitle}>
-                Analyzing audio signatures and matching tracks
+                analyzing audio signatures
               </Text>
-              <View style={styles.scanningDots}>
-                <View style={[styles.dot, styles.dotActive]} />
-                <View style={[styles.dot, styles.dotActive]} />
-                <View style={styles.dot} />
-              </View>
+              <GlassFillBar active />
             </View>
           )}
 
           {step === 'success' && (
             <View style={styles.centerContent}>
-              <View style={styles.successContainer}>
-                <ScanningIDLogo isComplete={true} />
-              </View>
-              <Text style={styles.successTitle}>IDentification Complete!</Text>
+              <GlassFillBar complete />
+              <Text style={styles.successTitle}>Complete</Text>
 
               {stats && (
                 <View style={styles.statsContainer}>
@@ -589,9 +468,6 @@ export default function AddSourceModal({
               )}
 
               <View style={styles.pointsEarned}>
-                <View style={styles.pointsIdBadge}>
-                  <Text style={styles.pointsIdText}>ID</Text>
-                </View>
                 <Text style={styles.pointsText}>+25 points earned!</Text>
               </View>
 
@@ -634,11 +510,19 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modal: {
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(12, 12, 12, 0.85)',
     borderRadius: 24,
     padding: 24,
     width: '100%',
     maxWidth: 400,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
   },
   header: {
     flexDirection: 'row',
@@ -652,74 +536,74 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopColor: 'rgba(255, 255, 255, 0.12)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
   },
   closeButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   title: {
     fontSize: 22,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.6)',
     marginBottom: 20,
     lineHeight: 20,
   },
   input: {
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 12,
     padding: 16,
     fontSize: 15,
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   infoBox: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderRadius: 12,
     padding: 14,
     marginBottom: 20,
     gap: 10,
-  },
-  miniIdBadge: {
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginTop: 2,
-  },
-  miniIdText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -0.5,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   infoText: {
     flex: 1,
     fontSize: 13,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.4)',
     lineHeight: 18,
   },
   importButton: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+    borderTopColor: 'rgba(255, 100, 120, 0.2)',
   },
   importButtonDisabled: {
     opacity: 0.5,
   },
   importButtonText: {
-    color: Colors.dark.background,
+    color: '#F5E6D3',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -727,66 +611,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 20,
   },
-  scanningContainer: {
-    marginBottom: 24,
-  },
-  scanningDots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: 20,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Colors.dark.surfaceLight,
-  },
-  dotActive: {
-    backgroundColor: Colors.dark.primary,
-  },
-  successContainer: {
-    marginBottom: 20,
-  },
-  importingIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 212, 170, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
   importingTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 8,
   },
   importingSubtitle: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
-  },
-  successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
+    color: 'rgba(245, 230, 211, 0.6)',
   },
   successTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 20,
   },
   statsContainer: {
     width: '100%',
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   statRow: {
     flexDirection: 'row',
@@ -795,12 +643,12 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.6)',
   },
   statValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
   },
   pointsEarned: {
     flexDirection: 'row',
@@ -812,31 +660,22 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginBottom: 20,
   },
-  pointsIdBadge: {
-    backgroundColor: Colors.dark.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  pointsIdText: {
-    fontSize: 10,
-    fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -0.5,
-  },
   pointsText: {
     fontSize: 14,
     fontWeight: '600',
     color: Colors.dark.primary,
   },
   doneButton: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
     borderRadius: 14,
     paddingVertical: 14,
     paddingHorizontal: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.3)',
+    borderTopColor: 'rgba(255, 100, 120, 0.2)',
   },
   doneButtonText: {
-    color: Colors.dark.background,
+    color: '#F5E6D3',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -852,12 +691,12 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 8,
   },
   errorMessage: {
     fontSize: 14,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.6)',
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -866,24 +705,28 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   retryButton: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.2)',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.3)',
   },
   retryButtonText: {
-    color: Colors.dark.background,
+    color: '#F5E6D3',
     fontSize: 14,
     fontWeight: '600',
   },
   cancelButton: {
-    backgroundColor: Colors.dark.surfaceLight,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   cancelButtonText: {
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.6)',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -899,12 +742,12 @@ const styles = StyleSheet.create({
   warningTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: '#F5E6D3',
     marginBottom: 12,
   },
   warningMessage: {
     fontSize: 13,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(245, 230, 211, 0.6)',
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 18,

@@ -304,179 +304,120 @@ const ringStyles = StyleSheet.create({
   },
 });
 
-// Animated loading ring for reanalyze state — dual spinning arcs in a glass circle
-function TrakingRing({ isActive, isComplete }: { isActive: boolean; isComplete: boolean }) {
-  const rotation1 = useRef(new RNAnimated.Value(0)).current;
-  const rotation2 = useRef(new RNAnimated.Value(0)).current;
+// Liquid glass progress bar for reanalyze loading state
+function GlassProgressBar({ isActive }: { isActive: boolean }) {
+  const fillAnim = useRef(new RNAnimated.Value(0)).current;
+  const shimmerAnim = useRef(new RNAnimated.Value(0)).current;
   const glowAnim = useRef(new RNAnimated.Value(0.3)).current;
-  const [dotText, setDotText] = useState('traking.');
-  const dotRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const size = 120;
-  const strokeWidth = 4;
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const arcLength = circumference * 0.4;
 
   useEffect(() => {
-    if (isActive && !isComplete) {
-      const loop1 = RNAnimated.loop(
-        RNAnimated.timing(rotation1, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      const loop2 = RNAnimated.loop(
-        RNAnimated.timing(rotation2, {
-          toValue: 1,
-          duration: 2000,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      );
-      loop1.start();
-      loop2.start();
+    if (isActive) {
+      // Fill bar: slow ease from 0→85% (never fully completes until done)
+      RNAnimated.timing(fillAnim, {
+        toValue: 0.85,
+        duration: 8000,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
 
+      // Shimmer sweep across the bar
+      RNAnimated.loop(
+        RNAnimated.timing(shimmerAnim, {
+          toValue: 1,
+          duration: 1800,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        })
+      ).start();
+
+      // Glow pulse
       RNAnimated.loop(
         RNAnimated.sequence([
-          RNAnimated.timing(glowAnim, { toValue: 0.8, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-          RNAnimated.timing(glowAnim, { toValue: 0.3, duration: 1500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+          RNAnimated.timing(glowAnim, { toValue: 0.7, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
+          RNAnimated.timing(glowAnim, { toValue: 0.3, duration: 1200, easing: Easing.inOut(Easing.ease), useNativeDriver: false }),
         ])
       ).start();
 
-      let dotIndex = 0;
-      const dots = ['traking.', 'traking..', 'traking...'];
-      dotRef.current = setInterval(() => {
-        dotIndex = (dotIndex + 1) % 3;
-        setDotText(dots[dotIndex]);
-      }, 500);
-
       return () => {
-        rotation1.stopAnimation();
-        rotation2.stopAnimation();
+        fillAnim.stopAnimation();
+        shimmerAnim.stopAnimation();
         glowAnim.stopAnimation();
-        if (dotRef.current) clearInterval(dotRef.current);
       };
+    } else {
+      fillAnim.setValue(0);
     }
-  }, [isActive, isComplete]);
+  }, [isActive]);
 
-  useEffect(() => {
-    if (isComplete) {
-      rotation1.stopAnimation();
-      rotation2.stopAnimation();
-      RNAnimated.sequence([
-        RNAnimated.timing(glowAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-        RNAnimated.timing(glowAnim, { toValue: 0.5, duration: 500, useNativeDriver: true }),
-      ]).start();
-      if (dotRef.current) clearInterval(dotRef.current);
-      setDotText('trakd!');
-    }
-  }, [isComplete]);
-
-  const spin1 = rotation1.interpolate({
+  const shimmerTranslate = shimmerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
+    outputRange: [-60, 260],
   });
-  const spin2 = rotation2.interpolate({
+
+  const fillWidth = fillAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '-360deg'],
+    outputRange: ['0%', '100%'],
   });
 
   return (
-    <View style={trakingRingStyles.container}>
-      <RNAnimated.View style={[trakingRingStyles.glowRing, { opacity: glowAnim }]} />
-      <View style={trakingRingStyles.glassFace}>
-        <Svg width={size} height={size} style={{ position: 'absolute' }}>
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={radius}
-            stroke="rgba(255,255,255,0.08)"
-            strokeWidth={strokeWidth}
-            fill="none"
+    <View style={glassBarStyles.wrapper}>
+      {/* Glass track */}
+      <View style={glassBarStyles.track}>
+        {/* Fill */}
+        <RNAnimated.View style={[glassBarStyles.fill, { width: fillWidth }]}>
+          {/* Shimmer highlight */}
+          <RNAnimated.View
+            style={[glassBarStyles.shimmer, { transform: [{ translateX: shimmerTranslate }] }]}
           />
-        </Svg>
-        <RNAnimated.View style={{ position: 'absolute', transform: [{ rotate: spin1 }] }}>
-          <Svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke="#C41E3A"
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-              strokeLinecap="round"
-            />
-          </Svg>
         </RNAnimated.View>
-        <RNAnimated.View style={{ position: 'absolute', transform: [{ rotate: spin2 }] }}>
-          <Svg width={size} height={size} style={{ transform: [{ rotate: '90deg' }] }}>
-            <Circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke="#C41E3A"
-              strokeWidth={strokeWidth}
-              fill="none"
-              strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-              strokeLinecap="round"
-            />
-          </Svg>
-        </RNAnimated.View>
-        <View style={trakingRingStyles.centerLabel}>
-          <Text style={trakingRingStyles.centerText}>{dotText}</Text>
-        </View>
       </View>
+      {/* Glow under bar */}
+      <RNAnimated.View style={[glassBarStyles.glow, { opacity: glowAnim }]} />
     </View>
   );
 }
 
-const trakingRingStyles = StyleSheet.create({
-  container: {
+const glassBarStyles = StyleSheet.create({
+  wrapper: {
+    width: '80%',
     alignItems: 'center',
-    justifyContent: 'center',
-    width: 140,
-    height: 140,
+    paddingVertical: 8,
   },
-  glowRing: {
-    position: 'absolute',
-    width: 130,
-    height: 130,
-    borderRadius: 65,
-    backgroundColor: 'transparent',
+  track: {
+    width: '100%',
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(255,255,255,0.03)',
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: 'rgba(196, 30, 58, 0.45)',
+    overflow: 'hidden',
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 3,
+  },
+  glow: {
+    position: 'absolute',
+    bottom: 0,
+    width: '60%',
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'transparent',
     shadowColor: '#C41E3A',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 12,
-  },
-  glassFace: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    borderTopColor: 'rgba(255,255,255,0.3)',
-    borderBottomColor: 'rgba(255,255,255,0.05)',
-    overflow: 'hidden',
-  },
-  centerLabel: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  centerText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 0.5,
+    shadowRadius: 10,
   },
 });
 
@@ -672,6 +613,7 @@ export default function SetDetailScreen() {
             })) || [],
             hasGaps: data.set.hasGaps,
             gapCount: data.set.gapCount,
+            source: data.set.source,
           };
           setDbSet(transformedSet);
           if (__DEV__) console.log('[SetDetail] Loaded set from API:', transformedSet.name, 'with', transformedSet.tracks?.length, 'tracks');
@@ -1432,11 +1374,19 @@ export default function SetDetailScreen() {
     }
   }, [coverTriedHqFallback, coverImageError, setList?.coverUrl]);
 
+  // Extract videoId for the floating player (must be before early return to keep hook count stable)
+  const playerVideoId = useMemo(() => {
+    const links = setList?.sourceLinks || [];
+    const ytLink = links.find((l: any) => l.platform === 'youtube');
+    if (!ytLink) return null;
+    return extractYouTubeId(ytLink.url);
+  }, [setList?.sourceLinks]);
+
   // Show loading / error / not found state
   if (isLoadingSet || !setList) {
     return (
       <View style={styles.loadingContainer}>
-        <BubbleGlassLogo size="large" />
+        <BubbleGlassLogo size="large" loading={isLoadingSet} />
         {!isLoadingSet && loadError && (
           <View style={{ alignItems: 'center', marginTop: 16, paddingHorizontal: 32 }}>
             <Text style={styles.loadingText}>{loadError}</Text>
@@ -1659,16 +1609,21 @@ export default function SetDetailScreen() {
 
 
   // Get the source URL and platform for audio preview
+  // Prefer the platform the tracklist was built from (timestamps match that source)
   const getAudioSource = (): { url: string; platform: 'youtube' | 'soundcloud' } | null => {
     if (!setList?.sourceLinks?.length) return null;
+    const links = setList.sourceLinks || [];
+    const ytLink = links.find(l => l.platform === 'youtube');
+    const scLink = links.find(l => l.platform === 'soundcloud');
 
-    // Prefer YouTube, then SoundCloud
-    const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
+    // Prefer the platform the tracklist was built from (timestamps match that source)
+    const primarySource = setList.source;
+    if (primarySource === 'soundcloud' && scLink) return { url: scLink.url, platform: 'soundcloud' };
+    if (primarySource === 'youtube' && ytLink) return { url: ytLink.url, platform: 'youtube' };
+
+    // Fallback: if primary is 1001tracklists or unknown, prefer YouTube (most common), then SoundCloud
     if (ytLink) return { url: ytLink.url, platform: 'youtube' };
-
-    const scLink = (setList.sourceLinks || []).find(l => l.platform === 'soundcloud');
     if (scLink) return { url: scLink.url, platform: 'soundcloud' };
-
     return null;
   };
 
@@ -2024,27 +1979,6 @@ export default function SetDetailScreen() {
             </View>
           )}
 
-          {/* Embedded YouTube Player */}
-          {(() => {
-            const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
-            const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
-            
-            if (!showPlayer || !videoId) {
-              return null;
-            }
-            
-            return (
-              <YouTubePlayer
-                videoId={videoId}
-                initialTimestamp={currentTimestamp}
-                onTimestampChange={setCurrentTimestamp}
-                onClose={() => setShowPlayer(false)}
-                minimized={playerMinimized}
-                onToggleMinimize={() => setPlayerMinimized(!playerMinimized)}
-              />
-            );
-          })()}
-
           {/* Waveform Timeline */}
           {(setList.totalDuration || 0) > 0 && tracks.length > 0 && (
             <WaveformTimeline
@@ -2195,8 +2129,9 @@ export default function SetDetailScreen() {
                           }
                         }}
                         onContributorPress={(username) => setSelectedContributor(username)}
-                        onListen={isUnidentified && audioSource && audioSource.platform === 'youtube' ? () => {
+                        onListen={isUnidentified && audioSource ? () => {
                           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                          if (showPlayer) setPlayerMinimized(true);
                           setAudioPreviewTrack(votedTrack);
                         } : undefined}
                         hasPreview={!isUnidentified && !votedTrack.isUnreleased && (!!votedTrack.previewUrl || !!votedTrack.isReleased)}
@@ -2404,6 +2339,41 @@ export default function SetDetailScreen() {
         </View>
       </RNAnimated.ScrollView>
 
+      {/* Floating YouTube/SoundCloud Player */}
+      {showPlayer && playerVideoId && (
+        <View style={styles.floatingPlayer}>
+          <YouTubePlayer
+            videoId={playerVideoId}
+            initialTimestamp={currentTimestamp}
+            onTimestampChange={setCurrentTimestamp}
+            onClose={() => setShowPlayer(false)}
+            minimized={playerMinimized}
+            onToggleMinimize={() => setPlayerMinimized(!playerMinimized)}
+          />
+        </View>
+      )}
+
+      {/* Floating Audio Preview for track identification */}
+      {audioPreviewTrack && (
+        <View style={styles.floatingAudioPreview}>
+          <AudioPreviewModal
+            visible={audioPreviewTrack !== null}
+            onClose={() => setAudioPreviewTrack(null)}
+            onSubmitIdentification={handleIdentifyTrack}
+            sourceUrl={audioSource?.url || null}
+            sourcePlatform={audioSource?.platform || null}
+            timestamp={audioPreviewTrack?.timestamp || 0}
+            trackArtist={
+              audioPreviewTrack?.artist &&
+              audioPreviewTrack.artist.toLowerCase() !== 'id' &&
+              audioPreviewTrack.artist.toLowerCase() !== 'unknown'
+                ? audioPreviewTrack.artist
+                : undefined
+            }
+          />
+        </View>
+      )}
+
       {/* Floating banner when a track is picked for placement */}
       {pickedTrack && (
         <View style={styles.pickedBanner}>
@@ -2494,7 +2464,7 @@ export default function SetDetailScreen() {
 
             {analyzing ? (
               <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                <TrakingRing isActive={analyzing} isComplete={false} />
+                <GlassProgressBar isActive={analyzing} />
               </View>
             ) : (<>
             <View style={styles.chartModalBadges}>
@@ -2698,7 +2668,7 @@ export default function SetDetailScreen() {
                   }}
                 >
                   <Sparkles size={14} color="#C41E3A" />
-                  <Text style={styles.chartModalReanalyzeText}>{analyzing ? 'traking...' : 'Reanalyze Set'}</Text>
+                  <Text style={styles.chartModalReanalyzeText}>{analyzing ? 'Reanalyzing...' : 'Reanalyze Set'}</Text>
                 </Pressable>
               );
             })()}
@@ -2801,16 +2771,33 @@ export default function SetDetailScreen() {
                             <Text style={styles.gapCardTime}>{timeStr}</Text>
                           </View>
                         </View>
-                        {audioSource && audioSource.platform === 'youtube' && (
+                        {audioSource && (
                           <Pressable
                             style={styles.gapCardPlayBtn}
                             onPress={() => {
                               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                               setGapMenuData(null);
-                              // Use in-app player at this timestamp
-                              setCurrentTimestamp(ts);
-                              setShowPlayer(true);
-                              setPlayerMinimized(false);
+                              if (audioSource.platform === 'youtube' && playerVideoId) {
+                                // Use floating YouTube player at this timestamp
+                                setCurrentTimestamp(ts);
+                                setShowPlayer(true);
+                                setPlayerMinimized(false);
+                              } else {
+                                // SoundCloud or no video: open audio preview overlay
+                                setAudioPreviewTrack({
+                                  id: `gap-${ts}`,
+                                  title: 'ID',
+                                  artist: 'ID',
+                                  duration: 0,
+                                  coverUrl: '',
+                                  addedAt: new Date(),
+                                  source: 'manual',
+                                  timestamp: ts,
+                                  verified: false,
+                                  confidence: 0,
+                                  isId: true,
+                                } as Track);
+                              }
                             }}
                           >
                             <Play size={16} color="#FFFFFF" fill="#FFFFFF" />
@@ -3040,41 +3027,25 @@ export default function SetDetailScreen() {
         }}
         onPlayTimestamp={() => {
           if (pendingTimestamp !== null) {
-            const youtubeLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
-
-            if (showPlayer) {
-              // Seek existing player to timestamp
-              setCurrentTimestamp(pendingTimestamp);
-              if (playerMinimized) {
+            if (audioSource?.platform === 'youtube' && playerVideoId) {
+              if (showPlayer) {
+                // Seek existing player to timestamp
+                setCurrentTimestamp(pendingTimestamp);
+                if (playerMinimized) setPlayerMinimized(false);
+              } else {
+                // Start the floating YouTube player at the timestamp
+                setCurrentTimestamp(pendingTimestamp);
+                setShowPlayer(true);
                 setPlayerMinimized(false);
               }
-            } else if (youtubeLink) {
-              // Start the embedded player at the timestamp
-              setCurrentTimestamp(pendingTimestamp);
-              setShowPlayer(true);
-              setPlayerMinimized(false);
+            } else if (audioSource && selectedTrack) {
+              // SoundCloud: open audio preview overlay at this timestamp
+              setAudioPreviewTrack({ ...selectedTrack, timestamp: pendingTimestamp });
             }
           }
           setPendingTimestamp(null);
         }}
       />
-
-      <AudioPreviewModal
-        visible={audioPreviewTrack !== null}
-        onClose={() => setAudioPreviewTrack(null)}
-        onSubmitIdentification={handleIdentifyTrack}
-        sourceUrl={audioSource?.url || null}
-        sourcePlatform={audioSource?.platform || null}
-        timestamp={audioPreviewTrack?.timestamp || 0}
-        trackArtist={
-          audioPreviewTrack?.artist &&
-          audioPreviewTrack.artist.toLowerCase() !== 'id' &&
-          audioPreviewTrack.artist.toLowerCase() !== 'unknown'
-            ? audioPreviewTrack.artist
-            : undefined
-        }
-      />
-
 
       <IDThisModal
         visible={showIDThisModal}
@@ -3116,6 +3087,20 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  floatingPlayer: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    zIndex: 10,
+  },
+  floatingAudioPreview: {
+    position: 'absolute',
+    top: 60,
+    left: 8,
+    right: 8,
+    zIndex: 20,
   },
   headerImage: {
     height: 420,
