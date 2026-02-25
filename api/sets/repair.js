@@ -189,6 +189,12 @@ export default async function handler(req, res) {
       results.finalTrackCount = newCount;
     }
 
+    // Action: setDuration — set duration_seconds on the set
+    if (action === 'setDuration' && req.body.duration) {
+      await supabase.from('sets').update({ duration_seconds: req.body.duration }).eq('id', setId);
+      results.actions.push({ action: 'setDuration', duration: req.body.duration });
+    }
+
     results.success = true;
     if (!results.finalTrackCount) results.finalTrackCount = actualCount;
     return res.status(200).json(results);
