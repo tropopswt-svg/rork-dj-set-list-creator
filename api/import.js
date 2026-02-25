@@ -1722,6 +1722,75 @@ function formatSecondsToTimestamp(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/**
+ * Interpolate timestamps for an ordered tracklist using anchor points and total duration.
+ *
+ * Tracks with timestamp > 0 are "anchors". Tracks with timestamp 0 are interpolated
+ * between surrounding anchors. The first implicit anchor is 0:00 and the last is totalDuration.
+ *
+ * Example: 10 tracks, total duration 3600s, track 3 anchored at 900s, track 7 at 2400s
+ *   → tracks 0-2 interpolated between 0 and 900 (0, 300, 600)
+ *   → tracks 4-6 interpolated between 900 and 2400 (1275, 1650, 2025)
+ *   → tracks 8-9 interpolated between 2400 and 3600 (2800, 3200)
+ */
+function interpolateTimestamps(orderedTracks, totalDuration) {
+  if (!orderedTracks || orderedTracks.length === 0 || !totalDuration || totalDuration <= 0) {
+    return orderedTracks;
+  }
+
+  // Build list of anchor points: { index, timestamp }
+  // Always start with virtual anchor at (index -1, time 0) and end at (index N, time totalDuration)
+  const anchors = [{ index: -1, timestamp: 0 }];
+  for (let i = 0; i < orderedTracks.length; i++) {
+    if (orderedTracks[i].timestamp > 0) {
+      anchors.push({ index: i, timestamp: orderedTracks[i].timestamp });
+    }
+  }
+  anchors.push({ index: orderedTracks.length, timestamp: totalDuration });
+
+  // If no real anchors (only virtual start/end), just space everything evenly
+  const hasRealAnchors = anchors.length > 2;
+
+  let interpolatedCount = 0;
+  // Fill in gaps between consecutive anchors
+  for (let a = 0; a < anchors.length - 1; a++) {
+    const startAnchor = anchors[a];
+    const endAnchor = anchors[a + 1];
+
+    // Tracks in the gap: indices between startAnchor.index and endAnchor.index (exclusive)
+    const gapStart = startAnchor.index + 1;
+    const gapEnd = endAnchor.index; // exclusive — this is the next anchor
+    const gapCount = gapEnd - gapStart;
+
+    if (gapCount <= 0) continue; // No untimed tracks in this gap
+
+    const startTime = startAnchor.timestamp;
+    const endTime = endAnchor.timestamp;
+    const segmentDuration = endTime - startTime;
+
+    for (let i = 0; i < gapCount; i++) {
+      const trackIdx = gapStart + i;
+      if (orderedTracks[trackIdx].timestamp > 0) continue; // Already anchored
+
+      // Evenly space within the segment
+      // +1 because we divide the gap into (gapCount + 1) intervals if there's an end anchor
+      const fraction = (i + 1) / (gapCount + 1);
+      const interpolated = Math.floor(startTime + fraction * segmentDuration);
+
+      orderedTracks[trackIdx].timestamp = interpolated;
+      orderedTracks[trackIdx].timestampFormatted = formatSecondsToTimestamp(interpolated);
+      orderedTracks[trackIdx].isInterpolated = true;
+      interpolatedCount++;
+    }
+  }
+
+  if (interpolatedCount > 0) {
+    console.log(`[Interpolate] Placed ${interpolatedCount} timestamps using ${anchors.length - 2} anchor(s) across ${totalDuration}s`);
+  }
+
+  return orderedTracks;
+}
+
 async function importFromSoundCloud(url) {
   // Try page scraping first (more reliable), then fallback to oEmbed
   const pageInfo = await fetchSoundCloudPage(url);
@@ -1810,15 +1879,35 @@ async function importFromSoundCloud(url) {
     finalName
   );
 
-  // For untimed tracks, only keep those that don't already exist in the timed set
-  const scUntimedUnique = scStillUntimed.filter(ut => {
-    return !scDedupedTimed.some(tt =>
-      calculateTrackSimilarity(ut.title, ut.artist, tt.title, tt.artist) >= 0.55
+  // Build ordered track list with interpolated timestamps
+  const scOrderedTracks = descTracks.map(dt => ({ ...dt }));
+
+  // Add comment-only tracks (not in description)
+  const scCommentOnly = scDedupedTimed.filter(ct => {
+    return !descTracks.some(dt =>
+      calculateTrackSimilarity(ct.title, ct.artist, dt.title, dt.artist) >= 0.55
     );
   });
+  for (const ct of scCommentOnly) {
+    let insertIdx = scOrderedTracks.length;
+    if (ct.timestamp > 0) {
+      for (let i = 0; i < scOrderedTracks.length; i++) {
+        if (scOrderedTracks[i].timestamp > 0 && scOrderedTracks[i].timestamp > ct.timestamp) {
+          insertIdx = i;
+          break;
+        }
+      }
+    }
+    scOrderedTracks.splice(insertIdx, 0, ct);
+  }
 
-  const tracks = [...scDedupedTimed, ...scUntimedUnique];
-  
+  // Interpolate timestamps using anchors + total duration
+  if (duration > 0 && scOrderedTracks.length > 0) {
+    interpolateTimestamps(scOrderedTracks, duration);
+  }
+
+  const tracks = scOrderedTracks;
+
   const setList = {
     id: setId,
     name: finalName,
@@ -1835,11 +1924,13 @@ async function importFromSoundCloud(url) {
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
+      timestampFormatted: pt.timestampFormatted || formatSecondsToTimestamp(pt.timestamp || 0),
       verified: false,
       contributedBy: pt.sourceAuthor || 'Description',
       hasConflict: pt.hasConflict,
       conflictId: pt.conflictId,
       isUnreleased: pt.isUnreleased || false,
+      isInterpolated: pt.isInterpolated || false,
     })),
     coverUrl: thumbnailUrl,
     sourceLinks: [{ platform: 'soundcloud', url }],
@@ -2248,8 +2339,39 @@ async function importFromYouTube(url, apiKey) {
     console.log(`[YouTube Import] ${untimedUnique.length} untimed tracks not found in comments — appending as unmatched`);
   }
 
-  // Final track list: timed tracks first (ordered by timestamp), then remaining untimed tracks
-  const tracks = [...dedupedTimed, ...untimedUnique];
+  // Build ordered track list: use description order as canonical order.
+  // Insert timed-only comment tracks (no description match) at their timestamp positions.
+  const totalDuration = parseDuration(video.duration);
+
+  // Start with description tracks in order (some now have timestamps from cross-ref)
+  const orderedTracks = descTracks.map(dt => ({ ...dt }));
+
+  // Add comment-only tracks (not in description) — insert at position based on timestamp
+  const commentOnlyTracks = dedupedTimed.filter(ct => {
+    return !descTracks.some(dt =>
+      calculateTrackSimilarity(ct.title, ct.artist, dt.title, dt.artist) >= 0.55
+    );
+  });
+  for (const ct of commentOnlyTracks) {
+    // Find insertion point: after the last track with a smaller timestamp
+    let insertIdx = orderedTracks.length;
+    if (ct.timestamp > 0) {
+      for (let i = 0; i < orderedTracks.length; i++) {
+        if (orderedTracks[i].timestamp > 0 && orderedTracks[i].timestamp > ct.timestamp) {
+          insertIdx = i;
+          break;
+        }
+      }
+    }
+    orderedTracks.splice(insertIdx, 0, ct);
+  }
+
+  // Interpolate timestamps: use anchored tracks + total duration to fill gaps
+  if (totalDuration > 0 && orderedTracks.length > 0) {
+    interpolateTimestamps(orderedTracks, totalDuration);
+  }
+
+  const tracks = orderedTracks;
 
   const setList = {
     id: setId,
@@ -2269,22 +2391,23 @@ async function importFromYouTube(url, apiKey) {
       addedAt: new Date().toISOString(),
       source: 'ai',
       timestamp: pt.timestamp,
-      timestampFormatted: pt.timestampFormatted || '',
+      timestampFormatted: pt.timestampFormatted || formatSecondsToTimestamp(pt.timestamp || 0),
       verified: false,
       contributedBy: pt.sourceAuthor,
       hasConflict: pt.hasConflict,
       conflictId: pt.conflictId,
       isUnreleased: pt.isUnreleased || false,
+      isInterpolated: pt.isInterpolated || false,
     })),
     coverUrl: video.thumbnailUrl,
     sourceLinks: [{ platform: 'youtube', url }],
-    totalDuration: parseDuration(video.duration),
+    totalDuration,
     aiProcessed: true,
     commentsScraped: comments.length,
     tracksIdentified: tracks.length,
     timedTracksCount: tracks.filter(t => t.timestamp > 0).length,
     untimedTracksCount: tracks.filter(t => !t.timestamp || t.timestamp === 0).length,
-    conflicts: samePlatformConflicts, // Include same-platform conflicts
+    conflicts: samePlatformConflicts,
     plays: 0,
   };
 
