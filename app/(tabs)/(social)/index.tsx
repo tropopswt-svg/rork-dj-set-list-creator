@@ -340,9 +340,9 @@ function CrateStack({
               const total = previewSets.length;
               const centerIdx = (total - 1) / 2;
               const off = i - centerIdx;
-              const rotation = off * 2.2;
-              const height = 65 - Math.abs(off) * 5;
-              const xShift = off * 39;
+              const rotation = off * 2.5;
+              const height = 75 - Math.abs(off) * 6;
+              const xShift = off * 40;
 
               return (
                 <View
@@ -2044,9 +2044,9 @@ const styles = StyleSheet.create({
 });
 
 // ─── Vinyl Crate Visual Styles ─────────────────────────────────
-const VC_W = 260;
-const VC_BODY_H = 140;
-const VC_PEEK_W = 42;
+const VC_W = 290;
+const VC_BODY_H = 76;
+const VC_PEEK_W = 44;
 
 const vcStyles = StyleSheet.create({
   outerCrate: {
@@ -2056,20 +2056,20 @@ const vcStyles = StyleSheet.create({
   },
   glow: {
     position: 'absolute',
-    bottom: -8,
-    width: '70%',
-    height: 30,
+    bottom: -6,
+    width: '80%',
+    height: 20,
     alignSelf: 'center',
     borderRadius: 100,
     backgroundColor: 'transparent',
-    shadowColor: '#C41E3A',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
   },
   peekRow: {
     width: VC_W,
-    height: 65,
+    height: 75,
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -2081,18 +2081,20 @@ const vcStyles = StyleSheet.create({
     width: VC_PEEK_W,
     borderRadius: 4,
     overflow: 'hidden',
-    backgroundColor: 'rgba(20, 20, 22, 0.9)',
+    backgroundColor: '#1A1A1E',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.18)',
-    borderBottomColor: 'rgba(0,0,0,0.3)',
+    borderColor: 'rgba(0,0,0,0.2)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
   peekCover: {
     width: '100%',
     flex: 1,
   },
   peekFallback: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -2101,86 +2103,88 @@ const vcStyles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: '35%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    height: '30%',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderTopLeftRadius: 3,
     borderTopRightRadius: 3,
   },
   body: {
     width: VC_W,
     height: VC_BODY_H,
-    backgroundColor: 'rgba(18, 18, 22, 0.95)',
-    borderRadius: 12,
+    backgroundColor: '#2A1F16',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-    borderTopColor: 'rgba(255,255,255,0.15)',
-    borderBottomColor: 'rgba(0,0,0,0.4)',
+    borderColor: 'rgba(0,0,0,0.15)',
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
     overflow: 'hidden',
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   sideL: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    width: 12,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    width: 10,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     borderRightWidth: 1,
-    borderRightColor: 'rgba(255,255,255,0.04)',
+    borderRightColor: 'rgba(255,200,140,0.06)',
   },
   sideR: {
     position: 'absolute',
     right: 0,
     top: 0,
     bottom: 0,
-    width: 12,
-    backgroundColor: 'rgba(0,0,0,0.15)',
+    width: 10,
+    backgroundColor: 'rgba(0,0,0,0.2)',
     borderLeftWidth: 1,
-    borderLeftColor: 'rgba(255,255,255,0.04)',
+    borderLeftColor: 'rgba(255,200,140,0.06)',
   },
   front: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
   },
   frontSlats: {
     flex: 1,
     justifyContent: 'space-evenly',
   },
   slat: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 0.5,
+    height: 1.5,
+    backgroundColor: 'rgba(255,200,140,0.1)',
+    borderRadius: 1,
   },
   badge: {
     position: 'absolute',
-    right: 20,
-    bottom: 16,
-    backgroundColor: 'rgba(196, 30, 58, 0.25)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(196, 30, 58, 0.35)',
+    right: 16,
+    bottom: 12,
+    backgroundColor: 'rgba(196, 30, 58, 0.3)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   badgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700' as const,
-    color: 'rgba(245, 230, 211, 0.7)',
+    color: 'rgba(255, 220, 200, 0.8)',
   },
   bottomEdge: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 4,
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    height: 3,
+    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   hint: {
-    marginTop: 16,
-    fontSize: 14,
-    color: 'rgba(245, 230, 211, 0.3)',
-    letterSpacing: 0.5,
+    marginTop: 12,
+    fontSize: 13,
+    color: 'rgba(0,0,0,0.3)',
+    letterSpacing: 0.3,
     textAlign: 'center',
   },
 });
