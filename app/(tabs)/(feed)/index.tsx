@@ -1241,8 +1241,8 @@ const FEED_API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://
 type FeedCategory = 'for_you' | 'new' | 'popular' | 'deep_cuts';
 
 const FEED_CATEGORIES: { key: FeedCategory; label: string }[] = [
-  { key: 'for_you', label: 'For You' },
   { key: 'new', label: 'New Sets' },
+  { key: 'for_you', label: 'For You' },
   { key: 'popular', label: 'Most Popular' },
   { key: 'deep_cuts', label: 'Deep Cuts' },
 ];
@@ -1260,9 +1260,9 @@ function CategoryCarousel(props: {
   onCategoryChange: (cat: FeedCategory) => void;
 }) {
   const { categories, activeCategory, onCategoryChange } = props;
-  const scrollXRef = useRef(new Animated.Value(0)).current;
-  const flatListRef = useRef<FlatList>(null);
   const activeIdx = categories.findIndex(c => c.key === activeCategory);
+  const scrollXRef = useRef(new Animated.Value(activeIdx * CAR_ITEM_W)).current;
+  const flatListRef = useRef<FlatList>(null);
   const isUserScroll = useRef(false);
 
   // When activeCategory changes via tap, scroll to it
@@ -1295,9 +1295,10 @@ function CategoryCarousel(props: {
       index * CAR_ITEM_W,
       (index + 1) * CAR_ITEM_W,
     ];
+    const isForYou = item.key === 'for_you';
     const scale = scrollXRef.interpolate({
       inputRange,
-      outputRange: [0.72, 1.05, 0.72],
+      outputRange: [0.72, isForYou ? 1.15 : 1.05, 0.72],
       extrapolate: 'clamp',
     });
     const itemOpacity = scrollXRef.interpolate({
@@ -1307,7 +1308,7 @@ function CategoryCarousel(props: {
     });
     const translateY = scrollXRef.interpolate({
       inputRange,
-      outputRange: [2, -3, 2],
+      outputRange: [2, isForYou ? -5 : -3, 2],
       extrapolate: 'clamp',
     });
 
@@ -1321,13 +1322,17 @@ function CategoryCarousel(props: {
         <Animated.View style={[
           carStyles.pill,
           isCenter && carStyles.pillCenter,
+          isCenter && isForYou && carStyles.pillForYou,
           {
             transform: [{ scale }, { translateY }],
             opacity: itemOpacity,
           },
         ]}>
           <Text
-            style={isCenter ? carStyles.txtCenter : carStyles.txtSide}
+            style={[
+              isCenter ? carStyles.txtCenter : carStyles.txtSide,
+              isCenter && isForYou && carStyles.txtForYou,
+            ]}
             numberOfLines={1}
           >
             {item.label}
@@ -1349,6 +1354,7 @@ function CategoryCarousel(props: {
         snapToInterval={CAR_ITEM_W}
         decelerationRate="fast"
         contentContainerStyle={{ paddingHorizontal: sidePad }}
+        contentOffset={{ x: activeIdx * CAR_ITEM_W, y: 0 }}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { x: scrollXRef } } }],
           { useNativeDriver: true }
@@ -1370,7 +1376,8 @@ const carStyles = StyleSheet.create({
   bar: {
     height: 48,
     backgroundColor: '#F0EDE8',
-    zIndex: 10,
+    zIndex: 20,
+    overflow: 'visible',
   },
   pill: {
     paddingHorizontal: 14,
@@ -1391,12 +1398,27 @@ const carStyles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 6,
   },
+  pillForYou: {
+    backgroundColor: 'rgba(196,30,58,0.1)',
+    borderColor: 'rgba(196,30,58,0.4)',
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    shadowColor: 'rgba(196,30,58,0.5)',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
   txtCenter: {
     fontSize: 15,
     fontWeight: '800' as const,
     color: '#C41E3A',
     letterSpacing: -0.3,
     textAlign: 'center',
+  },
+  txtForYou: {
+    fontSize: 17,
+    fontWeight: '900' as const,
   },
   txtSide: {
     fontSize: 12,
@@ -1822,6 +1844,18 @@ export default function FeedScreen() {
     return match ? `https://img.youtube.com/vi/${match[1]}/hqdefault.jpg` : null;
   };
 
+  // Build a map of artist name → image from followed artists
+  const artistImageMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const f of followedArtists) {
+      const artist = f.following_artist;
+      if (artist?.name && artist.image_url) {
+        map.set(artist.name.toLowerCase(), artist.image_url);
+      }
+    }
+    return map;
+  }, [followedArtists]);
+
   const realFeedItems = useMemo(() => {
     // "For You" with followed artists gets priority
     if (activeCategory === 'for_you' && user && followedArtistSets.length > 0) {
@@ -1834,7 +1868,7 @@ export default function FeedScreen() {
           artist: {
             id: set.dj_name,
             name: set.dj_name,
-            image: null,
+            image: artistImageMap.get(set.dj_name?.toLowerCase()) || null,
             following: true,
           },
           set: {
@@ -1842,7 +1876,7 @@ export default function FeedScreen() {
             name: set.title || set.name,
             venue: set.venue || '',
             date: formatDate(new Date(set.created_at || set.event_date)),
-            image: getYTThumb(set.youtube_url) || null,
+            image: set.cover_url || getYTThumb(set.youtube_url) || null,
             duration: set.duration_seconds ? formatDuration(set.duration_seconds) : '',
             tracksIdentified: set.track_count || 0,
           },
@@ -1882,7 +1916,7 @@ export default function FeedScreen() {
         artist: {
           id: set.artist,
           name: set.artist,
-          image: null,
+          image: set.artistImageUrl || null,
           following: true,
         },
         set: {
@@ -1896,7 +1930,7 @@ export default function FeedScreen() {
         },
         timestamp: set.date,
       }));
-  }, [sets, user, followedArtistSets, recentDbSets, activeCategory]);
+  }, [sets, user, followedArtistSets, recentDbSets, activeCategory, artistImageMap]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

@@ -1090,9 +1090,9 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
     trackdFont: Math.round(6 * badgeSizeScale),
     unanalyzedSize: Math.round(12 * badgeSizeScale),
     unanalyzedFont: Math.round(7 * badgeSizeScale),
-    tracksPaddingH: Math.round(5 * badgeSizeScale),
-    tracksPaddingV: Math.round(2 * badgeSizeScale),
-    tracksFont: Math.round(8 * badgeSizeScale),
+    tracksPaddingH: Math.round(4 * badgeSizeScale),
+    tracksPaddingV: Math.round(1.5 * badgeSizeScale),
+    tracksFont: Math.round(6.5 * badgeSizeScale),
   };
 
   return (
@@ -1330,15 +1330,34 @@ export default function SetFeedCard({ setList, onPress, onLongPress, onArtistPre
                     {getPlatformIcons()}
                   </View>
                 )}
-                {/* Tracks count badge */}
-                <View style={[styles.tracksBadge, {
+                {/* Tracks count badge — liquid glass */}
+                <Animated.View style={[styles.tracksBadge, {
                   paddingHorizontal: dynamicBadgeSize.tracksPaddingH,
                   paddingVertical: dynamicBadgeSize.tracksPaddingV,
+                }, solidness && {
+                  backgroundColor: solidness.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['rgba(255,255,255,0.04)', 'rgba(255,255,255,0.10)'],
+                    extrapolate: 'clamp',
+                  }),
+                  borderColor: solidness.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.18)'],
+                    extrapolate: 'clamp',
+                  }),
                 }]}>
-                  <Text style={[styles.tracksBadgeText, { fontSize: dynamicBadgeSize.tracksFont }]}>
-                    {trackCount} {trackCount === 1 ? 'track' : 'tracks'}
-                  </Text>
-                </View>
+                  <Animated.Text style={[styles.tracksBadgeText, { fontSize: dynamicBadgeSize.tracksFont },
+                    solidness && {
+                      color: solidness.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['rgba(245,230,211,0.5)', '#D4C4B0'],
+                        extrapolate: 'clamp',
+                      }),
+                    },
+                  ]}>
+                    {trackCount} {trackCount === 1 ? 'trak' : 'traks'}
+                  </Animated.Text>
+                </Animated.View>
               </View>
 
               {/* Right side: all badges in a single row - fade in/out based on scroll position */}
@@ -1894,15 +1913,19 @@ const styles = StyleSheet.create({
   },
   // Tracks count badge
   tracksBadge: {
-    backgroundColor: 'rgba(245, 230, 211, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     paddingHorizontal: 5,
     paddingVertical: 2,
-    borderRadius: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
   tracksBadgeText: {
     fontSize: 8,
-    color: '#D4C4B0',
+    color: 'rgba(245, 230, 211, 0.5)',
     fontWeight: '700' as const,
+    fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
+    letterSpacing: 0.3,
   },
   // trackd badge - inline small pill
   trackdBadge: {

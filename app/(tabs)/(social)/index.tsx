@@ -1170,11 +1170,21 @@ export default function MyStuffScreen() {
           )}
 
           {/* ─── Vinyl Crate Stack ─── */}
-          {likedSets.length > 0 && (
+          {likedSets.length > 0 ? (
             <View style={styles.section}>
               <CrateStack sets={likedSets} onPress={navigateToSet} />
             </View>
-          )}
+          ) : !likedLoading ? (
+            <View style={styles.section}>
+              <View style={styles.emptySection}>
+                <Heart size={28} color="rgba(0,0,0,0.35)" />
+                <Text style={styles.emptyTitle}>Your crate is empty</Text>
+                <Text style={styles.emptyText}>
+                  Like sets to add them to your crate
+                </Text>
+              </View>
+            </View>
+          ) : null}
 
           {/* ─── Identified Tracks ─── */}
           <View style={styles.section}>

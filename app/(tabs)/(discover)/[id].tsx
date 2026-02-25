@@ -1493,7 +1493,7 @@ export default function SetDetailScreen() {
             <View style={[styles.coverImage, { backgroundColor: Colors.dark.surface }]} />
           )}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(40,40,44,1)']}
+            colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(105,100,95,1)']}
             style={styles.headerGradient}
           />
           <Pressable
@@ -1509,6 +1509,9 @@ export default function SetDetailScreen() {
           >
             <ArrowLeft size={24} color="#FFFFFF" />
           </Pressable>
+          <View style={styles.headerLogo}>
+            <BubbleGlassLogo size="small" />
+          </View>
         </View>
 
         <View style={styles.darkZone}>
@@ -1552,27 +1555,6 @@ export default function SetDetailScreen() {
                     <Radio size={22} color="#FFFFFF" />
                   </Pressable>
                 )}
-                {(() => {
-                  const ytLink = (setList.sourceLinks || []).find(l => l.platform === 'youtube');
-                  const videoId = ytLink ? extractYouTubeId(ytLink.url) : null;
-                  if (!videoId) return null;
-                  return (
-                    <Pressable
-                      style={styles.statsPlayButton}
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                        if (Platform.OS !== 'web') {
-                          Linking.openURL(`https://www.youtube.com/watch?v=${videoId}`);
-                        } else {
-                          setShowPlayer(true);
-                          setPlayerMinimized(false);
-                        }
-                      }}
-                    >
-                      <Play size={18} color="#FFFFFF" fill="#FFFFFF" />
-                    </Pressable>
-                  );
-                })()}
               </View>
             </View>
             
@@ -1853,7 +1835,8 @@ export default function SetDetailScreen() {
         </View>
           {/* Gradient transition dark → cream */}
           <LinearGradient
-            colors={['rgba(40,40,44,1)', Colors.dark.background]}
+            colors={['rgba(105,100,95,1)', 'rgba(105,100,95,0.6)', 'rgba(105,100,95,0.2)', Colors.dark.background]}
+            locations={[0, 0.3, 0.6, 1]}
             style={styles.darkToCreamGradient}
           />
 
@@ -2129,46 +2112,45 @@ export default function SetDetailScreen() {
               </View>
               {unplacedTracks.map((track, index) => {
                 const isPicked = pickedTrack?.id === track.id;
+                const isUnidentified = track.isId || track.title?.toLowerCase() === 'id';
                 return (
-                  <Pressable
-                    key={track.id}
-                    style={[
-                      styles.unplacedTrackCard,
-                      isPicked && styles.unplacedTrackCardPicked,
-                    ]}
-                    onPress={() => {
-                      if (isPicked) {
-                        setPickedTrack(null);
-                      } else if (estimatedMissingTracks > 0) {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setPickedTrack(track);
-                        // Expand tracklist so user can see gaps to place the track
-                        if (tracklistCollapsed) {
-                          setTracklistCollapsed(false);
+                  <View key={track.id} style={isPicked ? styles.unplacedTrackCardPicked : undefined}>
+                    <TrackCard
+                      track={track}
+                      showIndex={index + 1}
+                      onPress={() => {
+                        if (isPicked) {
+                          setPickedTrack(null);
+                        } else if (estimatedMissingTracks > 0) {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setPickedTrack(track);
+                          if (tracklistCollapsed) {
+                            setTracklistCollapsed(false);
+                          }
+                        } else {
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                          setSelectedTrack(track);
                         }
-                      } else {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                        setSelectedTrack(track);
-                      }
-                    }}
-                    onLongPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      setSelectedTrack(track);
-                    }}
-                  >
-                    <View style={styles.unplacedTrackIndex}>
-                      <Text style={styles.unplacedTrackIndexText}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.unplacedTrackInfo}>
-                      <Text style={styles.unplacedTrackTitle} numberOfLines={1}>{track.title}</Text>
-                      <Text style={styles.unplacedTrackArtist} numberOfLines={1}>{track.artist}</Text>
-                    </View>
+                      }}
+                      hasPreview={!isUnidentified && !track.isUnreleased && (!!track.previewUrl || !!track.isReleased)}
+                      isCurrentlyPlaying={currentTrackId === track.id && isPlaying}
+                      isPreviewLoading={currentTrackId === track.id && isPreviewLoading}
+                      previewFailed={failedTrackId === track.id}
+                      onPlayPreview={!isUnidentified && !track.isUnreleased && (track.previewUrl || track.isReleased) ? () => {
+                        if (track.previewUrl) {
+                          playPreview(track.id, track.previewUrl);
+                        } else if (track.title && track.artist) {
+                          playDeezerPreview(track.id, track.artist, track.title);
+                        }
+                      } : undefined}
+                      onContributorPress={(username) => setSelectedContributor(username)}
+                    />
                     {isPicked && (
                       <View style={styles.pickedBadge}>
                         <Text style={styles.pickedBadgeText}>Selected</Text>
                       </View>
                     )}
-                  </Pressable>
+                  </View>
                 );
               })}
             </View>
@@ -2877,12 +2859,18 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
+  headerLogo: {
+    position: 'absolute',
+    top: 64,
+    right: 20,
+  },
   darkZone: {
-    backgroundColor: 'rgba(40,40,44,1)',
+    backgroundColor: 'rgba(105,100,95,1)',
   },
   darkToCreamGradient: {
-    height: 40,
+    height: 140,
     marginTop: -1,
+    marginBottom: -40,
   },
   content: {
     paddingHorizontal: 20,
@@ -3804,9 +3792,11 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   unplacedTrackCardPicked: {
+    borderRadius: 14,
     borderColor: 'rgba(0, 212, 170, 0.5)',
     borderWidth: 2,
-    backgroundColor: 'rgba(0, 212, 170, 0.08)',
+    backgroundColor: 'rgba(0, 212, 170, 0.06)',
+    marginBottom: 8,
   },
   unplacedTrackIndex: {
     width: 24,

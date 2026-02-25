@@ -321,13 +321,12 @@ export default function TabLayout() {
           tabBarLabel: () => null,
           tabBarItemStyle: { flex: 1, overflow: 'visible', justifyContent: 'center', alignItems: 'center' },
           tabBarIcon: ({ focused }) => (
-            <View style={{ overflow: 'visible', minWidth: 60, alignItems: 'center' }}>
+            <View style={{ overflow: 'visible', minWidth: 60, alignItems: 'center', marginTop: -4 }}>
               <Text style={{
                 color: focused ? '#C41E3A' : 'rgba(255, 255, 255, 0.5)',
-                fontSize: 15,
+                fontSize: 18,
                 fontWeight: '900',
                 letterSpacing: -0.3,
-                marginTop: 10,
               }}>
                 trakd
               </Text>
@@ -339,6 +338,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="(submit)"
+        options={{
+          href: null,
+          tabBarItemStyle: { display: 'none' },
+        }}
+      />
+      <Tabs.Screen
         name="(discover)"
         options={{
           title: 'Dig',
@@ -347,13 +353,6 @@ export default function TabLayout() {
         }}
         listeners={{
           tabPress: (e) => handleTabPress('(discover)', e),
-        }}
-      />
-      <Tabs.Screen
-        name="(submit)"
-        options={{
-          href: null,
-          tabBarItemStyle: { display: 'none' },
         }}
       />
       <Tabs.Screen

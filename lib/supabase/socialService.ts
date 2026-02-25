@@ -292,10 +292,10 @@ export interface Like {
 export async function likeSet(userId: string, setId: string) {
   const { data, error } = await supabase
     .from('likes')
-    .insert({
-      user_id: userId,
-      set_id: setId,
-    })
+    .upsert(
+      { user_id: userId, set_id: setId },
+      { onConflict: 'user_id,set_id' }
+    )
     .select()
     .single();
 
@@ -336,28 +336,44 @@ export async function hasLikedSet(userId: string, setId: string) {
 
 // Get user's liked sets
 export async function getLikedSets(userId: string, limit = 50) {
-  // Step 1: Get liked rows
-  const { data: likes, error: likesError } = await supabase
+  // Try FK join first
+  const { data, error } = await supabase
     .from('likes')
-    .select('*')
+    .select(`
+      *,
+      set:sets(*)
+    `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  if (likesError || !likes || likes.length === 0) {
-    return { data: likes || [], error: likesError };
+  if (error) {
+    if (__DEV__) console.error('getLikedSets FK join error:', error);
+    return { data: [], error };
   }
 
-  // Step 2: Fetch full set data for the liked set IDs
-  const setIds = likes.map(l => l.set_id).filter(Boolean);
+  if (!data || data.length === 0) {
+    return { data: data || [], error: null };
+  }
+
+  // Check if the FK join actually populated set data
+  const hasSetData = data.some((d: any) => d.set != null);
+  if (hasSetData) {
+    return { data, error: null };
+  }
+
+  // Fallback: FK join returned rows but set is null — fetch sets manually
+  if (__DEV__) console.warn('getLikedSets: FK join returned null sets, using fallback');
+  const setIds = data.map((l: any) => l.set_id).filter(Boolean);
+  if (setIds.length === 0) return { data, error: null };
+
   const { data: sets } = await supabase
     .from('sets')
     .select('*')
     .in('id', setIds);
 
-  // Step 3: Combine — attach set data to each like row
-  const setsMap = new Map((sets || []).map(s => [s.id, s]));
-  const enriched = likes.map(l => ({
+  const setsMap = new Map((sets || []).map((s: any) => [s.id, s]));
+  const enriched = data.map((l: any) => ({
     ...l,
     set: setsMap.get(l.set_id) || null,
   }));

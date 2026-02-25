@@ -148,9 +148,11 @@ export function useLikeSet(setId: string) {
     setIsLoading(true);
     try {
       if (wasLiked) {
-        await socialService.unlikeSet(user.id, setId);
+        const { error } = await socialService.unlikeSet(user.id, setId);
+        if (error) throw error;
       } else {
-        await socialService.likeSet(user.id, setId);
+        const { error } = await socialService.likeSet(user.id, setId);
+        if (error) throw error;
       }
     } catch (error) {
       // Revert on error
@@ -177,7 +179,10 @@ export function useLikedSets() {
     }
 
     setIsLoading(true);
-    const { data } = await socialService.getLikedSets(user.id);
+    const { data, error } = await socialService.getLikedSets(user.id);
+    if (error) {
+      if (__DEV__) console.error('useLikedSets refresh error:', error);
+    }
     setLikedSets(data || []);
     setIsLoading(false);
   }, [user]);

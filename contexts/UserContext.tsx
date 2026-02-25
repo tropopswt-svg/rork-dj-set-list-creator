@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import createContextHook from '@nkzw/create-context-hook';
 import { UserPoints, PointsBreakdown, PointsTransaction, PointsReason, PointsSyncState } from '@/types';
@@ -64,24 +65,25 @@ export const [UserProvider, useUser] = createContextHook(() => {
   }, []);
 
   // Handle login migration: sync anonymous points to database
+  // Deferred so it doesn't block the navigation/UI transition after login
   useEffect(() => {
-    const handleAuthChange = async () => {
-      // Detect login transition (was not authenticated, now is)
-      const justLoggedIn = isAuthenticated && !previousAuthState.current;
-      previousAuthState.current = isAuthenticated;
+    // Detect login transition (was not authenticated, now is)
+    const justLoggedIn = isAuthenticated && !previousAuthState.current;
+    previousAuthState.current = isAuthenticated;
 
-      if (justLoggedIn && user && !hasSyncedRef.current) {
+    if (justLoggedIn && user && !hasSyncedRef.current) {
+      // Wait for navigation animations to finish before migrating
+      const task = InteractionManager.runAfterInteractions(() => {
         if (__DEV__) console.log('[UserContext] User logged in, checking for points to sync...');
-        await migrateAnonymousPoints();
-      }
+        migrateAnonymousPoints();
+      });
+      return () => task.cancel();
+    }
 
-      // When logged out, reset sync state
-      if (!isAuthenticated) {
-        hasSyncedRef.current = false;
-      }
-    };
-
-    handleAuthChange();
+    // When logged out, reset sync state
+    if (!isAuthenticated) {
+      hasSyncedRef.current = false;
+    }
   }, [isAuthenticated, user]);
 
   const loadUserData = async () => {

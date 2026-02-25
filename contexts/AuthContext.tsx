@@ -106,17 +106,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Guard against duplicate profile fetches for the same user
+  const fetchedProfileForRef = useRef<string | null>(null);
+
   // Refresh profile data (explicit refresh — allowed even if already fetched)
   const refreshProfile = useCallback(async () => {
     if (user) {
-      fetchedProfileForRef.current = user.id; // Mark as fetched to prevent duplicate
+      fetchedProfileForRef.current = user.id;
       const profileData = await fetchProfile(user.id);
       setProfile(profileData);
     }
   }, [user, fetchProfile]);
-
-  // Guard against duplicate profile fetches for the same user
-  const fetchedProfileForRef = useRef<string | null>(null);
 
   // Initialize auth state
   useEffect(() => {
@@ -334,12 +334,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const value: AuthContextType = {
+  const isAuthenticated = !!user;
+
+  const value = useMemo<AuthContextType>(() => ({
     user,
     session,
     profile,
     isLoading,
-    isAuthenticated: !!user,
+    isAuthenticated,
     signUp,
     signIn,
     signInWithGoogle,
@@ -349,7 +351,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     deleteAccount,
     updateProfile,
     refreshProfile,
-  };
+  }), [user, session, profile, isLoading, isAuthenticated, refreshProfile]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -155,6 +155,9 @@ export default function TrackCard({
     const info = getSourceInfo();
     if (!info) return null;
 
+    // If track is confirmed on Spotify, the Spotify badge is sufficient — hide "Unverified"
+    if (info.icon === 'unverified' && hasConfirmedRelease) return null;
+
     const iconSize = 11;
     let IconComponent = null;
 

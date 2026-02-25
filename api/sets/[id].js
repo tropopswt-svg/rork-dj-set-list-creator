@@ -65,10 +65,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Get the set
+    // Get the set, joining artists table for the artist image fallback
     const { data: set, error: setError } = await supabase
       .from('sets')
-      .select('*')
+      .select('*, artist:dj_id(image_url)')
       .eq('id', id)
       .single();
 
@@ -276,6 +276,7 @@ export default async function handler(req, res) {
     }
 
     // Transform set to match app's SetList type
+    const artistImageUrl = set.artist?.image_url || null;
     const transformedSet = {
       id: set.id,
       name: set.title,
@@ -286,6 +287,7 @@ export default async function handler(req, res) {
       totalDuration: set.duration_seconds || 0,
       trackCount: set.track_count || tracks.length,
       coverUrl: setCoverUrl,
+      artistImageUrl,
       sourceLinks: [
         set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
         set.youtube_url && { platform: 'youtube', url: set.youtube_url },
