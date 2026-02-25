@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Polyline, Line, Rect, Defs, LinearGradient as SvgGradient, Stop, Circle, Path } from 'react-native-svg';
+import Svg, { Polyline, Defs, LinearGradient as SvgGradient, Stop, Circle, Path } from 'react-native-svg';
 import {
   Heart,
   Music,
@@ -182,38 +182,6 @@ function GlassStatCard({
   );
 }
 
-// ─── Wood Grain SVG Pattern ─────────────────────────────────
-function WoodGrain({ width, height }: { width: number; height: number }) {
-  // Generate subtle wood grain lines
-  const lines = [];
-  for (let i = 0; i < 12; i++) {
-    const y = (i / 12) * height + Math.sin(i * 1.3) * 4;
-    const opacity = 0.04 + (i % 3) * 0.02;
-    lines.push(
-      <Line
-        key={`grain-${i}`}
-        x1={0}
-        y1={y}
-        x2={width}
-        y2={y + Math.sin(i * 0.7) * 6}
-        stroke="#6B4226"
-        strokeWidth={1 + (i % 2) * 0.5}
-        opacity={opacity}
-      />
-    );
-  }
-  // Add a couple knot-like circles
-  lines.push(
-    <Rect key="knot-1" x={width * 0.7} y={height * 0.3} width={8} height={4} rx={2} fill="#6B4226" opacity={0.06} />,
-    <Rect key="knot-2" x={width * 0.2} y={height * 0.7} width={6} height={3} rx={1.5} fill="#6B4226" opacity={0.05} />,
-  );
-  return (
-    <Svg width={width} height={height} style={{ position: 'absolute', top: 0, left: 0 }}>
-      {lines}
-    </Svg>
-  );
-}
-
 // ─── Animated Crate Browser ─────────────────────────────────
 function CrateStack({
   sets,
@@ -226,7 +194,6 @@ function CrateStack({
   const [isOpen, setIsOpen] = useState(false);
   const slideAnim = useRef(new Animated.Value(0)).current;
   const recordAnims = useRef(sets.map(() => new Animated.Value(0))).current;
-  const lidAnim = useRef(new Animated.Value(0)).current;
 
   if (covers.length === 0) return null;
 
@@ -242,23 +209,14 @@ function CrateStack({
       useNativeDriver: true,
     }).start();
 
-    // 2. Animate crate lid opening
-    Animated.spring(lidAnim, {
-      toValue: 1,
-      tension: 40,
-      friction: 8,
-      useNativeDriver: true,
-      delay: 150,
-    }).start();
-
-    // 3. Stagger records popping out
+    // 2. Stagger records fading in
     const staggered = sets.slice(0, 20).map((_, i) =>
       Animated.spring(recordAnims[i] || new Animated.Value(0), {
         toValue: 1,
         tension: 80,
         friction: 8,
         useNativeDriver: true,
-        delay: 200 + i * 60,
+        delay: 100 + i * 60,
       })
     );
     Animated.stagger(60, staggered).start();
@@ -267,7 +225,7 @@ function CrateStack({
   const closeCrate = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Reverse: records drop back in
+    // Reverse: records fade out
     const reverseAnims = sets.slice(0, 20).map((_, i) =>
       Animated.spring(recordAnims[i] || new Animated.Value(0), {
         toValue: 0,
@@ -277,14 +235,6 @@ function CrateStack({
       })
     );
     Animated.stagger(30, reverseAnims).start();
-
-    // Lid closes
-    Animated.spring(lidAnim, {
-      toValue: 0,
-      tension: 80,
-      friction: 10,
-      useNativeDriver: true,
-    }).start();
 
     // Slide down
     Animated.spring(slideAnim, {
@@ -296,7 +246,7 @@ function CrateStack({
     }).start(() => setIsOpen(false));
   };
 
-  const RECORD_SIZE = (SCREEN_WIDTH - 64 - 12) / 2; // 2 columns with wood-wall insets
+  const RECORD_SIZE = (SCREEN_WIDTH - 52 - 12) / 2; // 2 columns with glass insets
 
   const renderCrateRecord = ({ item, index }: { item: any; index: number }) => {
     const set = item.set;
@@ -424,7 +374,7 @@ function CrateStack({
         </BlurView>
       </PressableCard>
 
-      {/* ─── Full-screen Animated Crate Modal ─── */}
+      {/* ─── Full-screen Animated Crate Modal (Liquid Glass) ─── */}
       <Modal visible={isOpen} transparent animationType="none" onRequestClose={closeCrate}>
         <Animated.View
           style={[
@@ -452,98 +402,38 @@ function CrateStack({
               },
             ]}
           >
-            {/* Crate lid */}
-            <Animated.View
-              style={[
-                styles.crateModalLid,
-                {
-                  transform: [
-                    { perspective: 800 },
-                    {
-                      rotateX: lidAnim.interpolate({
-                        inputRange: [0, 1],
-                        outputRange: ['0deg', '-75deg'],
-                      }),
-                    },
-                  ],
-                  opacity: lidAnim.interpolate({
-                    inputRange: [0, 0.5, 1],
-                    outputRange: [1, 0.6, 0.15],
-                  }),
-                },
-              ]}
-            >
-              <LinearGradient
-                colors={['#D4A574', '#B8864E', '#A0713A']}
-                style={styles.crateModalLidGradient}
-              >
-                <WoodGrain width={SCREEN_WIDTH} height={60} />
-                <View style={styles.crateModalLidPlank} />
-                <View style={styles.crateModalLidPlank} />
-                <View style={styles.crateModalLidPlank} />
-                <View style={styles.crateModalLidHandle}>
-                  <View style={styles.crateModalLidHandleBar} />
+            <BlurView intensity={60} tint="dark" style={styles.crateModalBlur}>
+              {/* Glass top edge highlight */}
+              <View style={styles.crateModalGlassEdge} />
+
+              {/* Drag handle */}
+              <View style={styles.crateModalHandle} />
+
+              {/* Header bar */}
+              <View style={styles.crateModalHeader}>
+                <View style={styles.crateModalHeaderLeft}>
+                  <Text style={styles.crateModalTitle}>Your Crate</Text>
                 </View>
-                {/* Nail dots on lid */}
-                <View style={[styles.crateNail, { position: 'absolute', top: 10, left: 16 }]} />
-                <View style={[styles.crateNail, { position: 'absolute', top: 10, right: 16 }]} />
-                <View style={[styles.crateNail, { position: 'absolute', bottom: 10, left: 16 }]} />
-                <View style={[styles.crateNail, { position: 'absolute', bottom: 10, right: 16 }]} />
-              </LinearGradient>
-            </Animated.View>
-
-            {/* Wood walls — left and right side rails */}
-            <View style={styles.crateWallLeft}>
-              <LinearGradient
-                colors={['#C49660', '#A67842', '#8B6332']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.crateWallGradient}
-              />
-            </View>
-            <View style={styles.crateWallRight}>
-              <LinearGradient
-                colors={['#C49660', '#A67842', '#8B6332']}
-                start={{ x: 1, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={styles.crateWallGradient}
-              />
-            </View>
-
-            {/* Wood bottom */}
-            <View style={styles.crateBottom}>
-              <LinearGradient
-                colors={['#B8864E', '#A0713A', '#8B6332']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.crateBottomGradient}
-              />
-            </View>
-
-            {/* Header bar */}
-            <View style={styles.crateModalHeader}>
-              <View style={styles.crateModalHeaderLeft}>
-                <Text style={styles.crateModalTitle}>Your Crate</Text>
+                <Pressable style={styles.crateModalClose} onPress={closeCrate}>
+                  <Text style={styles.crateModalCloseText}>Done</Text>
+                </Pressable>
               </View>
-              <Pressable style={styles.crateModalClose} onPress={closeCrate}>
-                <Text style={styles.crateModalCloseText}>Done</Text>
-              </Pressable>
-            </View>
 
-            <Text style={styles.crateModalSubtitle}>
-              {sets.length} set{sets.length !== 1 ? 's' : ''} saved
-            </Text>
+              <Text style={styles.crateModalSubtitle}>
+                {sets.length} set{sets.length !== 1 ? 's' : ''} saved
+              </Text>
 
-            {/* Records grid */}
-            <FlatList
-              data={sets}
-              renderItem={renderCrateRecord}
-              keyExtractor={(item) => item.id}
-              numColumns={2}
-              columnWrapperStyle={styles.crateModalRow}
-              contentContainerStyle={styles.crateModalGrid}
-              showsVerticalScrollIndicator={false}
-            />
+              {/* Records grid */}
+              <FlatList
+                data={sets}
+                renderItem={renderCrateRecord}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                columnWrapperStyle={styles.crateModalRow}
+                contentContainerStyle={styles.crateModalGrid}
+                showsVerticalScrollIndicator={false}
+              />
+            </BlurView>
           </Animated.View>
         </Animated.View>
       </Modal>
@@ -1693,108 +1583,49 @@ const styles = StyleSheet.create({
     color: Colors.dark.primary,
   },
 
-  // ─── Crate Modal (Wooden Interior) ───
+  // ─── Crate Modal (Liquid Glass) ───
   crateModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'flex-end',
   },
   crateModalContainer: {
-    backgroundColor: '#EDE0D0',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingTop: 0,
     maxHeight: '92%',
     minHeight: '70%',
     overflow: 'hidden',
   },
-  crateModalLid: {
-    height: 60,
-    overflow: 'hidden',
+  crateModalBlur: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.25)',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    transformOrigin: 'top center',
+    overflow: 'hidden',
   },
-  crateModalLidGradient: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    gap: 8,
-    position: 'relative',
-  },
-  crateModalLidPlank: {
-    flex: 1,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
-  },
-  crateModalLidHandle: {
+  crateModalGlassEdge: {
     position: 'absolute',
-    top: 20,
+    top: 0,
+    left: 16,
+    right: 16,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 1,
+  },
+  crateModalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.25)',
     alignSelf: 'center',
-  },
-  crateModalLidHandleBar: {
-    width: 52,
-    height: 7,
-    borderRadius: 3.5,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-  },
-  crateNail: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(80,50,20,0.4)',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255,220,180,0.3)',
-  },
-  // Side walls in modal — thin wood rails
-  crateWallLeft: {
-    position: 'absolute',
-    left: 0,
-    top: 60,
-    bottom: 0,
-    width: 8,
-    zIndex: 10,
-    overflow: 'hidden',
-  },
-  crateWallRight: {
-    position: 'absolute',
-    right: 0,
-    top: 60,
-    bottom: 0,
-    width: 8,
-    zIndex: 10,
-    overflow: 'hidden',
-  },
-  crateWallGradient: {
-    flex: 1,
-    borderWidth: 0.5,
-    borderColor: 'rgba(139,99,50,0.3)',
-  },
-  crateBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 6,
-    zIndex: 10,
-    overflow: 'hidden',
-  },
-  crateBottomGradient: {
-    flex: 1,
+    marginTop: 10,
   },
   crateModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 4,
   },
   crateModalHeaderLeft: {
@@ -1805,54 +1636,55 @@ const styles = StyleSheet.create({
   crateModalTitle: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#3A2010',
+    color: '#fff',
     letterSpacing: -0.5,
   },
   crateModalClose: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
   },
   crateModalCloseText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#8B5E34',
+    color: 'rgba(255,255,255,0.7)',
   },
   crateModalSubtitle: {
     fontSize: 13,
-    color: '#8B7355',
+    color: 'rgba(255,255,255,0.45)',
     paddingHorizontal: 20,
     marginTop: 4,
     marginBottom: 16,
   },
   crateModalGrid: {
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 40,
   },
   crateModalRow: {
     gap: 12,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   crateModalRecord: {
     borderRadius: 14,
     overflow: 'hidden',
-    backgroundColor: '#F5EDE0',
-    shadowColor: '#5A3714',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 10,
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
     elevation: 4,
     borderWidth: 1,
-    borderColor: 'rgba(139,99,50,0.12)',
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.15)',
   },
   crateModalRecordImage: {
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(139,99,50,0.15)',
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   crateModalRecordVinylHole: {
     position: 'absolute',
@@ -1861,23 +1693,23 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: 'rgba(0,0,0,0.4)',
     marginTop: -7,
     marginLeft: -7,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.25)',
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   crateModalRecordTitle: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#3A2010',
+    color: '#fff',
     paddingHorizontal: 10,
     paddingTop: 10,
   },
   crateModalRecordArtist: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#8B5E34',
+    color: 'rgba(255,255,255,0.5)',
     paddingHorizontal: 10,
     paddingTop: 2,
     paddingBottom: 10,
