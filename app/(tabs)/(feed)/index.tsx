@@ -1847,12 +1847,51 @@ export default function FeedScreen() {
   }, [followedArtists]);
 
   const realFeedItems = useMemo(() => {
-    // "For You" with followed artists gets priority
-    if (activeCategory === 'for_you' && user && followedArtistSets.length > 0) {
-      return followedArtistSets
+    // "For You" — merge API-scored recommendations with a few followed artist sets.
+    // The API handles discovery (genre-based, collaborative filtering, novelty boost).
+    // We sprinkle in some followed artist sets so the feed feels personal but isn't
+    // limited to artists the user already knows.
+    if (activeCategory === 'for_you' && user) {
+      const seen = new Set<string>();
+      const merged: any[] = [];
+
+      // Start with API's personalized recommendations (the main discovery source)
+      for (const set of recentDbSets) {
+        if (seen.has(set.id)) continue;
+        seen.add(set.id);
+        merged.push({
+          id: set.id,
+          type: 'new_set' as const,
+          artist: {
+            id: set.artist,
+            name: set.artist,
+            image: set.artistImageUrl || null,
+            following: followedArtistNames.includes(set.artist?.toLowerCase()),
+          },
+          set: {
+            id: set.id,
+            name: set.name,
+            venue: set.venue || '',
+            date: formatDate(new Date(set.date)),
+            image: set.coverUrl || null,
+            duration: set.totalDuration ? formatDuration(set.totalDuration) : '',
+            tracksIdentified: set.trackCount || 0,
+          },
+          timestamp: new Date(set.date),
+        });
+      }
+
+      // Mix in up to 4 recent followed-artist sets (interleaved for variety)
+      const followedRecent = followedArtistSets
+        .filter(s => !seen.has(s.id))
         .sort((a, b) => new Date(b.created_at || b.event_date).getTime() - new Date(a.created_at || a.event_date).getTime())
-        .slice(0, 20)
-        .map(set => ({
+        .slice(0, 4);
+      for (let i = 0; i < followedRecent.length; i++) {
+        const set = followedRecent[i];
+        seen.add(set.id);
+        // Insert at positions 1, 4, 8, 13 for natural interleaving
+        const insertAt = Math.min([1, 4, 8, 13][i], merged.length);
+        merged.splice(insertAt, 0, {
           id: set.id,
           type: 'new_set' as const,
           artist: {
@@ -1871,9 +1910,13 @@ export default function FeedScreen() {
             tracksIdentified: set.track_count || 0,
           },
           timestamp: new Date(set.created_at || set.event_date),
-        }));
+        });
+      }
+
+      if (merged.length > 0) return merged.slice(0, 20);
     }
 
+    // Other categories or no personalized data — use API results directly
     if (recentDbSets.length > 0) {
       return recentDbSets.map(set => ({
         id: set.id,
@@ -1882,7 +1925,7 @@ export default function FeedScreen() {
           id: set.artist,
           name: set.artist,
           image: set.artistImageUrl || null,
-          following: false,
+          following: followedArtistNames.includes(set.artist?.toLowerCase()),
         },
         set: {
           id: set.id,
@@ -1920,7 +1963,7 @@ export default function FeedScreen() {
         },
         timestamp: set.date,
       }));
-  }, [sets, user, followedArtistSets, recentDbSets, activeCategory, artistImageMap]);
+  }, [sets, user, followedArtistSets, recentDbSets, activeCategory, artistImageMap, followedArtistNames]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

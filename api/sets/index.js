@@ -119,7 +119,7 @@ function buildBaseQuery(supabase, { dj, search } = {}) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   let query = supabase
     .from('sets')
-    .select('*, artists:dj_id(image_url)', { count: 'exact' })
+    .select('*, artists:dj_id(image_url, genres)', { count: 'exact' })
     // Exclude future events — sets that haven't happened yet have no tracklists
     .or(`event_date.is.null,event_date.lte.${today}`);
   if (dj) query = query.ilike('dj_name', `%${dj}%`);
@@ -187,7 +187,11 @@ export default async function handler(req, res) {
     let totalCount;
 
     // ── For You ──────────────────────────────────────────────────────
-    // Personalized feed for logged-in users, trending fallback otherwise.
+    // Discovery-focused personalized feed. Prioritizes NEW music the user
+    // hasn't heard — similar genres to followed/liked artists, collaborative
+    // filtering from similar users, and trending sets. Direct affinity
+    // (artists already liked) is intentionally down-weighted so the feed
+    // surfaces fresh discoveries rather than echoing the user's library.
     if (sort === 'for_you') {
       const POOL_SIZE = 200;
       const query = buildBaseQuery(supabase, { dj, search })
@@ -197,12 +201,15 @@ export default async function handler(req, res) {
       if (error) throw error;
       totalCount = count;
 
-      // Gather personalization signals (gracefully degrade if RLS blocks access)
+      // Gather personalization signals (gracefully degrade if tables are empty)
       const affinityMap = {};
       const socialSignals = {};
+      const genreScores = {};     // genre → score (from user's taste profile)
+      const likedSetIds = new Set();
+      const followedArtistIds = new Set();
 
       if (user_id) {
-        // 1. Artist affinities — pre-calculated scores from user's listening/liking history
+        // 1. Artist affinities — pre-calculated scores from liked sets
         const { data: affinities } = await supabase
           .from('user_artist_affinity')
           .select('artist_id, affinity_score')
@@ -211,7 +218,47 @@ export default async function handler(req, res) {
           .limit(50);
         (affinities || []).forEach(a => { affinityMap[a.artist_id] = a.affinity_score; });
 
-        // 2. Similar users — find what like-minded people are listening to
+        // 2. Followed artists — these are "known" artists to de-prioritize
+        const { data: follows } = await supabase
+          .from('follows')
+          .select('following_artist_id')
+          .eq('follower_id', user_id)
+          .not('following_artist_id', 'is', null);
+        (follows || []).forEach(f => followedArtistIds.add(f.following_artist_id));
+
+        // 3. User's liked set IDs — to filter out already-seen sets
+        const { data: likes } = await supabase
+          .from('likes')
+          .select('set_id')
+          .eq('user_id', user_id);
+        (likes || []).forEach(l => likedSetIds.add(l.set_id));
+
+        // 4. Build genre taste profile from followed artists + liked set artists
+        const knownArtistIds = [
+          ...Object.keys(affinityMap),
+          ...followedArtistIds,
+        ].filter(Boolean);
+
+        if (knownArtistIds.length > 0) {
+          const uniqueIds = [...new Set(knownArtistIds)];
+          const { data: artistGenres } = await supabase
+            .from('artists')
+            .select('id, genres')
+            .in('id', uniqueIds.slice(0, 50));
+          // Weight genres by affinity score (or 0.5 for followed-only artists)
+          (artistGenres || []).forEach(a => {
+            const weight = affinityMap[a.id] || 0.5;
+            (a.genres || []).forEach(g => {
+              const genre = g.toLowerCase();
+              genreScores[genre] = (genreScores[genre] || 0) + weight;
+            });
+          });
+          // Normalize genre scores to 0-1
+          const maxGenre = Math.max(...Object.values(genreScores), 0.001);
+          for (const g in genreScores) genreScores[g] /= maxGenre;
+        }
+
+        // 5. Similar users — collaborative filtering
         const { data: similarUsers } = await supabase
           .from('user_similarity')
           .select('similar_user_id, similarity_score')
@@ -222,7 +269,7 @@ export default async function handler(req, res) {
         const simMap = {};
         (similarUsers || []).forEach(u => { simMap[u.similar_user_id] = u.similarity_score; });
 
-        // 3. What those similar users liked recently (last 30 days)
+        // 6. What similar users liked recently (last 30 days)
         if (simIds.length > 0) {
           const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
           const { data: socialLikes } = await supabase
@@ -236,7 +283,10 @@ export default async function handler(req, res) {
         }
       }
 
-      const hasPersonalization = Object.keys(affinityMap).length > 0 || Object.keys(socialSignals).length > 0;
+      const hasPersonalization = Object.keys(affinityMap).length > 0
+        || Object.keys(socialSignals).length > 0
+        || Object.keys(genreScores).length > 0
+        || followedArtistIds.size > 0;
 
       // Compute velocity scores and normalize relative to the pool
       const rawVelocities = (pool || []).map(s => engagementVelocity(s));
@@ -245,23 +295,60 @@ export default async function handler(req, res) {
       const scored = (pool || []).map((set, i) => {
         let score;
         if (hasPersonalization) {
-          // Weighted multi-factor scoring (research-based weights):
-          //   Artist affinity 35% — strongest signal: user explicitly liked this artist's sets
-          //   Social signal   25% — collaborative filtering: similar users liked this
-          //   Velocity        20% — trending signal: recent engagement burst
-          //   Recency         15% — freshness: prefer recent sets
-          //   Quality          5% — metadata completeness: tiebreaker
+          // ── Genre match (discovery signal) ──
+          // Score how well this set's genre matches the user's taste profile.
+          // This is the primary DISCOVERY mechanism — surfaces new artists in
+          // genres the user already enjoys.
+          let genreMatch = 0;
+          if (Object.keys(genreScores).length > 0) {
+            // Collect genres from the set itself AND its linked artist
+            const setGenres = [];
+            if (set.genre) setGenres.push(set.genre.toLowerCase());
+            if (set.artists?.genres) {
+              set.artists.genres.forEach(g => setGenres.push(g.toLowerCase()));
+            }
+            for (const setGenre of setGenres) {
+              // Direct match
+              if (genreScores[setGenre]) {
+                genreMatch = Math.max(genreMatch, genreScores[setGenre]);
+              } else {
+                // Partial match — check if any user genre appears in set genre or vice versa
+                for (const [g, s] of Object.entries(genreScores)) {
+                  if (setGenre.includes(g) || g.includes(setGenre)) {
+                    genreMatch = Math.max(genreMatch, s * 0.7);
+                  }
+                }
+              }
+            }
+          }
+
+          // ── Novelty bonus ──
+          // Boost sets the user HASN'T seen (not liked, not from followed artists).
+          // This is what makes "For You" a discovery feed rather than an echo chamber.
+          const isKnownArtist = followedArtistIds.has(set.dj_id) || !!affinityMap[set.dj_id];
+          const isAlreadyLiked = likedSetIds.has(set.id);
+          const novelty = isAlreadyLiked ? 0 : (isKnownArtist ? 0.3 : 1.0);
+
           const affinity = affinityMap[set.dj_id] || 0;
           const social = Math.min(socialSignals[set.id] || 0, 1);
           const velocity = normVelocities[i];
           const recency = recencyScore(set.event_date || set.created_at, 14);
           const quality = qualityScore(set);
-          score = affinity * 0.35 + social * 0.25 + velocity * 0.20 + recency * 0.15 + quality * 0.05;
+
+          // Discovery-weighted scoring:
+          //   Genre match   30% — same vibe, new artist (primary discovery)
+          //   Social signal 25% — similar users liked this
+          //   Velocity      15% — trending signal
+          //   Recency       10% — freshness
+          //   Affinity      10% — familiar artists (intentionally low)
+          //   Quality       10% — metadata completeness
+          const rawScore = genreMatch * 0.30 + social * 0.25 + velocity * 0.15
+            + recency * 0.10 + affinity * 0.10 + quality * 0.10;
+
+          // Apply novelty multiplier: new stuff scores up to 1.5x, already-liked scores 0x
+          score = rawScore * (0.5 + novelty * 0.5);
         } else {
           // Anonymous / cold-start: trending algorithm
-          //   Velocity 45% — what's hot right now
-          //   Recency  35% — freshness
-          //   Quality  20% — metadata completeness
           const velocity = normVelocities[i];
           const recency = recencyScore(set.event_date || set.created_at, 14);
           const quality = qualityScore(set);
@@ -351,7 +438,7 @@ export default async function handler(req, res) {
         .from('artists')
         .select('name, image_url')
         .filter('image_url', 'not.is', null)
-        .in('name', uniqueNames);
+        .or(uniqueNames.map(name => `name.ilike.${name}`).join(','));
 
       if (artists && artists.length > 0) {
         const nameToImage = new Map(artists.map(a => [a.name.toLowerCase(), a.image_url]));
