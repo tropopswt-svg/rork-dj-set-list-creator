@@ -139,16 +139,34 @@ export default async function handler(req, res) {
       }
     }
 
-    // Fetch artist genres if set is linked to an artist
+    // Fetch artist genres (and image fallback) from artists table
     let artistGenres = [];
+    let artistImageFallback = null;
     if (set.dj_id) {
       const { data: artistData } = await supabase
         .from('artists')
-        .select('genres')
+        .select('genres, image_url')
         .eq('id', set.dj_id)
         .single();
       if (artistData?.genres?.length) {
         artistGenres = artistData.genres;
+      }
+      if (artistData?.image_url) {
+        artistImageFallback = artistData.image_url;
+      }
+    } else if (set.dj_name) {
+      // No FK link — look up artist by name for image + genres
+      const { data: artistData } = await supabase
+        .from('artists')
+        .select('genres, image_url')
+        .ilike('name', set.dj_name.trim())
+        .limit(1)
+        .maybeSingle();
+      if (artistData?.genres?.length) {
+        artistGenres = artistData.genres;
+      }
+      if (artistData?.image_url) {
+        artistImageFallback = artistData.image_url;
       }
     }
 
@@ -281,7 +299,7 @@ export default async function handler(req, res) {
     }
 
     // Transform set to match app's SetList type
-    const artistImageUrl = set.artist?.image_url || null;
+    const artistImageUrl = set.artist?.image_url || artistImageFallback || null;
     const transformedSet = {
       id: set.id,
       name: set.title,

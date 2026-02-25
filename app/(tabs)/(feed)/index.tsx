@@ -41,8 +41,6 @@ function GlassActionButton({ children, onPress, label, isActive, activeColor, di
 }) {
   return (
     <Pressable onPress={onPress} disabled={disabled} hitSlop={8} style={styles.glassActionOuter}>
-      {/* 3D shadow layer */}
-      <View style={styles.glassActionShadow} />
       {/* Glass face */}
       <View style={styles.glassActionFace}>
         <BlurView intensity={40} tint="dark" style={StyleSheet.absoluteFill} />
@@ -132,11 +130,11 @@ function LiquidGlassSkipButton({ onPress }: { onPress: () => void }) {
   };
 
   return (
-    <Animated.View style={[lgStyles.container, { transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View pointerEvents="box-none" style={[lgStyles.container, { transform: [{ scale: scaleAnim }] }]}>
       {/* Outer glow ring */}
-      <Animated.View style={[lgStyles.glowRing, { opacity: glowAnim }]} />
+      <Animated.View pointerEvents="none" style={[lgStyles.glowRing, { opacity: glowAnim }]} />
       {/* Spinning shimmer accent */}
-      <Animated.View style={[lgStyles.shimmerRing, { transform: [{ rotate: shimmerRotate }] }]} />
+      <Animated.View pointerEvents="none" style={[lgStyles.shimmerRing, { transform: [{ rotate: shimmerRotate }] }]} />
       <Pressable
         onPress={handlePress}
         onPressIn={handlePressIn}
@@ -1140,92 +1138,107 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
           {floatingTracks.length > 0 && (
             <FloatingTracks tracks={floatingTracks} cardHeight={cardHeight} />
           )}
+        </View>
+      </Pressable>
 
-          {/* ── Centered liquid glass skip button ── */}
-          {onSkipTrack && (
-            <LiquidGlassSkipButton onPress={() => onSkipTrack(item.set.id)} />
-          )}
+      {/* ── Interactive overlays — outside Pressable to prevent tap bubbling ── */}
 
-          {/* ── Glass action column (right side) ── */}
-          <View style={styles.feedActionColumn}>
-            <GlassActionButton
-              onPress={handleLike}
-              label={formatCount(displayLikeCount)}
-              isActive={isLiked}
-              activeColor="#EF4444"
-              disabled={likeLoading}
-            >
-              <Animated.View style={{ transform: [{ scale: heartScale }] }}>
-                <Heart
-                  size={22}
-                  color={isLiked ? '#EF4444' : '#fff'}
-                  fill={isLiked ? '#EF4444' : 'none'}
-                />
-              </Animated.View>
-            </GlassActionButton>
+      {/* ── Centered liquid glass skip button ── */}
+      {onSkipTrack && (
+        <LiquidGlassSkipButton onPress={() => onSkipTrack(item.set.id)} />
+      )}
 
-            <GlassActionButton onPress={handleComment} label={formatCount(commentCount)}>
-              <MessageCircle size={20} color="#fff" />
-            </GlassActionButton>
+      {/* ── Glass action column (right side) ── */}
+      <View style={styles.feedActionColumn}>
+        <GlassActionButton
+          onPress={handleLike}
+          label={formatCount(displayLikeCount)}
+          isActive={isLiked}
+          activeColor="#EF4444"
+          disabled={likeLoading}
+        >
+          <Animated.View style={{ transform: [{ scale: heartScale }] }}>
+            <Heart
+              size={22}
+              color={isLiked ? '#EF4444' : '#fff'}
+              fill={isLiked ? '#EF4444' : 'none'}
+            />
+          </Animated.View>
+        </GlassActionButton>
 
-            <GlassActionButton onPress={handleShare} label="Share">
-              <Share2 size={19} color="#fff" />
-            </GlassActionButton>
-          </View>
+        <GlassActionButton onPress={handleComment} label={formatCount(commentCount)}>
+          <MessageCircle size={20} color="#fff" />
+        </GlassActionButton>
 
-          {/* ── Glass artist badge (top-left) ── */}
-          <View style={styles.feedArtistBadge}>
-            <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, styles.feedArtistBadgeTint]} />
-            {/* Top light edge — glass refraction */}
-            <View style={styles.feedArtistBadgeLightEdge} />
-            <View style={styles.feedArtistBadgeInner}>
-              <ArtistAvatar
-                imageUrl={item.artist.image}
-                name={item.artist.name}
-                size={24}
-              />
+        <GlassActionButton onPress={handleShare} label="Share">
+          <Share2 size={19} color="#fff" />
+        </GlassActionButton>
+      </View>
+
+      {/* ── Top badge row: artist (left) + venue (right) ── */}
+      <View style={styles.feedTopBadgeRow} pointerEvents="none">
+        <View style={styles.feedArtistBadge}>
+          <BlurView intensity={70} tint="dark" style={StyleSheet.absoluteFill} />
+          <View style={[StyleSheet.absoluteFill, styles.feedArtistBadgeTint]} />
+          <View style={styles.feedArtistBadgeLightEdge} />
+          <View style={styles.feedArtistBadgeInner}>
+            <ArtistAvatar
+              imageUrl={item.artist.image}
+              name={item.artist.name}
+              size={28}
+            />
+            <View style={styles.feedArtistBadgeTextCol}>
               <Text style={styles.feedBadgeArtistName} numberOfLines={1}>{item.artist.name}</Text>
-              <View style={styles.feedBadgeDot} />
-              <Text style={styles.feedBadgeTime}>{item.set.date}</Text>
-            </View>
-          </View>
-
-          {/* ── Glass now-playing bar (always visible, centered under artist badge) ── */}
-          <NowPlayingBar nowPlaying={nowPlaying} isMuted={isMuted} />
-
-          {/* ── Floating glass info panel (bottom) ── */}
-          <View style={styles.feedInfoPanel}>
-            <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
-            <View style={[StyleSheet.absoluteFill, styles.feedInfoPanelTint]} />
-            {/* Light edge along top */}
-            <View style={styles.feedInfoPanelLightEdge} />
-            <View style={styles.feedInfoPanelContent}>
-              <Text style={styles.feedInfoTitle} numberOfLines={2}>{item.set.name}</Text>
-              <View style={styles.feedInfoMeta}>
-                {item.set.venue ? (
-                  <View style={styles.feedInfoMetaPill}>
-                    <MapPin size={10} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.feedInfoMetaText}>{item.set.venue}</Text>
-                  </View>
-                ) : null}
-                {item.set.duration ? (
-                  <View style={styles.feedInfoMetaPill}>
-                    <Clock size={10} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.feedInfoMetaText}>{item.set.duration}</Text>
-                  </View>
-                ) : null}
-                {item.set.tracksIdentified > 0 && (
-                  <View style={styles.feedInfoMetaPill}>
-                    <Music size={10} color="rgba(255,255,255,0.7)" />
-                    <Text style={styles.feedInfoMetaText}>{item.set.tracksIdentified} tracks</Text>
-                  </View>
-                )}
-              </View>
+              <Text style={styles.feedBadgeTime} numberOfLines={1}>{item.set.date}</Text>
             </View>
           </View>
         </View>
-      </Pressable>
+
+        {item.set.venue ? (
+          <View style={styles.feedVenueBadge}>
+            <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+            <View style={[StyleSheet.absoluteFill, styles.feedVenueBadgeTint]} />
+            <View style={styles.feedVenueBadgeLightEdge} />
+            <View style={styles.feedVenueBadgeInner}>
+              <MapPin size={12} color="#C41E3A" />
+              <Text style={styles.feedVenueBadgeText} numberOfLines={1}>{item.set.venue}</Text>
+            </View>
+          </View>
+        ) : null}
+      </View>
+
+      {/* ── Glass now-playing bar ── */}
+      <NowPlayingBar nowPlaying={nowPlaying} isMuted={isMuted} />
+
+      {/* ── Floating glass info panel (bottom) ── */}
+      <View style={styles.feedInfoPanel} pointerEvents="none">
+        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
+        <View style={[StyleSheet.absoluteFill, styles.feedInfoPanelTint]} />
+        <View style={styles.feedInfoPanelLightEdge} />
+        <View style={styles.feedInfoPanelContent}>
+          <Text style={styles.feedInfoTitle} numberOfLines={2}>{item.set.name}</Text>
+          <View style={styles.feedInfoMeta}>
+            {item.set.venue ? (
+              <View style={styles.feedInfoMetaPill}>
+                <MapPin size={10} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.feedInfoMetaText}>{item.set.venue}</Text>
+              </View>
+            ) : null}
+            {item.set.duration ? (
+              <View style={styles.feedInfoMetaPill}>
+                <Clock size={10} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.feedInfoMetaText}>{item.set.duration}</Text>
+              </View>
+            ) : null}
+            {item.set.tracksIdentified > 0 && (
+              <View style={styles.feedInfoMetaPill}>
+                <Music size={10} color="rgba(255,255,255,0.7)" />
+                <Text style={styles.feedInfoMetaText}>{item.set.tracksIdentified} tracks</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
       <DoubleTapHeart
         visible={showDoubleTapHeart}
         onComplete={() => setShowDoubleTapHeart(false)}
@@ -1433,6 +1446,7 @@ export default function FeedScreen() {
   const [feedAreaHeight, setFeedAreaHeight] = useState(0);
   const [activeCategory, setActiveCategory] = useState<FeedCategory>('for_you');
   const [commentSheetSetId, setCommentSheetSetId] = useState<string | null>(null);
+  const openCommentsRef = useRef<(setId: string) => void>(() => {});
   const feedListRef = useRef<FlatList>(null);
 
   // ── Audio Preview ──
@@ -1489,6 +1503,12 @@ export default function FeedScreen() {
     }
     setNowPlaying(null);
   }, []);
+
+  // Keep openComments ref updated so memoized renderFeedCard always calls latest version
+  openCommentsRef.current = (setId: string) => {
+    stopAudio();
+    setCommentSheetSetId(setId);
+  };
 
   const loadAndPlay = useCallback(async (gen: number, url: string, title: string, artist: string): Promise<boolean> => {
     if (audioGenRef.current !== gen) return false;
@@ -2037,7 +2057,7 @@ export default function FeedScreen() {
           stopAudio();
           router.push(`/(tabs)/(discover)/${item.set.id}`);
         }}
-        onOpenComments={(setId) => { stopAudio(); setCommentSheetSetId(setId); }}
+        onOpenComments={(setId) => openCommentsRef.current(setId)}
         onTracksLoaded={handleTracksLoaded}
         onSkipTrack={skipToNextTrack}
         nowPlaying={nowPlaying}
@@ -2267,20 +2287,11 @@ const styles = StyleSheet.create({
     bottom: 90,
     alignItems: 'center',
     gap: 14,
-    zIndex: 10,
+    zIndex: 20,
   },
   glassActionOuter: {
     alignItems: 'center',
     gap: 4,
-  },
-  glassActionShadow: {
-    position: 'absolute',
-    top: 3,
-    left: 2,
-    right: 2,
-    bottom: -1,
-    borderRadius: 24,
-    backgroundColor: 'rgba(0,0,0,0.4)',
   },
   glassActionFace: {
     width: 46,
@@ -2307,15 +2318,23 @@ const styles = StyleSheet.create({
   },
 
   // ── Glass Artist Badge (top-left) ──
-  feedArtistBadge: {
+  feedTopBadgeRow: {
     position: 'absolute',
     top: 12,
     left: 12,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 8,
+    zIndex: 10,
+  },
+  feedArtistBadge: {
+    flex: 1,
+    maxWidth: '75%',
     borderRadius: 22,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
-    // 3D lift
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
@@ -2338,28 +2357,68 @@ const styles = StyleSheet.create({
   feedArtistBadgeInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    gap: 7,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  feedArtistBadgeTextCol: {
+    flex: 1,
+    gap: 1,
   },
   feedBadgeArtistName: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700' as const,
     color: '#fff',
-    maxWidth: 140,
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
   },
-  feedBadgeDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: 'rgba(255,255,255,0.4)',
-  },
   feedBadgeTime: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.5)',
+  },
+  feedVenueBadge: {
+    flexShrink: 1,
+    maxWidth: (SCREEN_WIDTH / 2) - 20,
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  feedVenueBadgeTint: {
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
+  },
+  feedVenueBadgeLightEdge: {
+    position: 'absolute',
+    top: 0,
+    left: 6,
+    right: 6,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1,
+    zIndex: 2,
+  },
+  feedVenueBadgeInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  feedVenueBadgeText: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
+    fontWeight: '700' as const,
+    color: 'rgba(255, 255, 255, 0.85)',
+    textShadowColor: 'rgba(196, 30, 58, 0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 
   // (now playing styles moved to npStyles)

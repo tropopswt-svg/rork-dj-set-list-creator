@@ -47,6 +47,7 @@ export default function ArtistProfileScreen() {
   const [sets, setSets] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'tracks' | 'sets'>('sets');
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     loadArtist();
@@ -138,13 +139,14 @@ export default function ArtistProfileScreen() {
 
             {/* Artist Image/Avatar */}
             <View style={styles.avatarContainer}>
-              {artist.image_url ? (
+              {artist.image_url && !imageError ? (
                 <Image
                   source={{ uri: artist.image_url }}
                   style={styles.avatar}
                   contentFit="cover"
                   placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
                   transition={250}
+                  onError={() => setImageError(true)}
                 />
               ) : (
                 <View style={styles.avatarPlaceholder}>

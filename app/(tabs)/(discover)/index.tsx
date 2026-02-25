@@ -266,6 +266,8 @@ export default function DiscoverScreen() {
   const lastCenteredIndex = useRef(-1);
   const lastHapticTime = useRef(0);
   const { user } = useAuth();
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
   const lastTapRef = useRef<Record<string, number>>({});
   const tapTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [doubleTapHeartId, setDoubleTapHeartId] = useState<string | null>(null);
@@ -952,10 +954,11 @@ export default function DiscoverScreen() {
       delete tapTimerRef.current[setId];
       lastTapRef.current[setId] = 0;
 
-      if (user) {
+      const currentUser = userRef.current;
+      if (currentUser) {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         setDoubleTapHeartId(setId);
-        socialService.likeSet(user.id, setId);
+        socialService.likeSet(currentUser.id, setId);
       }
     } else {
       // First tap — wait for possible second tap
@@ -965,7 +968,7 @@ export default function DiscoverScreen() {
         handleSetPress(setId);
       }, 300);
     }
-  }, [user, handleSetPress]);
+  }, [handleSetPress]);
 
   const handleArtistNavPress = useCallback((artist: string) => {
     const slug = artist.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').trim();
@@ -979,23 +982,17 @@ export default function DiscoverScreen() {
   }), []);
 
   const renderSetCard = useCallback(({ item, index }: { item: SetList; index: number }) => (
-    <View style={{ position: 'relative' }}>
-      <AnimatedSetCard
-        setList={item}
-        index={index}
-        scrollY={scrollY}
-        centerOffset={0}
-        onPress={() => handleCardTap(item.id)}
-        onLongPress={() => handleSetLongPress(item)}
-        onArtistPress={handleArtistNavPress}
-        onEventPress={handleEventFilter}
-      />
-      <DoubleTapHeart
-        visible={doubleTapHeartId === item.id}
-        onComplete={() => setDoubleTapHeartId(null)}
-      />
-    </View>
-  ), [scrollY, handleCardTap, handleSetLongPress, handleArtistNavPress, handleEventFilter, doubleTapHeartId]);
+    <AnimatedSetCard
+      setList={item}
+      index={index}
+      scrollY={scrollY}
+      centerOffset={0}
+      onPress={() => handleCardTap(item.id)}
+      onLongPress={() => handleSetLongPress(item)}
+      onArtistPress={handleArtistNavPress}
+      onEventPress={handleEventFilter}
+    />
+  ), [scrollY, handleCardTap, handleSetLongPress, handleArtistNavPress, handleEventFilter]);
 
   const keyExtractor = useCallback((item: SetList) => item.id, []);
 
@@ -1299,12 +1296,22 @@ export default function DiscoverScreen() {
             }
             ListEmptyComponent={listEmptyComponent}
             removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            windowSize={7}
+            maxToRenderPerBatch={5}
+            windowSize={5}
             onScrollToIndexFailed={(info) => {
               flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
             }}
           />
+        )}
+
+        {/* Double-tap heart overlay — rendered once outside FlatList to avoid re-rendering all items */}
+        {doubleTapHeartId && (
+          <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <DoubleTapHeart
+              visible={true}
+              onComplete={() => setDoubleTapHeartId(null)}
+            />
+          </View>
         )}
 
         <ImportSetModal
