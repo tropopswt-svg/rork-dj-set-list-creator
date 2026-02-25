@@ -182,7 +182,6 @@ module.exports = async function handler(req, res) {
                         timestamp_seconds: track.timestamp_seconds || 0,
                         position: track.position || 0,
                         is_id: track.title?.toLowerCase() === 'id' || track.is_unreleased || false,
-                        is_timed: hasTimestamp,
                         source: '1001tracklists',
                         is_unreleased: isUnreleased,
                         unreleased_source: isUnreleased ? 'comment_hint' : null,

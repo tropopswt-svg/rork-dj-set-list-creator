@@ -218,7 +218,7 @@ export default async function handler(req, res) {
     // Check if tracks have real timestamps or are just ordered
     const totalDuration = set.duration_seconds || 0;
     const tracksWithRealTimestamps = setTracks?.filter(t =>
-      t.is_timed && t.timestamp_seconds && t.timestamp_seconds > 0
+      t.timestamp_seconds && t.timestamp_seconds > 0
     ).length || 0;
     const hasRealTimestamps = tracksWithRealTimestamps > 1;
 
@@ -265,7 +265,7 @@ export default async function handler(req, res) {
           /unreleased|forthcoming|dubplate/i.test(track.track_title || '') ||
           /unreleased/i.test(track.artist_name || '')
         )) || false,
-        isTimed: track.is_timed !== false || distributeTimestamps,
+        isTimed: (timestamp > 0) || distributeTimestamps,
         trackId: track.track_id,
         addedAt: track.created_at,
         source: track.source || '1001tracklists',

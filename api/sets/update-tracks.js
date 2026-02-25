@@ -144,7 +144,7 @@ export default async function handler(req, res) {
           if (!bestMatch.timestamp_seconds || bestMatch.timestamp_seconds === 0) {
             updateData.timestamp_seconds = timestamp;
             updateData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
-            updateData.is_timed = true;
+            // is_timed column not in schema — timestamp_seconds > 0 implies timed
           }
           updatedCount++;
         } else {
@@ -184,7 +184,6 @@ export default async function handler(req, res) {
             timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
             source: source || 'youtube',
             is_id: false,
-            is_timed: true,
           };
           if (scrapedUnreleased) {
             insertData.is_unreleased = true;

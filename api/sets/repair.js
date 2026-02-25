@@ -43,7 +43,7 @@ export default async function handler(req, res) {
 
     const { data: tracks } = await supabase
       .from('set_tracks')
-      .select('id, track_title, artist_name, position, source, is_timed, timestamp_seconds')
+      .select('id, track_title, artist_name, position, source, timestamp_seconds')
       .eq('set_id', setId)
       .order('position', { ascending: true });
 
@@ -166,7 +166,6 @@ export default async function handler(req, res) {
           timestamp_str: t.timestampFormatted || null,
           source: t.source || 'youtube',
           is_id: false,
-          is_timed: !!(t.timestamp && t.timestamp > 0),
         });
         if (!error) {
           inserted++;
