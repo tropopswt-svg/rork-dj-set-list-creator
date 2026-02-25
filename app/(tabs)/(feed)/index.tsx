@@ -1298,17 +1298,12 @@ function CategoryCarousel(props: {
     const isForYou = item.key === 'for_you';
     const scale = scrollXRef.interpolate({
       inputRange,
-      outputRange: [0.72, isForYou ? 1.15 : 1.05, 0.72],
+      outputRange: [0.72, 1.0, 0.72],
       extrapolate: 'clamp',
     });
     const itemOpacity = scrollXRef.interpolate({
       inputRange,
       outputRange: [0.4, 1, 0.4],
-      extrapolate: 'clamp',
-    });
-    const translateY = scrollXRef.interpolate({
-      inputRange,
-      outputRange: [2, isForYou ? -5 : -3, 2],
       extrapolate: 'clamp',
     });
 
@@ -1324,7 +1319,7 @@ function CategoryCarousel(props: {
           isCenter && carStyles.pillCenter,
           isCenter && isForYou && carStyles.pillForYou,
           {
-            transform: [{ scale }, { translateY }],
+            transform: [{ scale }],
             opacity: itemOpacity,
           },
         ]}>
@@ -1374,10 +1369,9 @@ function CategoryCarousel(props: {
 
 const carStyles = StyleSheet.create({
   bar: {
-    height: 48,
+    height: 50,
     backgroundColor: '#F0EDE8',
-    zIndex: 20,
-    overflow: 'visible',
+    justifyContent: 'center',
   },
   pill: {
     paddingHorizontal: 14,
@@ -1399,15 +1393,10 @@ const carStyles = StyleSheet.create({
     elevation: 6,
   },
   pillForYou: {
-    backgroundColor: 'rgba(196,30,58,0.1)',
-    borderColor: 'rgba(196,30,58,0.4)',
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    shadowColor: 'rgba(196,30,58,0.5)',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 1,
-    shadowRadius: 16,
-    elevation: 8,
+    backgroundColor: '#C41E3A',
+    borderColor: '#C41E3A',
+    paddingHorizontal: 22,
+    paddingVertical: 8,
   },
   txtCenter: {
     fontSize: 15,
@@ -1417,8 +1406,9 @@ const carStyles = StyleSheet.create({
     textAlign: 'center',
   },
   txtForYou: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '900' as const,
+    color: '#FFFFFF',
   },
   txtSide: {
     fontSize: 12,
