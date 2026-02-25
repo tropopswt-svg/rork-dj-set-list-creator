@@ -66,40 +66,89 @@ export default async function handler(req, res) {
     });
   }
 
-  // POST: Repair a set (fix track_count, optionally re-import)
+  // POST: Repair a set (fix track_count, clean garbage tracks, reset source overwrite)
   if (req.method === 'POST') {
-    const { setId } = req.body;
+    const { setId, action } = req.body || {};
     if (!setId) return res.status(400).json({ error: 'setId is required' });
 
     const { data: set } = await supabase
       .from('sets')
-      .select('id, title, track_count')
+      .select('id, title, track_count, source')
       .eq('id', setId)
       .single();
 
     if (!set) return res.status(404).json({ error: 'Set not found' });
 
-    // Count actual tracks
+    const results = { setId, actions: [] };
+
+    // Action: cleanGarbage — remove tracks with obviously bad titles from YouTube comments
+    if (!action || action === 'cleanGarbage') {
+      const { data: allTracks } = await supabase
+        .from('set_tracks')
+        .select('id, track_title, artist_name, position, source')
+        .eq('set_id', setId);
+
+      const garbageIds = [];
+      for (const t of (allTracks || [])) {
+        const title = t.track_title || '';
+        const artist = t.artist_name || '';
+        const combined = `${artist} ${title}`;
+        // Detect garbage: very long text (comment fragments), contains emoji, contains "RIP", "rest in peace", etc.
+        const isGarbage =
+          combined.length > 120 ||
+          /rest in peace|RIP |🙏|❤️|🔥|😍|💀/i.test(combined) ||
+          /love the |reminds me of|this track/i.test(combined) ||
+          /let's get this \(/i.test(title) ||
+          /\(fc\d/i.test(title);
+
+        if (isGarbage) {
+          garbageIds.push({ id: t.id, title: `${t.artist_name} - ${t.track_title}` });
+        }
+      }
+
+      if (garbageIds.length > 0) {
+        for (const g of garbageIds) {
+          await supabase.from('set_tracks').delete().eq('id', g.id);
+        }
+        results.actions.push({ action: 'cleanGarbage', removed: garbageIds.length, tracks: garbageIds.map(g => g.title) });
+      }
+    }
+
+    // Action: fixSource — reset source back to '1001tracklists' for tracks that were wrongly overwritten
+    if (!action || action === 'fixSource') {
+      if (set.source === '1001tracklists') {
+        const { data: wrongSource } = await supabase
+          .from('set_tracks')
+          .select('id')
+          .eq('set_id', setId)
+          .eq('source', 'youtube');
+
+        if (wrongSource && wrongSource.length > 0) {
+          for (const t of wrongSource) {
+            await supabase.from('set_tracks').update({ source: '1001tracklists' }).eq('id', t.id);
+          }
+          results.actions.push({ action: 'fixSource', fixed: wrongSource.length });
+        }
+      }
+    }
+
+    // Always: fix track_count to match actual rows
     const { count: actualCount } = await supabase
       .from('set_tracks')
       .select('*', { count: 'exact', head: true })
       .eq('set_id', setId);
 
-    // Fix track_count if mismatched
     if (actualCount !== null && actualCount !== set.track_count) {
       await supabase
         .from('sets')
         .update({ track_count: actualCount })
         .eq('id', setId);
+      results.actions.push({ action: 'fixCount', from: set.track_count, to: actualCount });
     }
 
-    return res.status(200).json({
-      success: true,
-      setId,
-      previousTrackCount: set.track_count,
-      actualTrackCount: actualCount,
-      fixed: actualCount !== set.track_count,
-    });
+    results.success = true;
+    results.finalTrackCount = actualCount;
+    return res.status(200).json(results);
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
