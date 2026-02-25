@@ -2391,10 +2391,15 @@ export default function SetDetailScreen() {
                             coverUrl: importResult.setList.coverUrl,
                           }),
                         });
+                        // Read the breakdown from update-tracks
+                        let updateData: any = {};
+                        try {
+                          updateData = await updateResponse.json();
+                        } catch {}
                         if (!updateResponse.ok) {
-                          const errBody = await updateResponse.json().catch(() => ({}));
-                          console.warn('[Reanalyze] update-tracks error:', errBody);
+                          console.warn('[Reanalyze] update-tracks error:', updateData);
                         }
+
                         fetch(`${API_BASE_URL}/api/spotify-enrich`, {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
@@ -2405,15 +2410,30 @@ export default function SetDetailScreen() {
                         if (refreshData.success && refreshData.set) {
                           setDbSet(transformApiSet(refreshData.set));
                         }
+
+                        // Build breakdown message from update-tracks response
+                        const timestamped = updateData.updatedCount || 0;
+                        const verified = updateData.confirmedCount || 0;
+                        const added = updateData.newTracksAdded || 0;
+                        const parts: string[] = [];
+                        if (timestamped > 0) parts.push(`${timestamped} timestamped`);
+                        if (verified > 0) parts.push(`${verified} verified`);
+                        if (added > 0) parts.push(`${added} new`);
+                        const resultType = (timestamped > 0 || added > 0) ? 'success' : (verified > 0 ? 'success' : 'empty');
+                        const msg = parts.length > 0
+                          ? parts.join(', ')
+                          : 'No changes made';
+
                         // Show result popup after chart modal is gone
                         setTimeout(() => {
-                          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                          Haptics.notificationAsync(
+                            resultType === 'success'
+                              ? Haptics.NotificationFeedbackType.Success
+                              : Haptics.NotificationFeedbackType.Warning
+                          );
                           analyzePopupScale.value = 0;
                           analyzePopupOpacity.value = 0;
-                          const timedCount = importResult.setList?.timedTracksCount || importResult.setList?.tracks?.filter((t: any) => t.timestamp > 0).length || 0;
-                          const totalCount = importResult.setList.tracks.length;
-                          const msg = timedCount > 0 ? `trakd ${totalCount} tracks (${timedCount} timestamped)` : `trakd ${totalCount} tracks`;
-                          setAnalyzeResult({ type: 'success', message: msg, trackCount: totalCount });
+                          setAnalyzeResult({ type: resultType as any, message: msg, trackCount: timestamped + added });
                           analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
                           analyzePopupOpacity.value = withTiming(1, { duration: 200 });
                         }, 250);
@@ -2422,7 +2442,7 @@ export default function SetDetailScreen() {
                           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
                           analyzePopupScale.value = 0;
                           analyzePopupOpacity.value = 0;
-                          setAnalyzeResult({ type: 'empty', message: 'Nothing new found' });
+                          setAnalyzeResult({ type: 'empty', message: 'No tracks found in comments or description' });
                           analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
                           analyzePopupOpacity.value = withTiming(1, { duration: 200 });
                         }, 250);
@@ -2635,7 +2655,7 @@ export default function SetDetailScreen() {
                   >
                     <Sparkles size={28} color="#C41E3A" />
                   </Animated.View>
-                  <Text style={styles.analyzePopupTitle}>Tracks Found!</Text>
+                  <Text style={styles.analyzePopupTitle}>Analysis Complete</Text>
                   <Text style={styles.analyzePopupMessage}>{analyzeResult.message}</Text>
                 </>
               ) : analyzeResult.type === 'empty' ? (
@@ -2643,8 +2663,8 @@ export default function SetDetailScreen() {
                   <View style={[styles.analyzePopupIconRing, { borderColor: 'rgba(156, 150, 142, 0.3)' }]}>
                     <ListMusic size={28} color="#9C968E" />
                   </View>
-                  <Text style={styles.analyzePopupTitle}>Nothing New</Text>
-                  <Text style={styles.analyzePopupMessage}>No new tracks could be identified from this source</Text>
+                  <Text style={styles.analyzePopupTitle}>No Changes</Text>
+                  <Text style={styles.analyzePopupMessage}>{analyzeResult.message || 'No new tracks could be identified from this source'}</Text>
                 </>
               ) : (
                 <>
