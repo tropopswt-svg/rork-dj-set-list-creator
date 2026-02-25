@@ -246,8 +246,9 @@ function parseTrackInfo(text) {
   if (/\([a-zA-Z]{1,3}$/.test(cleaned)) return null;
 
   // Reject text that starts with a lowercase letter (truncated from the start, e.g., "ree Style Dub")
-  // Exception: known lowercase prefixes (dj, mc, etc.) and intentional lowercase artists
-  if (/^[a-z]/.test(cleaned) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/.test(cleaned.toLowerCase())) {
+  // Exception: known lowercase prefixes and intentional lowercase artists
+  // Also allow if text contains " - " (likely a valid "artist - title" line)
+  if (/^[a-z]/.test(cleaned) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/.test(cleaned.toLowerCase()) && !cleaned.includes(' - ')) {
     return null;
   }
 
@@ -355,7 +356,9 @@ function isValidTrackPart(str) {
   if (/^forthcoming\b/i.test(str)) return false;
 
   // Reject parts starting with lowercase (truncated text) unless known pattern
-  if (/^[a-z]/.test(str) && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/i.test(str)) return false;
+  // Allow lowercase-starting parts if they have 4+ alpha chars (real artist names like "kölsch", "deadmau5")
+  const lcAlphaCount = (str.match(/[a-zA-Z]/g) || []).length;
+  if (/^[a-z]/.test(str) && lcAlphaCount < 4 && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/i.test(str)) return false;
 
   // Reject common non-track patterns
   const invalidPatterns = [
@@ -555,6 +558,8 @@ function parseDescription(description, djName = null) {
   const lines = cleanText(description).split(/[\n\r]+/);
   const tracks = [];
   const seen = new Set();
+
+  // Pass 1: Extract tracks that have timestamps (most reliable)
   for (const line of lines) {
     const timestamps = extractTimestamps(line);
     if (timestamps.length > 0) {
@@ -584,6 +589,68 @@ function parseDescription(description, djName = null) {
       }
     }
   }
+
+  // Pass 2: If no timestamped tracks found, look for non-timestamped tracklists
+  // (e.g. BBC Radio 1 tracklists: "01. Artist - Track" or plain "Artist - Track" lines)
+  if (tracks.length === 0) {
+    const candidateLines = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      // Strip numbered prefix: "01.", "1.", "2)", "03 -", etc.
+      let cleaned = trimmed.replace(/^\d{1,3}[.):\-–—]\s*/, '').trim();
+      // Also handle "01 " (number + space, no punctuation) when followed by Artist - Track
+      if (/^\d{1,3}\s+\S/.test(trimmed) && !cleaned.match(/^\d{1,3}\s/)) {
+        // already stripped above
+      } else if (/^\d{1,3}\s+/.test(trimmed)) {
+        cleaned = trimmed.replace(/^\d{1,3}\s+/, '').trim();
+      }
+
+      const info = parseTrackInfo(cleaned);
+      if (info) {
+        candidateLines.push({ line: trimmed, info, cleaned });
+      }
+    }
+
+    // Only use non-timestamped tracks if we found a meaningful cluster (3+ tracks)
+    // This prevents random "Artist - Title" lines in descriptions from being treated as tracklists
+    if (candidateLines.length >= 3) {
+      console.log(`[parseDescription] Found ${candidateLines.length} non-timestamped tracks (tracklist without timestamps)`);
+      for (let i = 0; i < candidateLines.length; i++) {
+        let info = candidateLines[i].info;
+
+        // If the parsed "artist" is actually the DJ name, fix it
+        if (djName && areNamesSimilar(info.artist, djName)) {
+          const reparsed = parseTrackInfo(info.title);
+          if (reparsed) {
+            info = reparsed;
+          } else {
+            info = { title: info.title, artist: 'Unknown Artist' };
+          }
+        }
+
+        const key = `${i}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          const isUnreleased = detectUnreleasedInText(candidateLines[i].line);
+          const cleanTitle = isUnreleased ? stripUnreleasedFromTitle(info.title) : info.title;
+          tracks.push({
+            timestamp: 0, // No real timestamp — will be distributed evenly by the client
+            timestampFormatted: '',
+            title: cleanTitle,
+            artist: info.artist,
+            confidence: 0.85, // Slightly lower since no timestamp verification
+            sourceAuthor: 'Uploader',
+            likes: 0,
+            isUnreleased,
+            position: i, // Preserve order from description
+          });
+        }
+      }
+    }
+  }
+
   return tracks;
 }
 
@@ -1777,7 +1844,17 @@ async function importFromSoundCloud(url) {
  */
 function deduplicateSingleSource(tracks, platform = 'youtube', setId = null, setName = null) {
   if (tracks.length === 0) return { tracks: [], conflicts: [] };
-  
+
+  // If all tracks have timestamp 0 and have position fields (non-timestamped tracklist),
+  // skip segment-based dedup — each line is a distinct ordered track from the description
+  const allZeroTimestamp = tracks.every(t => !t.timestamp || t.timestamp === 0);
+  const hasPositions = tracks.some(t => t.position !== undefined);
+  if (allZeroTimestamp && hasPositions) {
+    console.log(`[deduplicateSingleSource] Non-timestamped tracklist (${tracks.length} tracks) — skipping segment dedup`);
+    const sorted = [...tracks].sort((a, b) => (a.position || 0) - (b.position || 0));
+    return { tracks: sorted, conflicts: [] };
+  }
+
   // Sort by timestamp
   const sorted = [...tracks].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
   
