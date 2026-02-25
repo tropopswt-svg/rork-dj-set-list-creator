@@ -58,7 +58,9 @@ import { useLikeSet } from '@/hooks/useSocial';
 import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
 import { useSets } from '@/contexts/SetsContext';
 import { useUser } from '@/contexts/UserContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAudioPreview } from '@/contexts/AudioPreviewContext';
+import { AuthGateModal } from '@/components/AuthGate';
 
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -264,7 +266,7 @@ const ringStyles = StyleSheet.create({
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
   },
   glassFace: {
     width: 66,
@@ -351,9 +353,11 @@ export default function SetDetailScreen() {
   const router = useRouter();
   const { sets, addSourceToSet, voteOnConflict, getActiveConflicts, addTracksToSet } = useSets();
   const { userId, addPoints } = useUser();
+  const { isAuthenticated } = useAuth();
   const { currentTrackId, isPlaying, isLoading: isPreviewLoading, failedTrackId, playPreview, playDeezerPreview, stop: stopAudio } = useAudioPreview();
   const { isLiked, toggleLike } = useLikeSet(id);
 
+  const [showAuthGate, setShowAuthGate] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [tracklistCollapsed, setTracklistCollapsed] = useState(false);
   const [showFillGapModal, setShowFillGapModal] = useState(false);
@@ -363,6 +367,13 @@ export default function SetDetailScreen() {
   const [analyzeResult, setAnalyzeResult] = useState<{ type: 'success' | 'empty' | 'error'; message: string; trackCount?: number } | null>(null);
   const analyzePopupScale = useSharedValue(0);
   const analyzePopupOpacity = useSharedValue(0);
+  const analyzePopupStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: analyzePopupScale.value }],
+    opacity: analyzePopupOpacity.value,
+  }));
+  const analyzePopupIconStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: withDelay(200, withSpring(1.1, { damping: 8 })) }],
+  }));
   const [selectedContributor, setSelectedContributor] = useState<string | null>(null);
 
   // Database set state
@@ -411,6 +422,7 @@ export default function SetDetailScreen() {
   // Cover image fallback state
   const [coverImageError, setCoverImageError] = useState(false);
   const [coverTriedHqFallback, setCoverTriedHqFallback] = useState(false);
+  const [artistImageFailed, setArtistImageFailed] = useState(false);
 
   // Chart detail modal
   const [showChartModal, setShowChartModal] = useState(false);
@@ -1174,33 +1186,41 @@ export default function SetDetailScreen() {
   }, [sortedTracks, conflicts, isLowQualityTrack]);
 
   const handleLike = useCallback(() => {
+    if (!isAuthenticated) {
+      setShowAuthGate(true);
+      return;
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     toggleLike();
-  }, [toggleLike]);
+  }, [toggleLike, isAuthenticated]);
 
 
   const getHeaderCoverImage = useCallback((): string | null => {
     if (!setList) return null;
-    if (coverImageError && coverTriedHqFallback) return setList.artistImageUrl || null;
+    const artistFallback = (!artistImageFailed && setList.artistImageUrl) || null;
+    if (coverImageError && coverTriedHqFallback) return artistFallback;
     if (setList.coverUrl) {
       if (coverImageError && setList.coverUrl.includes('maxresdefault')) {
         if (!coverTriedHqFallback) return setList.coverUrl.replace('maxresdefault', 'hqdefault');
-        return setList.artistImageUrl || null;
+        return artistFallback;
       }
       return setList.coverUrl;
     }
-    return setList.artistImageUrl || null;
-  }, [setList, coverImageError, coverTriedHqFallback]);
+    return artistFallback;
+  }, [setList, coverImageError, coverTriedHqFallback, artistImageFailed]);
 
   const handleCoverImageError = useCallback(() => {
     if (!coverTriedHqFallback && setList?.coverUrl?.includes('maxresdefault')) {
       setCoverTriedHqFallback(true);
       setCoverImageError(true);
-    } else {
+    } else if (!coverImageError) {
       setCoverTriedHqFallback(true);
       setCoverImageError(true);
+    } else {
+      // All cover fallbacks exhausted, artist image also failed — show placeholder
+      setArtistImageFailed(true);
     }
-  }, [coverTriedHqFallback, setList?.coverUrl]);
+  }, [coverTriedHqFallback, coverImageError, setList?.coverUrl]);
 
   // Show loading / error / not found state
   if (isLoadingSet || !setList) {
@@ -1658,7 +1678,7 @@ export default function SetDetailScreen() {
               return (
                 <View style={styles.needsSourceBanner}>
                   <View style={styles.needsSourceIconContainer}>
-                    <AlertCircle size={20} color="#FF6B35" />
+                    <AlertCircle size={14} color="#FF6B35" />
                   </View>
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Source Needed for Analysis</Text>
@@ -1675,7 +1695,7 @@ export default function SetDetailScreen() {
               return (
                 <View style={[styles.needsSourceBanner, { backgroundColor: 'rgba(251, 146, 60, 0.1)', borderColor: 'rgba(251, 146, 60, 0.3)' }]}>
                   <View style={[styles.needsSourceIconContainer, { backgroundColor: 'rgba(251, 146, 60, 0.2)' }]}>
-                    <Sparkles size={20} color="#FB923C" />
+                    <Sparkles size={14} color="#FB923C" />
                   </View>
                   <View style={styles.needsSourceContent}>
                     <Text style={styles.needsSourceTitle}>Ready for Analysis</Text>
@@ -2578,10 +2598,7 @@ export default function SetDetailScreen() {
                 analyzeResult.type === 'success' && styles.analyzePopupSuccess,
                 analyzeResult.type === 'empty' && styles.analyzePopupEmpty,
                 analyzeResult.type === 'error' && styles.analyzePopupError,
-                useAnimatedStyle(() => ({
-                  transform: [{ scale: analyzePopupScale.value }],
-                  opacity: analyzePopupOpacity.value,
-                })),
+                analyzePopupStyle,
               ]}
             >
               {analyzeResult.type === 'success' ? (
@@ -2590,9 +2607,7 @@ export default function SetDetailScreen() {
                     style={[
                       styles.analyzePopupIconRing,
                       { borderColor: 'rgba(196, 30, 58, 0.4)' },
-                      useAnimatedStyle(() => ({
-                        transform: [{ scale: withDelay(200, withSpring(1.1, { damping: 8 })) }],
-                      })),
+                      analyzePopupIconStyle,
                     ]}
                   >
                     <Sparkles size={28} color="#C41E3A" />
@@ -2810,6 +2825,12 @@ export default function SetDetailScreen() {
         setId={id || undefined}
         audioUrl={audioSource?.url}
       />
+      <AuthGateModal
+        visible={showAuthGate}
+        onClose={() => setShowAuthGate(false)}
+        title="Sign Up to Like Sets"
+        message="Create a free account to save your favorite sets and build your music profile."
+      />
     </View>
   );
 }
@@ -2868,9 +2889,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(105,100,95,1)',
   },
   darkToCreamGradient: {
-    height: 140,
+    height: 100,
     marginTop: -1,
-    marginBottom: -40,
+    marginBottom: -50,
   },
   content: {
     paddingHorizontal: 20,
@@ -2880,7 +2901,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   titleSection: {
-    marginBottom: 24,
+    marginBottom: 14,
   },
   titleRow: {
     flexDirection: 'row',
@@ -2933,11 +2954,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
     borderTopColor: 'rgba(255,255,255,0.18)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   venue: {
     fontSize: 14,
@@ -3136,7 +3154,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statsSectionWrap: {
-    marginBottom: 12,
+    marginBottom: 6,
     alignItems: 'center',
   },
   statsSection: {
@@ -3742,18 +3760,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(255, 107, 53, 0.1)',
-    borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-    gap: 8,
+    borderRadius: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+    gap: 6,
     borderWidth: 1,
     borderColor: 'rgba(255, 107, 53, 0.25)',
   },
   needsSourceIconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: 'rgba(255, 107, 53, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -3762,15 +3780,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   needsSourceTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '600' as const,
     color: '#FF6B35',
-    marginBottom: 2,
+    marginBottom: 1,
   },
   needsSourceText: {
-    fontSize: 11,
+    fontSize: 9.5,
     color: '#6B6560',
-    lineHeight: 15,
+    lineHeight: 13,
   },
   // Pick-and-place styles
   unplacedTrackCard: {
