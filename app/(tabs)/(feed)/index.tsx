@@ -1836,19 +1836,10 @@ export default function FeedScreen() {
   }, [stopAudio, playPreviewForSet]);
 
   // Called by FeedCard when its track data loads (supplements cache)
-  // Also triggers autoplay for the first card — avoids race condition with
-  // handleSetBecameVisible fetching the same tracks simultaneously.
+  // If this set is the visible one and no audio is playing, start playback.
   const handleTracksLoaded = useCallback((setId: string, tracks: any[]) => {
     tracksCacheRef.current.set(setId, tracks);
-    // Auto-play: first card whose tracks load triggers playback (fires once)
-    if (!hasAutoPlayedRef.current && !audioDisabledRef.current) {
-      hasAutoPlayedRef.current = true;
-      visibleSetIdRef.current = setId;
-      playPreviewForSet(setId, tracks);
-      return;
-    }
-    // If this card is visible and no audio is playing yet, start
-    if (visibleSetIdRef.current === setId && !soundRef.current) {
+    if (visibleSetIdRef.current === setId && !soundRef.current && !audioDisabledRef.current) {
       playPreviewForSet(setId, tracks);
     }
   }, [playPreviewForSet]);
@@ -2149,6 +2140,15 @@ export default function FeedScreen() {
       handleSetBecameVisible(realFeedItems[index].set.id);
     }
   }, [fullFeedHeight, realFeedItems, handleSetBecameVisible]);
+
+  // Mark the first set as visible so handleTracksLoaded will autoplay
+  // when its tracks arrive. No fetch here — FeedCard handles that.
+  useEffect(() => {
+    if (realFeedItems.length > 0 && !hasAutoPlayedRef.current) {
+      hasAutoPlayedRef.current = true;
+      visibleSetIdRef.current = realFeedItems[0].set.id;
+    }
+  }, [realFeedItems.length]);
 
   const renderFeedCard = useCallback(({ item }: { item: any }) => (
     <View style={{ height: fullFeedHeight, justifyContent: 'center', paddingVertical: CARD_GAP / 2 }}>
