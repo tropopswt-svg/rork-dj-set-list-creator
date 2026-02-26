@@ -42,6 +42,61 @@ export function normalize(str) {
     .trim();
 }
 
+// Normalize and strip articles for looser title comparison
+function normalizeTitle(str) {
+  return normalize(str)
+    .replace(/\b(a|an|the)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Word-overlap similarity between two title strings (0–1)
+function titleSimilarity(a, b) {
+  const na = normalizeTitle(a);
+  const nb = normalizeTitle(b);
+  if (na === nb) return 1;
+  if (na.includes(nb) || nb.includes(na)) return 0.9;
+  const wa = na.split(' ').filter(w => w.length > 1);
+  const wb = nb.split(' ').filter(w => w.length > 1);
+  if (wa.length === 0 || wb.length === 0) return 0;
+  const shared = wa.filter(w => wb.includes(w)).length;
+  return shared / Math.max(wa.length, wb.length);
+}
+
+// Fetch Spotify search results for a raw query string
+async function fetchSpotifyTracks(token, query, limit = 5) {
+  const response = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
+    { headers: { 'Authorization': `Bearer ${token}` } }
+  );
+  if (response.status === 429) {
+    const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+    return { _rateLimited: true, _retryAfter: retryAfter };
+  }
+  if (!response.ok) return [];
+  const data = await response.json();
+  return data.tracks?.items || [];
+}
+
+function formatSpotifyTrack(track) {
+  const images = track.album?.images || [];
+  const albumArt = images.find(i => i.width >= 300)?.url || images[0]?.url;
+  return {
+    spotify_id: track.id,
+    title: track.name,
+    artist: track.artists[0]?.name,
+    artists: track.artists.map(a => a.name),
+    album: track.album?.name,
+    album_art_url: albumArt || null,
+    preview_url: track.preview_url || null,
+    spotify_url: track.external_urls?.spotify || null,
+    isrc: track.external_ids?.isrc || null,
+    duration_ms: track.duration_ms,
+    release_date: track.album?.release_date || null,
+    popularity: track.popularity || 0,
+  };
+}
+
 export async function searchTrackOnSpotify(token, artist, title) {
   const cleanTitle = title
     .replace(/\(unreleased\)/gi, '')
@@ -49,52 +104,42 @@ export async function searchTrackOnSpotify(token, artist, title) {
     .replace(/\(clip\)/gi, '')
     .trim();
 
-  const query = encodeURIComponent(`track:${cleanTitle} artist:${artist}`);
+  const unknownArtist = !artist || /^(unknown|unknown artist|id|n\/a|various)$/i.test(artist.trim());
 
-  let response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=5`, {
-    headers: { 'Authorization': `Bearer ${token}` },
-  });
+  // Pass 1: strict query with artist
+  const strictTracks = unknownArtist ? [] : await fetchSpotifyTracks(token, `track:${cleanTitle} artist:${artist}`);
+  if (strictTracks._rateLimited) return strictTracks;
 
-  // Handle rate limiting — return signal instead of retrying
-  if (response.status === 429) {
-    const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
-    return { _rateLimited: true, _retryAfter: retryAfter };
-  }
-
-  if (!response.ok) return null;
-
-  const data = await response.json();
-  const tracks = data.tracks?.items || [];
-
-  for (const track of tracks) {
-    const titleSim = normalize(track.name) === normalize(cleanTitle) ||
-      normalize(track.name).includes(normalize(cleanTitle)) ||
-      normalize(cleanTitle).includes(normalize(track.name));
+  // Try to find a good match from Pass 1
+  for (const track of strictTracks) {
+    const ts = titleSimilarity(track.name, cleanTitle);
     const artistMatch = track.artists.some(a =>
       normalize(a.name).includes(normalize(artist)) ||
       normalize(artist).includes(normalize(a.name))
     );
-
-    if (titleSim && artistMatch) {
-      const images = track.album?.images || [];
-      const albumArt = images.find(i => i.width >= 300)?.url || images[0]?.url;
-
-      return {
-        spotify_id: track.id,
-        title: track.name,
-        artist: track.artists[0]?.name,
-        artists: track.artists.map(a => a.name),
-        album: track.album?.name,
-        album_art_url: albumArt || null,
-        preview_url: track.preview_url || null,
-        spotify_url: track.external_urls?.spotify || null,
-        isrc: track.external_ids?.isrc || null,
-        duration_ms: track.duration_ms,
-        release_date: track.album?.release_date || null,
-        popularity: track.popularity || 0,
-      };
-    }
+    if (ts >= 0.75 && artistMatch) return formatSpotifyTrack(track);
   }
+
+  // Pass 2: title-only search — catches wrong/abbreviated/missing artist
+  // (e.g. scraped as "SAM" but real artist is "Chris Stussy")
+  const titleTracks = await fetchSpotifyTracks(token, `track:${cleanTitle}`, 8);
+  if (titleTracks._rateLimited) return titleTracks;
+
+  for (const track of titleTracks) {
+    const ts = titleSimilarity(track.name, cleanTitle);
+    if (ts < 0.75) continue; // Title must be a strong match
+
+    const artistMatch = !unknownArtist && track.artists.some(a =>
+      normalize(a.name).includes(normalize(artist)) ||
+      normalize(artist).includes(normalize(a.name))
+    );
+
+    // Accept if: title matches well AND (artist matches OR artist was unknown/wrong)
+    // Use higher title threshold when accepting without artist confirmation
+    if (artistMatch && ts >= 0.75) return formatSpotifyTrack(track);
+    if (!artistMatch && ts >= 0.88) return formatSpotifyTrack(track);
+  }
+
   return null;
 }
 
