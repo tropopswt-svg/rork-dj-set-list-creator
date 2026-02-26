@@ -1043,19 +1043,9 @@ export default function MyStuffScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
-          <View style={styles.headerSpacer} />
+          <Text style={styles.headerLogo}>trakd</Text>
           <Text style={styles.headerTitle}>Crate</Text>
-          <Pressable
-            style={styles.headerButton}
-            onPress={() => {
-              Haptics.selectionAsync();
-              router.push('/(tabs)/(profile)');
-            }}
-          >
-            <BlurView intensity={50} tint="light" style={styles.headerButtonGlass}>
-              <User size={20} color="#1A1A1E" />
-            </BlurView>
-          </Pressable>
+          <View style={styles.headerSpacer} />
         </View>
 
         <ScrollView
@@ -1176,8 +1166,14 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 12,
   },
+  headerLogo: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#C41E3A',
+    letterSpacing: -0.5,
+  },
   headerSpacer: {
-    width: 38,
+    width: 50,
   },
   headerTitle: {
     fontSize: 20,

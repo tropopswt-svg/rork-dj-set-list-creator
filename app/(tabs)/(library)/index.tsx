@@ -136,82 +136,124 @@ function RecordSleeve({
   );
 }
 
-// ─── Closed Vinyl Crate Visual ─────────────────────────────────
+// ─── Closed Vinyl Crate Visual (auto-scrolling records) ────
+const CRATE_RECORD_W = 52;
+const CRATE_RECORD_H = 90;
+const CRATE_RECORD_STEP = CRATE_RECORD_W + 8;
+const CRATE_INNER_W = CLOSED_CRATE_W - 24; // inner visible area
+
+function CrateRecord({
+  set,
+  index,
+  scrollX,
+}: {
+  set: SetList;
+  index: number;
+  scrollX: Animated.SharedValue<number>;
+}) {
+  const coverUrl = getCoverImageUrl(set.coverUrl);
+
+  const animStyle = useAnimatedStyle(() => {
+    const pos = index * CRATE_RECORD_STEP + scrollX.value;
+    const center = CRATE_INNER_W / 2 - CRATE_RECORD_W / 2;
+    const distFromCenter = pos - center;
+    const normalizedDist = distFromCenter / (CRATE_INNER_W / 2);
+    const absDist = Math.abs(normalizedDist);
+
+    // Center record: bigger, lifted, full opacity
+    const scale = interpolate(absDist, [0, 0.8, 2], [1.15, 1.0, 0.88], Extrapolation.CLAMP);
+    const translateY = interpolate(absDist, [0, 0.8, 2], [-12, 0, 6], Extrapolation.CLAMP);
+    const rotateZ = interpolate(normalizedDist, [-2, 0, 2], [-4, 0, 4], Extrapolation.CLAMP);
+    const opacity = interpolate(absDist, [0, 1, 2], [1, 0.7, 0.35], Extrapolation.CLAMP);
+
+    return {
+      transform: [
+        { translateX: pos },
+        { translateY },
+        { rotateZ: `${rotateZ}deg` },
+        { scale },
+      ],
+      opacity,
+      zIndex: Math.round((1 - absDist) * 10),
+    };
+  });
+
+  return (
+    <Animated.View style={[closedStyles.crateRecord, animStyle]}>
+      {coverUrl ? (
+        <Image
+          source={{ uri: coverUrl }}
+          style={closedStyles.crateRecordCover}
+          transition={200}
+        />
+      ) : (
+        <View style={[closedStyles.crateRecordCover, closedStyles.crateRecordFallback]}>
+          <Disc3 size={14} color="rgba(255,255,255,0.25)" />
+        </View>
+      )}
+      <View style={closedStyles.crateRecordLabel}>
+        <Text style={closedStyles.crateRecordArtist} numberOfLines={1}>{set.artist}</Text>
+      </View>
+      <View style={closedStyles.crateRecordSheen} />
+    </Animated.View>
+  );
+}
+
 function ClosedCrateVisual({
   sets,
-  floatY,
   onOpen,
 }: {
   sets: SetList[];
-  floatY: Animated.SharedValue<number>;
   onOpen: () => void;
 }) {
-  const previewSets = sets.slice(0, 7);
-  const total = previewSets.length;
+  const autoScrollX = useSharedValue(0);
+  const contentW = sets.length * CRATE_RECORD_STEP;
+  const maxTravel = Math.max(0, contentW - CRATE_INNER_W + 8);
 
-  const floatStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: floatY.value }],
-  }));
+  // Auto-scroll: slowly crawl through all records, then back
+  useEffect(() => {
+    if (sets.length <= 4 || maxTravel <= 0) return;
+    // Duration proportional to number of sets — ~1.5s per record
+    const duration = sets.length * 1500;
+    autoScrollX.value = 0;
+    autoScrollX.value = withRepeat(
+      withSequence(
+        withTiming(-maxTravel, { duration, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration, easing: Easing.inOut(Easing.ease) }),
+      ),
+      -1,
+    );
+  }, [sets.length, maxTravel]);
 
   return (
     <View style={closedStyles.wrapper}>
       <Pressable onPress={onOpen}>
-        <Animated.View style={[closedStyles.outerCrate, floatStyle]}>
+        <View style={closedStyles.outerCrate}>
           {/* Glow underneath */}
           <View style={closedStyles.glow} />
 
-          {/* Records peeking out the top */}
-          <View style={closedStyles.peekRow}>
-            {previewSets.map((set, i) => {
-              const coverUrl = getCoverImageUrl(set.coverUrl);
-              const centerIdx = (total - 1) / 2;
-              const off = i - centerIdx;
-              const rotation = off * 2.2;
-              const height = PEEK_H - Math.abs(off) * 5;
-              const xShift = off * (PEEK_W - 3);
-
-              return (
-                <View
-                  key={set.id}
-                  style={[
-                    closedStyles.peekSleeve,
-                    {
-                      height,
-                      transform: [
-                        { translateX: xShift },
-                        { rotateZ: `${rotation}deg` },
-                      ],
-                      zIndex: total - Math.abs(Math.round(off)),
-                    },
-                  ]}
-                >
-                  {coverUrl ? (
-                    <Image
-                      source={{ uri: coverUrl }}
-                      style={closedStyles.peekCover}
-                      transition={200}
-                    />
-                  ) : (
-                    <View style={[closedStyles.peekCover, closedStyles.peekFallback]}>
-                      <Disc3 size={11} color="rgba(255,255,255,0.25)" />
-                    </View>
-                  )}
-                  <View style={closedStyles.peekSheen} />
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Crate body */}
           <View style={closedStyles.body}>
             {/* Side panels for 3D depth */}
             <View style={closedStyles.sideL} />
             <View style={closedStyles.sideR} />
 
-            {/* Front face with slats */}
-            <View style={closedStyles.front}>
+            {/* Records viewport — inside the crate, auto-scrolling */}
+            <View style={closedStyles.recordsInner}>
+              <Animated.View style={closedStyles.recordsRow}>
+                {sets.map((set, i) => (
+                  <CrateRecord
+                    key={set.id}
+                    set={set}
+                    index={i}
+                    scrollX={autoScrollX}
+                  />
+                ))}
+              </Animated.View>
+            </View>
+
+            {/* Front panel (lower half of crate, covers bottom of records) */}
+            <View style={closedStyles.frontPanel}>
               <View style={closedStyles.frontSlats}>
-                <View style={closedStyles.slat} />
                 <View style={closedStyles.slat} />
                 <View style={closedStyles.slat} />
                 <View style={closedStyles.slat} />
@@ -226,10 +268,12 @@ function ClosedCrateVisual({
             {/* Bottom edge */}
             <View style={closedStyles.bottomEdge} />
           </View>
-        </Animated.View>
+        </View>
       </Pressable>
 
-      <Text style={closedStyles.hint}>Tap to dig</Text>
+      <Pressable onPress={onOpen}>
+        <Text style={closedStyles.hint}>Tap to dig</Text>
+      </Pressable>
     </View>
   );
 }
@@ -243,20 +287,7 @@ export default function LibraryScreen() {
   const [crateOpen, setCrateOpen] = useState(false);
 
   const scrollX = useSharedValue(0);
-  const floatY = useSharedValue(0);
   const openAnim = useSharedValue(0);
-
-  // Floating idle animation for closed crate
-  useEffect(() => {
-    floatY.value = withRepeat(
-      withSequence(
-        withTiming(-6, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
-        withTiming(6, { duration: 1800, easing: Easing.inOut(Easing.ease) }),
-      ),
-      -1,
-      true,
-    );
-  }, []);
 
   const loadSavedSets = useCallback(async () => {
     try {
@@ -362,7 +393,6 @@ export default function LibraryScreen() {
               /* ─── Closed crate visual ─── */
               <ClosedCrateVisual
                 sets={savedSets}
-                floatY={floatY}
                 onOpen={handleOpenCrate}
               />
             ) : (
@@ -422,10 +452,12 @@ export default function LibraryScreen() {
 }
 
 // ─── Closed Crate Styles ───────────────────────────────────────
+const CRATE_BODY_H = 160; // taller to fit records inside
+
 const closedStyles = StyleSheet.create({
   wrapper: {
     alignItems: 'center',
-    paddingTop: 50,
+    paddingTop: 30,
   },
   outerCrate: {
     width: CLOSED_CRATE_W,
@@ -445,48 +477,9 @@ const closedStyles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 0,
   },
-  peekRow: {
-    width: CLOSED_CRATE_W,
-    height: PEEK_H,
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-  },
-  peekSleeve: {
-    position: 'absolute',
-    bottom: 0,
-    left: CLOSED_CRATE_W / 2 - PEEK_W / 2,
-    width: PEEK_W,
-    borderRadius: 4,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(20, 20, 22, 0.9)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.18)',
-    borderBottomColor: 'rgba(0,0,0,0.3)',
-  },
-  peekCover: {
-    width: '100%',
-    flex: 1,
-  },
-  peekFallback: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  peekSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '35%',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderTopLeftRadius: 3,
-    borderTopRightRadius: 3,
-  },
   body: {
     width: CLOSED_CRATE_W,
-    height: CLOSED_BODY_H,
+    height: CRATE_BODY_H,
     backgroundColor: 'rgba(18, 18, 22, 0.95)',
     borderRadius: 12,
     borderWidth: 1,
@@ -505,6 +498,7 @@ const closedStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.15)',
     borderRightWidth: 1,
     borderRightColor: 'rgba(255,255,255,0.04)',
+    zIndex: 5,
   },
   sideR: {
     position: 'absolute',
@@ -515,11 +509,89 @@ const closedStyles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.15)',
     borderLeftWidth: 1,
     borderLeftColor: 'rgba(255,255,255,0.04)',
+    zIndex: 5,
   },
-  front: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingVertical: 14,
+  // Records viewport — sits in upper portion of crate, records peek above top edge
+  recordsInner: {
+    position: 'absolute',
+    top: -20, // records peek above the crate rim
+    left: 12,
+    right: 12,
+    height: CRATE_RECORD_H + 20,
+    overflow: 'visible',
+    zIndex: 2,
+  },
+  recordsRow: {
+    width: CRATE_INNER_W,
+    height: CRATE_RECORD_H + 20,
+    position: 'relative',
+  },
+  // Individual record inside crate
+  crateRecord: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: CRATE_RECORD_W,
+    height: CRATE_RECORD_H,
+    borderRadius: 5,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(20,20,22,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(0,0,0,0.3)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  crateRecordCover: {
+    width: '100%',
+    height: CRATE_RECORD_H - 22,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  crateRecordFallback: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crateRecordLabel: {
+    height: 22,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  crateRecordArtist: {
+    fontSize: 7,
+    fontWeight: '700' as const,
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 0.2,
+  },
+  crateRecordSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '35%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
+  // Front panel — lower portion of crate, covers bottom of records
+  frontPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 65,
+    backgroundColor: 'rgba(14, 14, 18, 0.97)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+    zIndex: 3,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
   },
   frontSlats: {
     flex: 1,
@@ -527,19 +599,20 @@ const closedStyles = StyleSheet.create({
   },
   slat: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
     borderRadius: 0.5,
   },
   badge: {
     position: 'absolute',
     right: 20,
-    bottom: 16,
+    bottom: 14,
     backgroundColor: 'rgba(196, 30, 58, 0.25)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(196, 30, 58, 0.35)',
+    zIndex: 10,
   },
   badgeText: {
     fontSize: 12,
@@ -553,6 +626,7 @@ const closedStyles = StyleSheet.create({
     right: 0,
     height: 4,
     backgroundColor: 'rgba(0,0,0,0.3)',
+    zIndex: 4,
   },
   hint: {
     marginTop: 24,

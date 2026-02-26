@@ -136,12 +136,12 @@ export default async function handler(req, res) {
               source: 'cache',
             });
           } else {
-            // Known not-found in cache — mark as unreleased
+            // Known not-found in cache — mark as unreleased, set placeholder to prevent re-checking
             await supabase
               .from('set_tracks')
-              .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
+              .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
-            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+            await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
           continue;
@@ -247,6 +247,8 @@ export default async function handler(req, res) {
             }
 
             if (scArtwork?.artwork_url) {
+              // SoundCloud found artwork — store it but don't mark as unreleased
+              // (being on SoundCloud doesn't mean it's unreleased; Spotify search may have just failed)
               const scData = {
                 album_art_url: scArtwork.artwork_url,
                 title: scArtwork.title || track.track_title,
@@ -257,7 +259,7 @@ export default async function handler(req, res) {
               };
               await supabase
                 .from('set_tracks')
-                .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .update({ spotify_data: scData })
                 .eq('id', track.id);
               enriched++;
               results.push({
@@ -277,7 +279,7 @@ export default async function handler(req, res) {
               };
               await supabase
                 .from('set_tracks')
-                .update({ spotify_data: deezerData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .update({ spotify_data: deezerData })
                 .eq('id', track.id);
               enriched++;
               results.push({
@@ -287,12 +289,12 @@ export default async function handler(req, res) {
                 source: 'deezer_partial',
               });
             } else {
-              // Not found anywhere — mark as unreleased
+              // Not found anywhere — mark as unreleased, set placeholder to prevent re-checking
               await supabase
                 .from('set_tracks')
-                .update({ is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
                 .eq('id', track.id);
-              ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+              await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
               notFound++;
             }
           } // end: neither Spotify nor Deezer confirmed
@@ -349,7 +351,7 @@ export default async function handler(req, res) {
               .from('set_tracks')
               .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
               .eq('id', track.id);
-            ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+            await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
             notFound++;
           }
           continue;
@@ -440,6 +442,7 @@ export default async function handler(req, res) {
             }
 
             if (scArtwork?.artwork_url) {
+              // SoundCloud found artwork — store it but don't mark as unreleased
               const scData = {
                 album_art_url: scArtwork.artwork_url,
                 title: scArtwork.title || track.track_title,
@@ -450,7 +453,7 @@ export default async function handler(req, res) {
               };
               await supabase
                 .from('set_tracks')
-                .update({ spotify_data: scData, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                .update({ spotify_data: scData })
                 .eq('id', track.id);
               enriched++;
             } else {
@@ -458,7 +461,7 @@ export default async function handler(req, res) {
                 .from('set_tracks')
                 .update({ spotify_data: { checked: true, found: false, deezer_checked: true }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
                 .eq('id', track.id);
-              ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+              await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
               notFound++;
             }
           } // end: neither Spotify nor Deezer confirmed

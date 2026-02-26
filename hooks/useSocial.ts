@@ -537,6 +537,7 @@ export interface FollowingItem {
     image_url: string | null;
     bio: string | null;
     followers_count: number;
+    country: string | null;
   };
 }
 

@@ -785,73 +785,99 @@ function ImportDemoPanel({ delay }: { delay: number }) {
   );
 }
 
-// ─── Panel 4: Build Your Crate ──────────────────────────────────────────
-function CrateDemoPanel({ delay }: { delay: number }) {
+// ─── Panel 4: Build Your Crate (fanned thumbnails sticking out of a crate) ──
+const CRATE_THUMB_W = 28;
+const CRATE_THUMB_H = 40;
+const CRATE_BOX_H = 38;
+const NUM_CRATE_CARDS = 7;
+
+function CrateDemoPanel({ delay, sets }: { delay: number; sets: MiniSet[] }) {
   const panelOpacity = useSharedValue(0);
   const panelTranslateY = useSharedValue(30);
-  const newCardX = useSharedValue(80);
-  const newCardOpacity = useSharedValue(0);
-  const heartBurst = useSharedValue(0);
-  const counterOpacity = useSharedValue(1);
-  const [count, setCount] = useState(3);
+
+  // Swipe offset — controls which card is centered
+  const swipeX = useSharedValue(0);
+  const [isManual, setIsManual] = useState(false);
+
+  // Auto-drift demo
+  const autoX = useSharedValue(0);
+
+  const crateCards = sets.length >= 5
+    ? sets.slice(0, NUM_CRATE_CARDS)
+    : Array.from({ length: NUM_CRATE_CARDS }, (_, i) => ({
+        id: `c-${i}`,
+        name: `Set ${i + 1}`,
+        artist: `DJ ${i + 1}`,
+        coverUrl: sets[i % Math.max(sets.length, 1)]?.coverUrl,
+      }));
 
   useEffect(() => {
     panelOpacity.value = withDelay(delay, withTiming(1, { duration: 500 }));
     panelTranslateY.value = withDelay(delay, withSpring(0, { damping: 14, stiffness: 90 }));
 
-    const demoDelay = delay + 500;
+    // Gentle auto-drift
+    const demoDelay = delay + 800;
+    autoX.value = withDelay(demoDelay, withRepeat(
+      withSequence(
+        withTiming(18, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(-18, { duration: 3000, easing: Easing.inOut(Easing.ease) }),
+      ), -1, true,
+    ));
+  }, [sets]);
 
-    const runCycle = () => {
-      newCardX.value = 80;
-      newCardOpacity.value = 0;
-      heartBurst.value = 0;
-
-      newCardOpacity.value = withTiming(1, { duration: 260 });
-      newCardX.value = withSpring(0, { damping: 10, stiffness: 80 });
-
-      setTimeout(() => {
-        heartBurst.value = withSequence(
-          withSpring(1.3, { damping: 6, stiffness: 120 }),
-          withSpring(0, { damping: 8, stiffness: 100 }),
-        );
-        counterOpacity.value = withSequence(
-          withTiming(0.3, { duration: 200 }),
-          withTiming(1, { duration: 200 }),
-        );
-        setCount(prev => {
-          const next = prev + 1;
-          return next > 6 ? 3 : next;
-        });
-      }, 800);
-    };
-
-    const initialTimeout = setTimeout(runCycle, demoDelay);
-    const interval = setInterval(runCycle, 3900);
-
-    return () => {
-      clearTimeout(initialTimeout);
-      clearInterval(interval);
-    };
-  }, []);
+  // Pan gesture — weighted feel
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
+      runOnJS(setIsManual)(true);
+    })
+    .onUpdate((e) => {
+      swipeX.value = Math.max(-40, Math.min(40, swipeX.value + e.changeX * 0.6));
+    })
+    .onEnd((e) => {
+      swipeX.value = withSpring(0, {
+        damping: 18,
+        stiffness: 50,
+        mass: 1.8,
+        velocity: e.velocityX * 0.2,
+      });
+    });
 
   const panelStyle = useAnimatedStyle(() => ({
     opacity: panelOpacity.value,
     transform: [{ translateY: panelTranslateY.value }],
   }));
 
-  const newCardStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: newCardX.value }],
-    opacity: newCardOpacity.value,
-  }));
+  // Each card: fanned position + swipe offset shifts them, center card pops up
+  const makeCardStyle = (index: number) => {
+    const centerI = (NUM_CRATE_CARDS - 1) / 2;
+    const baseOffset = (index - centerI);
+    const baseRotate = baseOffset * 6; // fan rotation: -18 to +18 deg
+    const baseX = baseOffset * 14;     // horizontal spread
 
-  const heartStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: heartBurst.value }],
-    opacity: heartBurst.value > 0 ? 1 : 0,
-  }));
+    return useAnimatedStyle(() => {
+      const offset = isManual ? swipeX.value : autoX.value;
+      // Shift effective position with swipe
+      const effectiveOffset = baseOffset - offset / 20;
+      const dist = Math.abs(effectiveOffset);
+      const closeness = Math.max(0, 1 - dist / (centerI + 1));
 
-  const counterStyle = useAnimatedStyle(() => ({
-    opacity: counterOpacity.value,
-  }));
+      // Selected card rises higher, scales up
+      const liftY = interpolate(closeness, [0, 1], [0, -8]);
+      const scale = interpolate(closeness, [0, 1], [0.88, 1.1]);
+      const rotate = baseRotate + offset * 0.15;
+
+      return {
+        transform: [
+          { translateX: baseX + offset * 0.6 },
+          { translateY: liftY },
+          { rotate: `${rotate}deg` },
+          { scale },
+        ],
+        zIndex: Math.round(closeness * 10),
+        opacity: interpolate(closeness, [0, 0.4, 1], [0.55, 0.8, 1]),
+      };
+    });
+  };
 
   return (
     <Animated.View style={[styles.panelCard, panelStyle]}>
@@ -861,55 +887,63 @@ function CrateDemoPanel({ delay }: { delay: number }) {
         colors={['rgba(255,255,255,0.3)', 'transparent']}
         style={styles.panelSheen}
       />
-      <View style={[styles.panelDemo, { alignItems: 'center', justifyContent: 'center' }]}>
-        {/* Fanned stack of cards */}
-        <View style={styles.crateStack}>
-          {[
-            { rotate: '-6deg', left: -4 },
-            { rotate: '-2deg', left: 0 },
-            { rotate: '3deg', left: 4 },
-          ].map((cardStyle, i) => (
-            <View
-              key={i}
-              style={[
-                styles.crateCard,
-                {
-                  transform: [{ rotate: cardStyle.rotate }],
-                  left: cardStyle.left,
-                  zIndex: i,
-                },
-              ]}
-            >
-              <LinearGradient
-                colors={['rgba(100,60,60,0.5)', 'rgba(60,40,40,0.4)']}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
+      <View style={[styles.panelDemo, { alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 0 }]}>
+        {/* Thumbnails fanned out, sticking up above crate */}
+        <GestureDetector gesture={panGesture}>
+          <View style={styles.crateFanWrap}>
+            {crateCards.map((set, i) => (
+              <CrateFanCard key={set.id} set={set} index={i} style={makeCardStyle(i)} />
+            ))}
+          </View>
+        </GestureDetector>
+
+        {/* The crate box (sits below, overlapping thumbnails) */}
+        <View style={styles.crateBox}>
+          <LinearGradient
+            colors={['#5C3D2E', '#4A3020', '#3A2418']}
+            style={StyleSheet.absoluteFill}
+          />
+          {/* Wood grain lines */}
+          {[0.2, 0.4, 0.6, 0.8].map((pos, i) => (
+            <View key={i} style={[styles.crateGrain, { top: `${pos * 100}%` }]} />
           ))}
-
-          {/* New card flying in */}
-          <Animated.View style={[styles.crateCard, styles.crateNewCard, newCardStyle]}>
-            <LinearGradient
-              colors={['rgba(196,30,58,0.5)', 'rgba(140,20,40,0.4)']}
-              style={StyleSheet.absoluteFill}
-            />
-          </Animated.View>
-
-          {/* Heart burst */}
-          <Animated.View style={[styles.heartBurst, heartStyle]}>
-            <Heart size={16} color="#C41E3A" fill="#C41E3A" />
-          </Animated.View>
+          {/* Count badge */}
+          <View style={styles.crateBadge}>
+            <Text style={styles.crateBadgeText}>{crateCards.length}</Text>
+          </View>
         </View>
-
-        {/* Counter */}
-        <Animated.Text style={[styles.crateCounter, counterStyle]}>
-          {count} sets
-        </Animated.Text>
       </View>
       <View style={styles.panelFooter}>
         <Text style={styles.panelTitle}>Build Your Crate</Text>
         <Text style={styles.panelSubtitle}>Save. Collect. Share.</Text>
       </View>
+    </Animated.View>
+  );
+}
+
+function CrateFanCard({
+  set,
+  index,
+  style,
+}: {
+  set: MiniSet;
+  index: number;
+  style: ReturnType<typeof useAnimatedStyle>;
+}) {
+  return (
+    <Animated.View style={[styles.crateFanCard, style]}>
+      {set.coverUrl ? (
+        <Image
+          source={{ uri: set.coverUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+      ) : (
+        <LinearGradient
+          colors={['rgba(100,60,60,0.7)', 'rgba(60,40,40,0.6)']}
+          style={StyleSheet.absoluteFill}
+        />
+      )}
     </Animated.View>
   );
 }
@@ -1183,7 +1217,7 @@ export default function LandingScreen() {
               <FeedDemoPanel delay={4300} sets={rowSets[0]} />
               <IdentifyDemoPanel delay={4500} />
               <ImportDemoPanel delay={4700} />
-              <CrateDemoPanel delay={4900} />
+              <CrateDemoPanel delay={4900} sets={rowSets[2]} />
             </View>
 
             {/* CTA */}
@@ -1695,36 +1729,60 @@ const styles = StyleSheet.create({
   },
 
   // ─── Panel 4: Crate Demo ─────────────────────────────────────────────
-  crateStack: {
-    width: 70,
-    height: 60,
-    position: 'relative',
-    marginBottom: 8,
+  crateFanWrap: {
+    width: '100%',
+    height: CRATE_THUMB_H + 10,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    zIndex: 2,
+    marginBottom: -12, // thumbnails overlap into the crate
   },
-  crateCard: {
+  crateFanCard: {
     position: 'absolute',
-    width: 50,
-    height: 50,
-    borderRadius: 10,
+    width: CRATE_THUMB_W,
+    height: CRATE_THUMB_H,
+    borderRadius: 4,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.3)',
-    top: 0,
+    borderColor: 'rgba(255,255,255,0.35)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+    backgroundColor: '#2A1F1A',
   },
-  crateNewCard: {
-    zIndex: 10,
-    left: 8,
+  crateBox: {
+    width: '90%',
+    height: CRATE_BOX_H,
+    borderRadius: 6,
+    overflow: 'hidden',
+    zIndex: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(80,55,35,0.5)',
   },
-  heartBurst: {
+  crateGrain: {
     position: 'absolute',
-    top: -14,
-    left: 20,
-    zIndex: 20,
+    left: 4,
+    right: 4,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.06)',
   },
-  crateCounter: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(0,0,0,0.5)',
+  crateBadge: {
+    position: 'absolute',
+    bottom: 5,
+    right: 6,
+    backgroundColor: 'rgba(196,30,58,0.7)',
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  crateBadgeText: {
+    fontSize: 7,
+    fontWeight: '800',
+    color: '#fff',
   },
 
   // ─── Button Area ──────────────────────────────────────────────────────

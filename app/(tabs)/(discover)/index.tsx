@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, ScrollView, Pressable, TextInput, RefreshControl, ActivityIndicator, Animated, Alert, Modal, GestureResponderEvent, Easing, useWindowDimensions, InteractionManager, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { Search, Link2, TrendingUp, Clock, SlidersHorizontal, ChevronDown, ChevronUp, X, User, Calendar, MapPin, Sparkles, Trash2, Edit3, RefreshCw, Tag, Settings, Heart, Bookmark, Play, Share2, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -280,7 +281,10 @@ const SetCardItem = React.memo(function SetCardItem({
   prev.item.id === next.item.id &&
   prev.index === next.index &&
   prev.onCardTap === next.onCardTap &&
-  prev.onLongPress === next.onLongPress
+  prev.onLongPress === next.onLongPress &&
+  prev.onArtistPress === next.onArtistPress &&
+  prev.onEventPress === next.onEventPress &&
+  prev.scrollY === next.scrollY
 );
 
 export default function DiscoverScreen() {
@@ -340,7 +344,7 @@ export default function DiscoverScreen() {
   const AUTO_SCROLL_INTERVAL = 5000; // 5 seconds per set
   const inactivityTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isAutoScrolling, setIsAutoScrolling] = useState(false);
+  const isAutoScrolling = useRef(false);
 
   // Hidden admin menu - tap 2 times, then hold to open
   const hiddenTapCount = useRef(0);
@@ -708,18 +712,23 @@ export default function DiscoverScreen() {
   // Track centered card index and provide haptic feedback during user drag.
   // Uses the Animated.event listener callback instead of scrollY.addListener
   // to avoid bridging the animated value from native→JS on every animation frame.
+  const lastIndexChangeTime = useRef(0);
+
   const handleScrollEvent = useCallback((event: any) => {
     const offsetY = event.nativeEvent.contentOffset.y;
     const centeredIndex = Math.round(offsetY / CARD_HEIGHT);
 
     if (centeredIndex !== lastCenteredIndex.current && centeredIndex >= 0) {
+      const now = Date.now();
+      const timeSinceLastChange = now - lastIndexChangeTime.current;
       lastCenteredIndex.current = centeredIndex;
       selectedIndexRef.current = centeredIndex;
+      lastIndexChangeTime.current = now;
 
-      // Haptic feedback only during user drag, throttled
-      if (isUserDragging.current) {
-        const now = Date.now();
-        if (now - lastHapticTime.current > 200) {
+      // Haptic only during slow/medium drag — skip during fast scroll
+      // (cards changing faster than 150ms = fast flick, haptics feel jarring)
+      if (isUserDragging.current && timeSinceLastChange > 150) {
+        if (now - lastHapticTime.current > 250) {
           lastHapticTime.current = now;
           Haptics.selectionAsync();
         }
@@ -882,7 +891,7 @@ export default function DiscoverScreen() {
   const startAutoScroll = useCallback(() => {
     if (filteredSets.length <= 1) return;
 
-    setIsAutoScrolling(true);
+    isAutoScrolling.current = true;
     // Scroll to next set immediately, then every 5 seconds
     scrollToNextSet();
     autoScrollTimer.current = setInterval(() => {
@@ -892,7 +901,7 @@ export default function DiscoverScreen() {
 
   // Stop auto-scroll and reset inactivity timer
   const stopAutoScroll = useCallback(() => {
-    setIsAutoScrolling(false);
+    isAutoScrolling.current = false;
     if (autoScrollTimer.current) {
       clearInterval(autoScrollTimer.current);
       autoScrollTimer.current = null;
@@ -902,7 +911,7 @@ export default function DiscoverScreen() {
   // Reset inactivity timer (called on any user interaction)
   const resetInactivityTimer = useCallback(() => {
     // Stop auto-scroll if it's running
-    if (isAutoScrolling) {
+    if (isAutoScrolling.current) {
       stopAutoScroll();
     }
 
@@ -915,7 +924,7 @@ export default function DiscoverScreen() {
     inactivityTimer.current = setTimeout(() => {
       startAutoScroll();
     }, AUTO_SCROLL_DELAY);
-  }, [isAutoScrolling, stopAutoScroll, startAutoScroll]);
+  }, [stopAutoScroll, startAutoScroll]);
 
   // Initialize inactivity timer on mount and cleanup on unmount
   useEffect(() => {
@@ -1144,7 +1153,9 @@ export default function DiscoverScreen() {
               setActiveFilter('trending');
             }}
           >
-            <TrendingUp size={14} color={activeFilter === 'trending' ? Colors.dark.background : Colors.dark.textSecondary} />
+            <BlurView intensity={activeFilter === 'trending' ? 0 : 40} tint="light" style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
+            <View style={styles.filterGlassShine} />
+            <TrendingUp size={14} color={activeFilter === 'trending' ? '#fff' : 'rgba(255,255,255,0.7)'} />
             <Text style={[styles.filterText, activeFilter === 'trending' && styles.filterTextActive]}>Popular</Text>
           </Pressable>
           <Pressable
@@ -1154,21 +1165,25 @@ export default function DiscoverScreen() {
               setActiveFilter('recent');
             }}
           >
-            <Clock size={14} color={activeFilter === 'recent' ? Colors.dark.background : Colors.dark.textSecondary} />
+            <BlurView intensity={activeFilter === 'recent' ? 0 : 40} tint="light" style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
+            <View style={styles.filterGlassShine} />
+            <Clock size={14} color={activeFilter === 'recent' ? '#fff' : 'rgba(255,255,255,0.7)'} />
             <Text style={[styles.filterText, activeFilter === 'recent' && styles.filterTextActive]}>Recent</Text>
           </Pressable>
           <Pressable
             style={[styles.filterButton, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonActive]}
             onPress={toggleFilterDropdown}
           >
-            <SlidersHorizontal size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+            <BlurView intensity={(showFilterDropdown || activeFilterCount > 0) ? 0 : 40} tint="light" style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
+            <View style={styles.filterGlassShine} />
+            <SlidersHorizontal size={14} color={(showFilterDropdown || activeFilterCount > 0) ? '#fff' : Colors.dark.primary} />
             <Text style={[styles.filterButtonText, (showFilterDropdown || activeFilterCount > 0) && styles.filterButtonTextActive]}>
               {activeFilterCount > 0 ? `${filteredSets.length} found` : 'Dig'}
             </Text>
             {showFilterDropdown ? (
-              <ChevronUp size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+              <ChevronUp size={14} color={(showFilterDropdown || activeFilterCount > 0) ? '#fff' : Colors.dark.primary} />
             ) : (
-              <ChevronDown size={14} color={(showFilterDropdown || activeFilterCount > 0) ? Colors.dark.background : Colors.dark.primary} />
+              <ChevronDown size={14} color={(showFilterDropdown || activeFilterCount > 0) ? '#fff' : Colors.dark.primary} />
             )}
           </Pressable>
         </View>
@@ -1190,11 +1205,29 @@ export default function DiscoverScreen() {
           </View>
         )}
 
-        {/* Filter Dropdown */}
+        </View>
+
+        {/* Filter Dropdown — absolute overlay so it doesn't push the list */}
         {showFilterDropdown && (
-          <View style={styles.filterDropdown}>
-            {/* trakd + Genres row */}
+          <View style={[styles.filterDropdown, { top: headerAreaHeight }]}>
+            <BlurView intensity={40} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 16 }]} />
+            <View style={styles.filterDropdownShine} />
+
+            {/* Genres + trakd row */}
             <View style={styles.topToggleRow}>
+              <Pressable
+                style={[
+                  styles.genresToggleBtn,
+                ]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  router.push('/(tabs)/(discover)/genres');
+                }}
+              >
+                <Tag size={14} color={Colors.dark.primary} />
+                <Text style={styles.genresToggleText}>Genres</Text>
+              </Pressable>
+
               <Pressable
                 style={[
                   styles.trakdToggleBtn,
@@ -1208,6 +1241,8 @@ export default function DiscoverScreen() {
                   }));
                 }}
               >
+                <BlurView intensity={30} tint="dark" style={[StyleSheet.absoluteFill, { borderRadius: 12 }]} />
+                <View style={styles.trakdGlassShine} />
                 <Text style={[
                   styles.trakdToggleText,
                   selectedFilters.identified === 'identified' && styles.trakdToggleTextActive,
@@ -1215,17 +1250,6 @@ export default function DiscoverScreen() {
                 {selectedFilters.identified === 'identified' && (
                   <X size={12} color="rgba(255, 248, 231, 0.8)" />
                 )}
-              </Pressable>
-
-              <Pressable
-                style={styles.genresToggleBtn}
-                onPress={() => {
-                  Haptics.selectionAsync();
-                  router.push('/(tabs)/(discover)/genres');
-                }}
-              >
-                <Tag size={14} color={Colors.dark.primary} />
-                <Text style={styles.genresToggleText}>Genres</Text>
               </Pressable>
             </View>
 
@@ -1235,33 +1259,33 @@ export default function DiscoverScreen() {
                 style={[styles.filterSectionBtn, expandedFilter === 'artists' && styles.filterSectionBtnActive]}
                 onPress={() => toggleFilterSection('artists')}
               >
-                <User size={14} color={expandedFilter === 'artists' ? Colors.dark.background : Colors.dark.text} />
+                <User size={14} color={expandedFilter === 'artists' ? '#fff' : 'rgba(255,255,255,0.6)'} />
                 <Text style={[styles.filterSectionBtnText, expandedFilter === 'artists' && styles.filterSectionBtnTextActive]}>
                   Artist {selectedFilters.artists.length > 0 && `(${selectedFilters.artists.length})`}
                 </Text>
-                <ChevronDown size={12} color={expandedFilter === 'artists' ? Colors.dark.background : Colors.dark.textMuted} />
+                <ChevronDown size={12} color={expandedFilter === 'artists' ? '#fff' : 'rgba(255,255,255,0.35)'} />
               </Pressable>
 
               <Pressable
                 style={[styles.filterSectionBtn, expandedFilter === 'years' && styles.filterSectionBtnActive]}
                 onPress={() => toggleFilterSection('years')}
               >
-                <Calendar size={14} color={expandedFilter === 'years' ? Colors.dark.background : Colors.dark.text} />
+                <Calendar size={14} color={expandedFilter === 'years' ? '#fff' : 'rgba(255,255,255,0.6)'} />
                 <Text style={[styles.filterSectionBtnText, expandedFilter === 'years' && styles.filterSectionBtnTextActive]}>
                   Year {selectedFilters.years.length > 0 && `(${selectedFilters.years.length})`}
                 </Text>
-                <ChevronDown size={12} color={expandedFilter === 'years' ? Colors.dark.background : Colors.dark.textMuted} />
+                <ChevronDown size={12} color={expandedFilter === 'years' ? '#fff' : 'rgba(255,255,255,0.35)'} />
               </Pressable>
 
               <Pressable
                 style={[styles.filterSectionBtn, expandedFilter === 'venues' && styles.filterSectionBtnActive]}
                 onPress={() => toggleFilterSection('venues')}
               >
-                <MapPin size={14} color={expandedFilter === 'venues' ? Colors.dark.background : Colors.dark.text} />
+                <MapPin size={14} color={expandedFilter === 'venues' ? '#fff' : 'rgba(255,255,255,0.6)'} />
                 <Text style={[styles.filterSectionBtnText, expandedFilter === 'venues' && styles.filterSectionBtnTextActive]}>
                   Venue {selectedFilters.venues.length > 0 && `(${selectedFilters.venues.length})`}
                 </Text>
-                <ChevronDown size={12} color={expandedFilter === 'venues' ? Colors.dark.background : Colors.dark.textMuted} />
+                <ChevronDown size={12} color={expandedFilter === 'venues' ? '#fff' : 'rgba(255,255,255,0.35)'} />
               </Pressable>
             </View>
 
@@ -1271,11 +1295,11 @@ export default function DiscoverScreen() {
                 {/* Search input for artists and venues */}
                 {(expandedFilter === 'artists' || expandedFilter === 'venues') && (
                   <View style={styles.filterSearchContainer}>
-                    <Search size={14} color={Colors.dark.textMuted} />
+                    <Search size={14} color="rgba(255,255,255,0.4)" />
                     <TextInput
                       style={styles.filterSearchInput}
                       placeholder={`Search ${expandedFilter === 'artists' ? 'artists' : 'venues'}...`}
-                      placeholderTextColor={Colors.dark.textMuted}
+                      placeholderTextColor="rgba(255,255,255,0.3)"
                       value={filterSearch}
                       onChangeText={setFilterSearch}
                       autoCapitalize="none"
@@ -1283,7 +1307,7 @@ export default function DiscoverScreen() {
                     />
                     {filterSearch.length > 0 && (
                       <Pressable onPress={() => setFilterSearch('')}>
-                        <X size={14} color={Colors.dark.textMuted} />
+                        <X size={14} color="rgba(255,255,255,0.4)" />
                       </Pressable>
                     )}
                   </View>
@@ -1330,7 +1354,6 @@ export default function DiscoverScreen() {
             )}
           </View>
         )}
-        </View>
 
         {isLoading ? (
           <View style={[styles.scrollView, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -1761,34 +1784,51 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    overflow: 'hidden' as const,
+    shadowColor: 'rgba(0,0,0,0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   filterChipActive: {
-    backgroundColor: Colors.dark.primary,
-    borderColor: 'rgba(196, 30, 58, 0.6)',
-    borderTopColor: 'rgba(255, 100, 120, 0.3)',
+    backgroundColor: 'rgba(196, 30, 58, 0.85)',
+    borderColor: 'rgba(255, 100, 120, 0.4)',
+    borderTopColor: 'rgba(255, 150, 170, 0.5)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.4)',
     shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  filterGlassShine: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 10,
+    right: 10,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    borderRadius: 1,
   },
   filterText: {
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
     fontWeight: '700' as const,
-    color: 'rgba(245, 230, 211, 0.7)',
+    color: 'rgba(255, 255, 255, 0.65)',
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
   },
   filterTextActive: {
     color: '#FFF',
@@ -1837,52 +1877,74 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: 'row' as const,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
+    paddingVertical: 11,
     borderRadius: 20,
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+    backgroundColor: 'rgba(0, 0, 0, 0.25)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderTopColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
+    overflow: 'hidden' as const,
+    shadowColor: 'rgba(0,0,0,0.4)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   filterButtonActive: {
-    backgroundColor: Colors.dark.primary,
-    borderColor: 'rgba(196, 30, 58, 0.6)',
-    borderTopColor: 'rgba(255, 100, 120, 0.3)',
+    backgroundColor: 'rgba(196, 30, 58, 0.85)',
+    borderColor: 'rgba(255, 100, 120, 0.4)',
+    borderTopColor: 'rgba(255, 150, 170, 0.5)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.4)',
     shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
   },
   filterButtonText: {
     fontSize: 12,
     fontFamily: Platform.OS === 'ios' ? 'HelveticaNeue-Bold' : undefined,
     fontWeight: '700' as const,
-    color: 'rgba(245, 230, 211, 0.7)',
+    color: 'rgba(255, 255, 255, 0.65)',
     letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    textTransform: 'uppercase' as const,
   },
   filterButtonTextActive: {
     color: '#FFF',
   },
   filterDropdown: {
-    marginHorizontal: 16,
-    marginBottom: 12,
-    backgroundColor: 'rgba(20, 20, 22, 0.85)',
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 50,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
     borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.06)',
-    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.2)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.04)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.15,
     shadowRadius: 12,
-    elevation: 6,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  filterDropdownShine: {
+    position: 'absolute',
+    top: 0,
+    left: 16,
+    right: 16,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 1,
+    zIndex: 1,
   },
   identifiedFilterRow: {
     flexDirection: 'row',
@@ -1891,17 +1953,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: Colors.dark.border,
+    borderBottomColor: 'rgba(255, 255, 255, 0.06)',
   },
   identifiedFilterLabel: {
     fontSize: 13,
     fontWeight: '600' as const,
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.7)',
   },
   identifiedToggleGroup: {
     flex: 1,
     flexDirection: 'row',
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 8,
     padding: 2,
   },
@@ -1913,15 +1975,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   identifiedToggleActive: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.8)',
   },
   identifiedToggleText: {
     fontSize: 11,
     fontWeight: '600' as const,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255, 255, 255, 0.4)',
   },
   identifiedToggleTextActive: {
-    color: Colors.dark.background,
+    color: '#fff',
   },
   needsSourceToggle: {
     borderWidth: 1,
@@ -1946,10 +2008,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 11,
-    borderRadius: 10,
-    backgroundColor: 'rgba(184, 134, 11, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(184, 134, 11, 0.25)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(180, 120, 20, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(200, 150, 40, 0.25)',
+    borderTopColor: 'rgba(255, 215, 100, 0.3)',
+    borderBottomColor: 'rgba(120, 60, 10, 0.2)',
+    overflow: 'hidden',
   },
   genresToggleBtn: {
     flex: 1,
@@ -1958,10 +2023,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 11,
-    borderRadius: 10,
-    backgroundColor: 'rgba(196, 30, 58, 0.08)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(196, 30, 58, 0.25)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(196, 30, 58, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(196, 30, 58, 0.2)',
+    borderTopColor: 'rgba(255, 100, 120, 0.15)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.15)',
   },
   genresToggleText: {
     fontSize: 14,
@@ -1970,28 +2037,40 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   trakdToggleBtnActive: {
-    backgroundColor: '#B8860B',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 223, 120, 0.5)',
-    borderTopColor: 'rgba(255, 235, 150, 0.6)',
-    borderBottomColor: '#8B6508',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
-    shadowRadius: 5,
-    elevation: 5,
+    backgroundColor: 'rgba(190, 100, 20, 0.65)',
+    borderColor: 'rgba(255, 200, 80, 0.5)',
+    borderTopColor: 'rgba(255, 230, 140, 0.6)',
+    borderBottomColor: 'rgba(140, 50, 10, 0.5)',
+    shadowColor: '#D4A017',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  trakdGlassShine: {
+    position: 'absolute',
+    top: 0,
+    left: 10,
+    right: 10,
+    height: 1,
+    backgroundColor: 'rgba(255, 215, 100, 0.35)',
+    borderRadius: 1,
+    zIndex: 1,
   },
   trakdToggleText: {
     fontSize: 14,
     fontWeight: '800' as const,
-    color: '#B8860B',
-    letterSpacing: 0.3,
+    color: '#D4A017',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(212, 160, 23, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   trakdToggleTextActive: {
-    color: '#FFF8E1',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    color: '#FFF3D4',
+    textShadowColor: 'rgba(255, 230, 140, 0.4)',
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 6,
   },
   filterSectionButtons: {
     flexDirection: 'row',
@@ -2005,19 +2084,26 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingVertical: 12,
     paddingHorizontal: 8,
-    borderRadius: 10,
-    backgroundColor: Colors.dark.background,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.03)',
   },
   filterSectionBtnActive: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.8)',
+    borderColor: 'rgba(255, 100, 120, 0.35)',
+    borderTopColor: 'rgba(255, 150, 170, 0.4)',
+    borderBottomColor: 'rgba(100, 10, 20, 0.35)',
   },
   filterSectionBtnText: {
     fontSize: 11,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.6)',
   },
   filterSectionBtnTextActive: {
-    color: Colors.dark.background,
+    color: '#fff',
   },
   expandedSection: {
     marginTop: 12,
@@ -2025,24 +2111,26 @@ const styles = StyleSheet.create({
   filterSearchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.dark.background,
-    borderRadius: 8,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderRadius: 10,
     paddingHorizontal: 10,
     marginBottom: 10,
     height: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   filterSearchInput: {
     flex: 1,
     marginLeft: 8,
     fontSize: 13,
-    color: Colors.dark.text,
+    color: '#fff',
   },
   filterOptionsList: {
     maxHeight: 120,
   },
   noResultsText: {
     fontSize: 12,
-    color: Colors.dark.textMuted,
+    color: 'rgba(255,255,255,0.35)',
     fontStyle: 'italic',
   },
   filterOptionsWrap: {
@@ -2054,18 +2142,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   filterOptionChipSelected: {
-    backgroundColor: Colors.dark.primary,
+    backgroundColor: 'rgba(196, 30, 58, 0.75)',
+    borderColor: 'rgba(255, 100, 120, 0.3)',
   },
   filterOptionChipText: {
     fontSize: 12,
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.6)',
     fontWeight: '500',
   },
   filterOptionChipTextSelected: {
-    color: Colors.dark.background,
+    color: '#fff',
   },
   clearFiltersBtn: {
     flexDirection: 'row',

@@ -335,6 +335,10 @@ export default function TabLayout() {
       // Already on discover but deep in stack — pop back to index
       e.preventDefault();
       router.replace('/(tabs)/(discover)');
+    } else if (tabName === '(social)' && segments[1] === '(social)' && segments.length > 2) {
+      // Already on social/crate but deep in stack (followers/following) — pop back to crate index
+      e.preventDefault();
+      router.replace('/(tabs)/(social)');
     } else if (tabName !== '(feed)') {
       // Switching away from feed — stop audio
       stopFeedAudio();

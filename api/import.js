@@ -439,14 +439,13 @@ function parseComments(comments, djName = null) {
 
   // Helper to add a track if valid
   const addTrack = (ts, info, comment, isMultiLine, rawLineText = '') => {
-    // If the parsed "artist" is actually the DJ name, fix it
+    // If the parsed "artist" is actually the DJ name, try to re-parse the title as "Artist - Title"
     if (djName && areNamesSimilar(info.artist, djName)) {
       const reparsed = parseTrackInfo(info.title);
       if (reparsed) {
         info = reparsed;
-      } else {
-        info = { title: info.title, artist: 'Unknown Artist' };
       }
+      // else: keep original — DJ might be the actual artist on their own track
     }
 
     const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
@@ -540,7 +539,8 @@ function parseComments(comments, djName = null) {
           let info = candidateLines[i].info;
           if (djName && areNamesSimilar(info.artist, djName)) {
             const reparsed = parseTrackInfo(info.title);
-            info = reparsed || { title: info.title, artist: 'Unknown Artist' };
+            if (reparsed) info = reparsed;
+            // else: keep original — DJ might be the actual artist on their own track
           }
           // Use a position-based key so same track at different positions isn't deduped
           const key = `untimed-${i}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
@@ -624,14 +624,13 @@ function parseDescription(description, djName = null) {
       let info = parseTrackInfo(afterText);
 
       if (info) {
-        // If the parsed "artist" is actually the DJ name, fix it
+        // If the parsed "artist" is actually the DJ name, try to re-parse the title
         if (djName && areNamesSimilar(info.artist, djName)) {
           const reparsed = parseTrackInfo(info.title);
           if (reparsed) {
             info = reparsed;
-          } else {
-            info = { title: info.title, artist: 'Unknown Artist' };
           }
+          // else: keep original — DJ might be the actual artist on their own track
         }
 
         const key = `${ts.timestamp}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
@@ -675,14 +674,13 @@ function parseDescription(description, djName = null) {
       for (let i = 0; i < candidateLines.length; i++) {
         let info = candidateLines[i].info;
 
-        // If the parsed "artist" is actually the DJ name, fix it
+        // If the parsed "artist" is actually the DJ name, try to re-parse the title
         if (djName && areNamesSimilar(info.artist, djName)) {
           const reparsed = parseTrackInfo(info.title);
           if (reparsed) {
             info = reparsed;
-          } else {
-            info = { title: info.title, artist: 'Unknown Artist' };
           }
+          // else: keep original — DJ might be the actual artist on their own track
         }
 
         const key = `${i}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;

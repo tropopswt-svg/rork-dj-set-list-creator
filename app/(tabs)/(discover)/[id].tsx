@@ -108,6 +108,39 @@ function TrakdWaveCenter() {
   );
 }
 
+// Pulse overlay for source chips that are missing a link
+function PulsingSourceChip({ children, hasLink, color }: { children: React.ReactNode; hasLink: boolean; color: string }) {
+  const pulseAnim = useRef(new RNAnimated.Value(0.3)).current;
+
+  useEffect(() => {
+    if (hasLink) { pulseAnim.stopAnimation(); return; }
+    const loop = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 0.3, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => { pulseAnim.stopAnimation(); };
+  }, [hasLink]);
+
+  return (
+    <View style={{ flex: 1, alignItems: 'center' }}>
+      {children}
+      {!hasLink && (
+        <RNAnimated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute', top: 0, left: 4, right: 4, bottom: -2,
+            borderRadius: 14, borderWidth: 1.5, borderColor: color,
+            opacity: pulseAnim,
+          }}
+        />
+      )}
+    </View>
+  );
+}
+
 // Liquid Glass Identification Ring — inspired by FYP skip button
 function IdentificationRing({ identified, total, onPress }: { identified: number; total: number; onPress?: () => void }) {
   const progress = useSharedValue(0);
@@ -1890,6 +1923,7 @@ export default function SetDetailScreen() {
               <RNAnimated.View style={[styles.statsSectionWrap, { transform: [{ scale: chartScale }] }]}>
                 <View style={styles.statsSection}>
                   {/* YouTube — left of chart */}
+                  <PulsingSourceChip hasLink={!!ytLink} color="#FF0000">
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
@@ -1914,6 +1948,7 @@ export default function SetDetailScreen() {
                       </Text>
                     </View>
                   </Pressable>
+                  </PulsingSourceChip>
 
                   {/* Chart ring — center */}
                   <IdentificationRing
@@ -1933,6 +1968,7 @@ export default function SetDetailScreen() {
                   />
 
                   {/* SoundCloud — right of chart */}
+                  <PulsingSourceChip hasLink={!!scLink} color="#FF5500">
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
@@ -1957,6 +1993,7 @@ export default function SetDetailScreen() {
                       </Text>
                     </View>
                   </Pressable>
+                  </PulsingSourceChip>
                 </View>
 
                 {/* Gold trakd badge — shown when both sources are linked */}

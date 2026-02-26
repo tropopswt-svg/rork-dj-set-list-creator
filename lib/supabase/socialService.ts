@@ -198,7 +198,8 @@ export async function getFollowingList(userId: string, limit = 50, offset = 0) {
         slug,
         image_url,
         bio,
-        followers_count
+        followers_count,
+        country
       )
     `)
     .eq('follower_id', userId)

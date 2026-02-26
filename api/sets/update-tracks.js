@@ -123,7 +123,7 @@ export default async function handler(req, res) {
     const matchThreshold = 0.6;
 
     // Source reliability ranking — never overwrite a more reliable source
-    const SOURCE_RANK = { '1001tracklists': 10, 'tracklist': 8, 'database': 6, 'manual': 5, 'soundcloud': 3, 'youtube': 2, 'unknown': 0 };
+    const SOURCE_RANK = { '1001tracklists': 10, 'tracklist': 8, 'acrcloud': 7, 'database': 6, 'manual': 5, 'soundcloud': 3, 'youtube': 2, 'unknown': 0 };
     function sourceRank(s) { return SOURCE_RANK[s] || 0; }
 
     console.log(`[Update Tracks] Processing ${tracks.length} scraped tracks for set ${setId} (${existingTrackCount} existing)`);

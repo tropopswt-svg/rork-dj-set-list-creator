@@ -1,7 +1,7 @@
 // Shared cache + rate-limit utilities for Spotify enrichment
 // Used by spotify-enrich.js, spotify-drip.js, and sets/[id].js
 
-const NOT_FOUND_TTL_DAYS = 30;
+const NOT_FOUND_TTL_DAYS = 7;
 
 /**
  * Generate a normalized lookup key for cache: "artist|||title"

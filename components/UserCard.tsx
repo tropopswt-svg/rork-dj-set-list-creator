@@ -24,6 +24,7 @@ interface UserCardProps {
   reason?: string;
   onPress?: () => void;
   compact?: boolean;
+  glass?: boolean;
 }
 
 export default function UserCard({
@@ -35,6 +36,7 @@ export default function UserCard({
   reason,
   onPress,
   compact = false,
+  glass = false,
 }: UserCardProps) {
   const router = useRouter();
   const { user: currentUser } = useAuth();
@@ -100,6 +102,99 @@ export default function UserCard({
     );
   }
 
+  // Glass variant — dark liquid glass with 3D depth
+  if (glass) {
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.glassWrap, pressed && { transform: [{ scale: 0.97 }], opacity: 0.85 }]}
+        onPress={handlePress}
+      >
+        {/* 3D depth layers */}
+        <View style={styles.glassDepth3} />
+        <View style={styles.glassDepth2} />
+        <View style={styles.glassDepth1} />
+        {/* Main face */}
+        <View style={styles.glassFace}>
+          <View style={styles.glassShine} />
+
+          <Image
+            source={{ uri: user.avatar_url || 'https://via.placeholder.com/56' }}
+            style={styles.glassAvatar}
+            contentFit="cover"
+            placeholder={{ blurhash: 'L9B:x]of00ay~qj[M{ay-;j[RjfQ' }}
+            transition={250}
+          />
+
+          <View style={styles.info}>
+            <Text style={styles.glassDisplayName} numberOfLines={1}>
+              {displayName}
+            </Text>
+
+            {user.username && (
+              <Text style={styles.glassUsername} numberOfLines={1}>
+                @{user.username}
+              </Text>
+            )}
+
+            {showBio && user.bio && (
+              <Text style={styles.glassBio} numberOfLines={2}>
+                {user.bio}
+              </Text>
+            )}
+
+            {showStats && user.followers_count !== undefined && (
+              <Text style={styles.glassStats}>
+                {user.followers_count} followers
+              </Text>
+            )}
+
+            {mutualCount !== undefined && mutualCount > 0 && (
+              <View style={styles.mutualRow}>
+                <Users size={12} color="rgba(255,255,255,0.3)" />
+                <Text style={styles.glassMutualText}>
+                  {mutualCount} mutual follower{mutualCount !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            )}
+
+            {reason && (
+              <Text style={styles.glassReason} numberOfLines={1}>
+                {reason}
+              </Text>
+            )}
+          </View>
+
+          {showFollowButton && !isOwnProfile && currentUser && (
+            <Pressable
+              style={[
+                styles.glassFollowBtn,
+                isFollowing && styles.glassFollowingBtn,
+              ]}
+              onPress={handleFollow}
+              disabled={followLoading}
+            >
+              {isFollowing && <View style={styles.glassFollowBtnShine} />}
+              {followLoading ? (
+                <ActivityIndicator size="small" color={isFollowing ? Colors.dark.primary : '#fff'} />
+              ) : isFollowing ? (
+                <>
+                  <UserCheck size={14} color={Colors.dark.primary} />
+                  <Text style={styles.glassFollowingText}>Following</Text>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={14} color="#fff" />
+                  <Text style={styles.glassFollowText}>Follow</Text>
+                </>
+              )}
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+    );
+  }
+
+  // Default (non-glass) variant
   return (
     <Pressable style={styles.container} onPress={handlePress}>
       <Image
@@ -178,6 +273,7 @@ export default function UserCard({
 }
 
 const styles = StyleSheet.create({
+  // ─── Default (light theme) ───────────────────────────
   container: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -259,7 +355,143 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Colors.dark.primary,
   },
-  // Compact styles
+
+  // ─── Glass (dark liquid glass) ───────────────────────
+  glassWrap: {
+    marginBottom: 10,
+  },
+  glassDepth3: {
+    position: 'absolute',
+    bottom: -4,
+    left: 8,
+    right: 8,
+    height: '100%',
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  glassDepth2: {
+    position: 'absolute',
+    bottom: -2,
+    left: 5,
+    right: 5,
+    height: '100%',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+  },
+  glassDepth1: {
+    position: 'absolute',
+    bottom: -1,
+    left: 3,
+    right: 3,
+    height: '100%',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  glassFace: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    borderTopColor: 'rgba(255,255,255,0.2)',
+    borderBottomColor: 'rgba(0,0,0,0.12)',
+    overflow: 'hidden',
+  },
+  glassShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '45%',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+  },
+  glassAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  glassDisplayName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
+  },
+  glassUsername: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 1,
+  },
+  glassBio: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.4)',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  glassStats: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+    marginTop: 4,
+  },
+  glassMutualText: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.3)',
+  },
+  glassReason: {
+    fontSize: 12,
+    color: Colors.dark.primary,
+    marginTop: 4,
+  },
+  // Glass follow button — liquid glass chip style
+  glassFollowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    backgroundColor: Colors.dark.primary,
+    marginLeft: 8,
+    overflow: 'hidden',
+  },
+  glassFollowingBtn: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    borderTopColor: 'rgba(255,255,255,0.18)',
+    borderBottomColor: 'rgba(0,0,0,0.15)',
+  },
+  glassFollowBtnShine: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderTopLeftRadius: 14,
+    borderTopRightRadius: 14,
+  },
+  glassFollowText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  glassFollowingText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: Colors.dark.primary,
+  },
+
+  // ─── Compact ─────────────────────────────────────────
   compactContainer: {
     flexDirection: 'row',
     alignItems: 'center',

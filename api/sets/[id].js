@@ -332,6 +332,9 @@ export default async function handler(req, res) {
       // Analysis flags
       youtubeAnalyzed: set.youtube_analyzed || false,
       soundcloudAnalyzed: set.soundcloud_analyzed || false,
+      // ACRCloud File Scanning state
+      acrScanStatus: set.acr_scan_status || null,
+      acrScanSubmittedAt: set.acr_scan_submitted_at || null,
     };
 
     return res.status(200).json({

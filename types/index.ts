@@ -21,7 +21,7 @@ export interface Track {
   key?: string;
   coverUrl?: string;
   addedAt: Date;
-  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database' | '1001tracklists' | 'youtube' | 'soundcloud' | 'user';
+  source: 'shazam' | 'social' | 'manual' | 'ai' | 'link' | 'database' | '1001tracklists' | 'youtube' | 'soundcloud' | 'user' | 'acrcloud';
   timestamp?: number;
   contributedBy?: string;
   verified?: boolean;
@@ -90,6 +90,9 @@ export interface SetList {
     matched: number;
     unreleased: number;
   };
+  // ACRCloud File Scanning state
+  acrScanStatus?: string | null;
+  acrScanSubmittedAt?: string | null;
 }
 
 export interface SocialComment {
