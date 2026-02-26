@@ -12,9 +12,24 @@ function normalizeText(text) {
   return text
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/[\u0300-\u036f]/g, '')          // strip diacritics
+    .replace(/\(original mix\)/gi, '')         // "(Original Mix)" is noise
+    .replace(/\(extended mix\)/gi, '')         // "(Extended Mix)" is noise
+    .replace(/\s*\(feat\.?[^)]*\)/gi, '')     // strip "(feat. X)" from title
+    .replace(/\s*\(ft\.?[^)]*\)/gi, '')       // strip "(ft. X)" from title
+    .replace(/[^a-z0-9\s]/g, '')              // strip punctuation
+    .replace(/\s+/g, ' ')                     // collapse whitespace
     .trim();
+}
+
+function normalizeArtistName(name) {
+  if (!name) return '';
+  return name
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\bfeat\.?\s*/gi, 'ft. ')        // normalize "feat" → "ft."
+    .replace(/\bfeaturing\s*/gi, 'ft. ')      // normalize "featuring" → "ft."
+    .replace(/\bb2b\b/gi, 'B2B');             // normalize b2b casing
 }
 
 function generateSlug(name) {
@@ -145,7 +160,7 @@ module.exports = async function handler(req, res) {
                   await supabase.from('set_tracks').insert({
                     set_id: existingSet.id,
                     track_title: track.title,
-                    artist_name: track.artist || 'Unknown',
+                    artist_name: normalizeArtistName(track.artist || 'Unknown'),
                     position: pos,
                     timestamp_seconds: track.timestamp_seconds || null,
                     timestamp_str: track.timestamp_str || null,
@@ -277,8 +292,8 @@ module.exports = async function handler(req, res) {
                       .insert({
                         set_id: newSet.id,
                         track_title: cleanTitle,
-                        artist_name: track.artist || 'Unknown',
-                        timestamp_seconds: ts,
+                        artist_name: normalizeArtistName(track.artist || 'Unknown'),
+                     timestamp_seconds: ts,
                         timestamp_str: tsStr,
                         position: track.position || 0,
                         is_id: track.title?.toLowerCase() === 'id' || track.is_unreleased || false,
@@ -391,7 +406,7 @@ module.exports = async function handler(req, res) {
         if (!track.title) continue;
 
         const titleNormalized = normalizeText(track.title);
-        const artistName = track.artist || track.artists?.[0] || 'Unknown';
+        const artistName = normalizeArtistName(track.artist || track.artists?.[0] || 'Unknown');
         const trackGenre = track.genre || pageGenre;
         
         try {
