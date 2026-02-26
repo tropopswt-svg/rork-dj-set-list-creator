@@ -1024,7 +1024,7 @@ function NowPlayingBar({ nowPlaying, isMuted }: { nowPlaying?: { title: string; 
 const npStyles = StyleSheet.create({
   card: {
     position: 'absolute',
-    top: 56,
+    top: 96,
     left: 16,
     right: 16,
     borderRadius: 14,
@@ -1032,7 +1032,8 @@ const npStyles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.06)',
     borderTopColor: 'rgba(255,255,255,0.1)',
-    zIndex: 12,
+    zIndex: 20,
+    pointerEvents: 'auto',
   },
   inner: {
     flexDirection: 'row',
@@ -1072,8 +1073,7 @@ const npStyles = StyleSheet.create({
 
 // ── Feed Card ───────────────────────────────────────────────────────────
 // Immersive TikTok-style card with frosted glass overlays and 3D depth
-function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, onSkipTrack, nowPlaying, isMuted }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void; onSkipTrack?: (setId: string) => void; nowPlaying?: { title: string; artist: string } | null; isMuted?: boolean }) {
-  const { user } = useAuth();
+function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, onSkipTrack }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void; onSkipTrack?: (setId: string) => void }) {
   const { isLiked, likeCount, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
   const router = useRouter();
   const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -1312,9 +1312,6 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
         ) : null}
       </View>
 
-      {/* ── Glass now-playing bar ── */}
-      <NowPlayingBar nowPlaying={nowPlaying} isMuted={isMuted} />
-
       {/* ── Floating glass info panel (bottom) ── */}
       <View style={styles.feedInfoPanel} pointerEvents="none">
         <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
@@ -1542,7 +1539,10 @@ export default function FeedScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const { sets } = useSets();
-  const { user, profile, isAuthenticated } = useAuth();
+  const { user } = useAuth();
+  // Mirror user to ref for use in callbacks/effects without adding to deps
+  const userRef = useRef(user);
+  userRef.current = user;
   const { followedArtists, isLoading: followingLoading } = useFollowing();
   const [refreshing, setRefreshing] = useState(false);
   const [followedArtistSets, setFollowedArtistSets] = useState<any[]>([]);
@@ -1581,18 +1581,6 @@ export default function FeedScreen() {
     return () => { stopAudio(); };
   }, []);
 
-  // Register stop callback so tab layout can stop audio on tab switch
-  useEffect(() => {
-    registerFeedAudioStop(stopAudio);
-    return () => { unregisterFeedAudioStop(); };
-  }, [stopAudio]);
-
-  // Sync muted state
-  useEffect(() => {
-    isMutedRef.current = isMuted;
-    soundRef.current?.setVolumeAsync(isMuted ? 0 : 0.7).catch(() => {});
-  }, [isMuted]);
-
   // ── Core helpers ──
 
   const stopAudio = useCallback((disable = true) => {
@@ -1609,6 +1597,18 @@ export default function FeedScreen() {
     setNowPlaying(null);
   }, []);
 
+  // Register stop callback so tab layout can stop audio on tab switch
+  useEffect(() => {
+    registerFeedAudioStop(stopAudio);
+    return () => { unregisterFeedAudioStop(); };
+  }, [stopAudio]);
+
+  // Sync muted state
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+    soundRef.current?.setVolumeAsync(isMuted ? 0 : 0.7).catch(() => {});
+  }, [isMuted]);
+
   // Keep openComments ref updated so memoized renderFeedCard always calls latest version
   openCommentsRef.current = (setId: string) => {
     setCommentSheetSetId(setId);
@@ -1618,6 +1618,10 @@ export default function FeedScreen() {
     if (audioGenRef.current !== gen) return false;
     const targetVol = isMutedRef.current ? 0 : 0.7;
     const isFirstPlay = !hasPlayedOnceRef.current;
+
+    // Show "now playing" immediately — before audio loads
+    setNowPlaying({ title, artist });
+
     try {
       const { sound } = await Audio.Sound.createAsync(
         { uri: url },
@@ -1634,20 +1638,22 @@ export default function FeedScreen() {
         old.stopAsync().then(() => old.unloadAsync()).catch(() => {});
       }
       soundRef.current = sound;
-      setNowPlaying({ title, artist });
       hasPlayedOnceRef.current = true;
-      // Gentle fade-in on first play (0 → target over ~2.4s)
+      // Gentle fade-in on first play — run in background, don't block return
       if (isFirstPlay && targetVol > 0) {
-        const steps = 12;
-        const stepMs = 200;
-        for (let i = 1; i <= steps; i++) {
-          await new Promise(r => setTimeout(r, stepMs));
-          if (audioGenRef.current !== gen) return true; // scrolled away, sound already set
-          await sound.setVolumeAsync(targetVol * (i / steps)).catch(() => {});
-        }
+        (async () => {
+          const steps = 12;
+          const stepMs = 200;
+          for (let i = 1; i <= steps; i++) {
+            await new Promise(r => setTimeout(r, stepMs));
+            if (audioGenRef.current !== gen) return;
+            await sound.setVolumeAsync(targetVol * (i / steps)).catch(() => {});
+          }
+        })();
       }
       return true;
     } catch {
+      setNowPlaying(null);
       return false;
     }
   }, []);
@@ -1860,25 +1866,14 @@ export default function FeedScreen() {
     }
   };
 
-  // Load sets for the active category (re-fetch on login/logout for personalization)
-  useEffect(() => {
-    loadCategorySets(activeCategory);
-  }, [activeCategory, user?.id]);
-
-  // Load sets from database for followed artists (for_you)
-  useEffect(() => {
-    if (user && followedArtists.length > 0 && !followingLoading) {
-      loadFollowedArtistSets();
-    }
-  }, [user, followedArtists, followingLoading]);
-
-  const loadCategorySets = async (category: FeedCategory) => {
+  const loadCategorySets = useCallback(async (category: FeedCategory) => {
     try {
       const sort = categoryToSort(category);
       let url = `${FEED_API_BASE_URL}/api/sets?limit=20&sort=${sort}`;
       // Pass user_id for personalized For You scoring
-      if (sort === 'for_you' && user?.id) {
-        url += `&user_id=${encodeURIComponent(user.id)}`;
+      const currentUser = userRef.current;
+      if (sort === 'for_you' && currentUser?.id) {
+        url += `&user_id=${encodeURIComponent(currentUser.id)}`;
       }
       const response = await fetch(url);
       const data = await response.json();
@@ -1888,23 +1883,9 @@ export default function FeedScreen() {
     } catch (error) {
       if (__DEV__) console.error('[Feed] Error loading sets:', error);
     }
-  };
+  }, []);
 
-  const handleCategoryChange = (cat: FeedCategory) => {
-    if (cat === activeCategory) return;
-    Haptics.selectionAsync();
-    setActiveCategory(cat);
-    // Scroll back to top when switching tabs
-    feedListRef.current?.scrollToOffset({ offset: 0, animated: false });
-    // Stop audio cleanly — new data will trigger playback for the first card
-    stopAudio();
-    visibleSetIdRef.current = null;
-  };
-
-  const loadFollowedArtistSets = async () => {
-    // Only show blocking loader if we have nothing rendered yet.
-    const shouldBlock = followedArtistSets.length === 0 && recentDbSets.length === 0;
-    if (shouldBlock) setLoadingSets(true);
+  const loadFollowedArtistSets = useCallback(async () => {
     try {
       const artistIds = followedArtists
         .map(f => f.following_artist?.id)
@@ -1922,8 +1903,30 @@ export default function FeedScreen() {
     } catch (error) {
       if (__DEV__) console.error('[Feed] Error loading followed artist sets:', error);
     }
-    if (shouldBlock) setLoadingSets(false);
+  }, [followedArtists]);
+
+  const handleCategoryChange = (cat: FeedCategory) => {
+    if (cat === activeCategory) return;
+    Haptics.selectionAsync();
+    setActiveCategory(cat);
+    // Scroll back to top when switching tabs
+    feedListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    // Stop audio cleanly — new data will trigger playback for the first card
+    stopAudio();
+    visibleSetIdRef.current = null;
   };
+
+  // Load sets for the active category
+  useEffect(() => {
+    loadCategorySets(activeCategory);
+  }, [activeCategory, loadCategorySets]);
+
+  // Load sets from database for followed artists (for_you)
+  useEffect(() => {
+    if (userRef.current && followedArtists.length > 0 && !followingLoading) {
+      loadFollowedArtistSets();
+    }
+  }, [followedArtists, followingLoading, loadFollowedArtistSets]);
 
   const formatDate = (date: Date) => {
     const now = new Date();
@@ -1946,11 +1949,11 @@ export default function FeedScreen() {
   };
 
   const followedArtistNames = useMemo(() => {
-    if (!user || followedArtists.length === 0) return [];
+    if (followedArtists.length === 0) return [];
     return followedArtists
       .map(f => f.following_artist?.name?.toLowerCase())
       .filter(Boolean) as string[];
-  }, [user, followedArtists]);
+  }, [followedArtists]);
 
   const getYTThumb = (url?: string) => {
     if (!url) return null;
@@ -1975,7 +1978,7 @@ export default function FeedScreen() {
     // The API handles discovery (genre-based, collaborative filtering, novelty boost).
     // We sprinkle in some followed artist sets so the feed feels personal but isn't
     // limited to artists the user already knows.
-    if (activeCategory === 'for_you' && user) {
+    if (activeCategory === 'for_you' && userRef.current) {
       const seen = new Set<string>();
       const merged: any[] = [];
 
@@ -2087,16 +2090,16 @@ export default function FeedScreen() {
         },
         timestamp: set.date,
       }));
-  }, [sets, user, followedArtistSets, recentDbSets, activeCategory, artistImageMap, followedArtistNames]);
+  }, [sets, followedArtistSets, recentDbSets, activeCategory, artistImageMap, followedArtistNames]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([
       loadCategorySets(activeCategory),
-      activeCategory === 'for_you' && user && followedArtists.length > 0 ? loadFollowedArtistSets() : Promise.resolve(),
+      activeCategory === 'for_you' && userRef.current && followedArtists.length > 0 ? loadFollowedArtistSets() : Promise.resolve(),
     ]);
     setRefreshing(false);
-  }, [user, followedArtists, activeCategory]);
+  }, [followedArtists, activeCategory, loadCategorySets, loadFollowedArtistSets]);
 
   // Scroll to top and refresh — called when user re-taps the Feed tab
   const scrollToTopAndRefresh = useCallback(() => {
@@ -2128,6 +2131,10 @@ export default function FeedScreen() {
     if (scrollCooldownRef.current) clearTimeout(scrollCooldownRef.current);
   }, []);
 
+  // Ref for realFeedItems — avoids recreating scroll handler when data changes
+  const realFeedItemsRef = useRef(realFeedItems);
+  realFeedItemsRef.current = realFeedItems;
+
   const handleScrollEnd = useCallback((e: any) => {
     // Mark scrolling done after a short cooldown (prevents tap-on-land)
     if (scrollCooldownRef.current) clearTimeout(scrollCooldownRef.current);
@@ -2136,10 +2143,11 @@ export default function FeedScreen() {
     if (fullFeedHeight <= 0) return;
     const offsetY = e.nativeEvent.contentOffset.y;
     const index = Math.round(offsetY / fullFeedHeight);
-    if (index >= 0 && index < realFeedItems.length) {
-      handleSetBecameVisible(realFeedItems[index].set.id);
+    const items = realFeedItemsRef.current;
+    if (index >= 0 && index < items.length) {
+      handleSetBecameVisible(items[index].set.id);
     }
-  }, [fullFeedHeight, realFeedItems, handleSetBecameVisible]);
+  }, [fullFeedHeight, handleSetBecameVisible]);
 
   // Mark the first set as visible so handleTracksLoaded will autoplay
   // when its tracks arrive. No fetch here — FeedCard handles that.
@@ -2165,11 +2173,9 @@ export default function FeedScreen() {
         onOpenComments={(setId) => openCommentsRef.current(setId)}
         onTracksLoaded={handleTracksLoaded}
         onSkipTrack={skipToNextTrack}
-        nowPlaying={nowPlaying}
-        isMuted={isMuted}
       />
     </View>
-  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded, stopAudio, skipToNextTrack, nowPlaying, isMuted]);
+  ), [cardPageHeight, fullFeedHeight, router, handleTracksLoaded, stopAudio, skipToNextTrack]);
 
   return (
     <View style={styles.container}>
@@ -2205,6 +2211,8 @@ export default function FeedScreen() {
           style={styles.feedScrollWrapper}
           onLayout={(e) => setFeedAreaHeight(e.nativeEvent.layout.height)}
         >
+          {/* NowPlayingBar overlay — rendered once, outside FlatList to avoid re-render cascade */}
+          <NowPlayingBar nowPlaying={nowPlaying} isMuted={isMuted} />
           {loadingSets && realFeedItems.length === 0 ? (
             <View style={styles.loadingFeed}>
               <ActivityIndicator color={Colors.dark.primary} />
@@ -2223,6 +2231,9 @@ export default function FeedScreen() {
               onScrollBeginDrag={handleScrollBegin}
               onMomentumScrollEnd={handleScrollEnd}
               onScrollEndDrag={handleScrollEnd}
+              windowSize={3}
+              maxToRenderPerBatch={2}
+              removeClippedSubviews={Platform.OS === 'android'}
               refreshControl={
                 <RefreshControl
                   refreshing={refreshing}
