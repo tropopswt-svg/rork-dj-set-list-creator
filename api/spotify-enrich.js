@@ -7,8 +7,9 @@ import { rateLimit } from './_lib/rate-limit.js';
 import { checkCache, writeCache, canMakeRequest, recordRateLimit, generateLookupKey } from './_lib/spotify-cache.js';
 import { fetchSoundCloudClientId, searchTrackOnSoundCloud, searchArtistOnSoundCloud } from './_lib/soundcloud-core.js';
 import { searchDeezerTrack } from './_lib/deezer-core.js';
+import { getAppleMusicToken, lookupByISRC, searchTrackOnAppleMusic } from './_lib/applemusic-core.js';
 
-const DELAY_MS = 1200; // 1.2s between Spotify API calls
+const DELAY_MS = 2500; // 2.5s between tracks — two-pass search can make 2 real API calls per track
 let soundcloudClientId = null;
 
 // Create or link an unreleased_tracks catalog entry when a track is confirmed not on Spotify
@@ -268,35 +269,84 @@ export default async function handler(req, res) {
                 albumArt: true,
                 source: 'soundcloud_fallback',
               });
-            } else if (deezerMatch?.previewUrl) {
-              // Deezer found something but wasn't a confident match — store preview only
-              const deezerData = {
-                title: track.track_title,
-                artist: track.artist_name,
-                source: 'deezer_partial',
-                deezer_preview_url: deezerMatch.previewUrl,
-                deezer_id: deezerMatch.deezerId,
-              };
-              await supabase
-                .from('set_tracks')
-                .update({ spotify_data: deezerData })
-                .eq('id', track.id);
-              enriched++;
-              results.push({
-                track: `${track.artist_name} - ${track.track_title}`,
-                matched: 'Deezer partial match',
-                albumArt: false,
-                source: 'deezer_partial',
-              });
             } else {
-              // Not found anywhere — mark as unreleased, set placeholder to prevent re-checking
-              await supabase
-                .from('set_tracks')
-                .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
-                .eq('id', track.id);
-              await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
-              notFound++;
-            }
+              // Try Apple Music as next fallback
+              let amData = null;
+              try {
+                const amToken = getAppleMusicToken();
+                if (amToken) {
+                  const existingIsrc = deezerMatch?.isrc;
+                  if (existingIsrc) {
+                    amData = await lookupByISRC(amToken, existingIsrc);
+                    if (amData?._rateLimited) amData = null;
+                  }
+                  if (!amData) {
+                    amData = await searchTrackOnAppleMusic(amToken, track.artist_name, track.track_title);
+                    if (amData?._rateLimited) amData = null;
+                  }
+                }
+              } catch {}
+
+              if (amData) {
+                // Apple Music found it — store full AM data
+                const amEnriched = {
+                  title: amData.title || track.track_title,
+                  artist: amData.artist || track.artist_name,
+                  album: amData.album,
+                  album_art_url: amData.apple_music_artwork_url,
+                  apple_music_id: amData.apple_music_id,
+                  apple_music_url: amData.apple_music_url,
+                  apple_music_artwork_url: amData.apple_music_artwork_url,
+                  apple_music_preview_url: amData.apple_music_preview_url,
+                  preview_url: amData.apple_music_preview_url,
+                  isrc: amData.isrc,
+                  release_date: amData.release_date,
+                  duration_ms: amData.duration_ms,
+                  source: 'apple_music',
+                  deezer_preview_url: deezerMatch?.previewUrl || undefined,
+                  deezer_id: deezerMatch?.deezerId || undefined,
+                };
+                await supabase
+                  .from('set_tracks')
+                  .update({ spotify_data: amEnriched, is_unreleased: false })
+                  .eq('id', track.id);
+                enriched++;
+                results.push({
+                  track: `${track.artist_name} - ${track.track_title}`,
+                  matched: `${amData.artist} - ${amData.title}`,
+                  albumArt: !!amData.apple_music_artwork_url,
+                  source: 'apple_music_fallback',
+                });
+              } else if (deezerMatch?.previewUrl) {
+                // Deezer found something but wasn't a confident match — store preview only
+                const deezerData = {
+                  title: track.track_title,
+                  artist: track.artist_name,
+                  source: 'deezer_partial',
+                  deezer_preview_url: deezerMatch.previewUrl,
+                  deezer_id: deezerMatch.deezerId,
+                };
+                await supabase
+                  .from('set_tracks')
+                  .update({ spotify_data: deezerData })
+                  .eq('id', track.id);
+                enriched++;
+                results.push({
+                  track: `${track.artist_name} - ${track.track_title}`,
+                  matched: 'Deezer partial match',
+                  albumArt: false,
+                  source: 'deezer_partial',
+                });
+              } else {
+                // Not found anywhere — mark as unreleased, set placeholder to prevent re-checking
+                await supabase
+                  .from('set_tracks')
+                  .update({ spotify_data: { checked: true, found: false }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                  .eq('id', track.id);
+                await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+                notFound++;
+              }
+            } // end: Apple Music / Deezer partial / unreleased
           } // end: neither Spotify nor Deezer confirmed
         } // end: Spotify miss
       }
@@ -457,13 +507,55 @@ export default async function handler(req, res) {
                 .eq('id', track.id);
               enriched++;
             } else {
-              await supabase
-                .from('set_tracks')
-                .update({ spotify_data: { checked: true, found: false, deezer_checked: true }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
-                .eq('id', track.id);
-              await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
-              notFound++;
-            }
+              // Try Apple Music as next fallback
+              let amData = null;
+              try {
+                const amToken = getAppleMusicToken();
+                if (amToken) {
+                  const existingIsrc = deezerMatch?.isrc;
+                  if (existingIsrc) {
+                    amData = await lookupByISRC(amToken, existingIsrc);
+                    if (amData?._rateLimited) amData = null;
+                  }
+                  if (!amData) {
+                    amData = await searchTrackOnAppleMusic(amToken, track.artist_name, track.track_title);
+                    if (amData?._rateLimited) amData = null;
+                  }
+                }
+              } catch {}
+
+              if (amData) {
+                const amEnriched = {
+                  title: amData.title || track.track_title,
+                  artist: amData.artist || track.artist_name,
+                  album: amData.album,
+                  album_art_url: amData.apple_music_artwork_url,
+                  apple_music_id: amData.apple_music_id,
+                  apple_music_url: amData.apple_music_url,
+                  apple_music_artwork_url: amData.apple_music_artwork_url,
+                  apple_music_preview_url: amData.apple_music_preview_url,
+                  preview_url: amData.apple_music_preview_url,
+                  isrc: amData.isrc,
+                  release_date: amData.release_date,
+                  duration_ms: amData.duration_ms,
+                  source: 'apple_music',
+                  deezer_preview_url: deezerMatch?.previewUrl || undefined,
+                  deezer_id: deezerMatch?.deezerId || undefined,
+                };
+                await supabase
+                  .from('set_tracks')
+                  .update({ spotify_data: amEnriched, is_unreleased: false })
+                  .eq('id', track.id);
+                enriched++;
+              } else {
+                await supabase
+                  .from('set_tracks')
+                  .update({ spotify_data: { checked: true, found: false, deezer_checked: true }, is_unreleased: true, unreleased_source: 'spotify_not_found' })
+                  .eq('id', track.id);
+                await ensureUnreleasedCatalogEntry(supabase, track.artist_name, track.track_title, track.id);
+                notFound++;
+              }
+            } // end: Apple Music / unreleased
           } // end: neither Spotify nor Deezer confirmed
         } // end: Spotify miss
       }

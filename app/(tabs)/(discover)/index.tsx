@@ -213,7 +213,7 @@ const ClearFilterFab = ({ onPress, bottom }: { onPress: () => void; bottom?: num
 // API base URL
 const API_BASE_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 
-type FilterType = 'trending' | 'recent';
+type FilterType = 'popular' | 'recent';
 
 interface Filters {
   artists: string[];
@@ -648,8 +648,8 @@ export default function DiscoverScreen() {
   const fetchSets = useCallback(async (searchTerm?: string) => {
     try {
       const params = new URLSearchParams({
-        limit: '200',
-        sort: 'recent',
+        limit: activeFilter === 'popular' ? '500' : '200',
+        sort: activeFilter,
       });
       if (searchTerm && searchTerm.length >= 2) {
         params.set('search', searchTerm);
@@ -669,7 +669,6 @@ export default function DiscoverScreen() {
           totalDuration: set.totalDuration || 0,
           coverUrl: set.coverUrl || null,
           artistImageUrl: set.artistImageUrl || null,
-          plays: set.trackCount * 10, // Estimate plays from track count
           tracks: [],
           sourceLinks: set.sourceLinks || [],
           trackCount: set.trackCount,
@@ -685,7 +684,7 @@ export default function DiscoverScreen() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [activeFilter]);
 
   // Load sets on mount and when filter changes
   useEffect(() => {
@@ -849,8 +848,8 @@ export default function DiscoverScreen() {
         return true;
       })
       .sort((a, b) => {
-        if (activeFilter === 'trending') {
-          return (b.plays || 0) - (a.plays || 0);
+        if (activeFilter === 'popular') {
+          return 0; // Preserve API popularity order
         }
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       });
@@ -1147,16 +1146,16 @@ export default function DiscoverScreen() {
 
         <View style={styles.filterRow}>
           <Pressable
-            style={[styles.filterChip, activeFilter === 'trending' && styles.filterChipActive]}
+            style={[styles.filterChip, activeFilter === 'popular' && styles.filterChipActive]}
             onPress={() => {
               Haptics.selectionAsync();
-              setActiveFilter('trending');
+              setActiveFilter('popular');
             }}
           >
-            <BlurView intensity={activeFilter === 'trending' ? 0 : 40} tint="light" style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
+            <BlurView intensity={activeFilter === 'popular' ? 0 : 40} tint="light" style={[StyleSheet.absoluteFill, { borderRadius: 20 }]} />
             <View style={styles.filterGlassShine} />
-            <TrendingUp size={14} color={activeFilter === 'trending' ? '#fff' : 'rgba(255,255,255,0.7)'} />
-            <Text style={[styles.filterText, activeFilter === 'trending' && styles.filterTextActive]}>Popular</Text>
+            <TrendingUp size={14} color={activeFilter === 'popular' ? '#fff' : 'rgba(255,255,255,0.7)'} />
+            <Text style={[styles.filterText, activeFilter === 'popular' && styles.filterTextActive]}>Popular</Text>
           </Pressable>
           <Pressable
             style={[styles.filterChip, activeFilter === 'recent' && styles.filterChipActive]}

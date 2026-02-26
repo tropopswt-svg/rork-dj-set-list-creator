@@ -1034,7 +1034,7 @@ const SetFeedCard = React.memo(function SetFeedCard({ setList, onPress, onLongPr
   const needsSource = !hasAnalyzableSource;
 
   // Check if set has been trackd (analyzed via YouTube/SoundCloud)
-  const trackCount = setList.tracksIdentified || setList.trackCount || setList.tracks?.length || 0;
+  const trackCount = setList.trackCount || setList.tracks?.length || 0;
   const isIdentified = hasAnalyzableSource && (setList.aiProcessed || trackCount > 0);
   const isFullyIdentified = trackCount > 0 && !setList.hasGaps && setList.aiProcessed;
 

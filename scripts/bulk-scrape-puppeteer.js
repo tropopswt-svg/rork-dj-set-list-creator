@@ -9,20 +9,33 @@
  *   --source=most-liked     Scrape most liked tracklists
  *   --source=premium        Scrape premium audio livesets
  *   --source=url:<url>      Scrape a specific index page URL
- *   --limit=10              Max number of sets to scrape
+ *   --seeds                 Scrape all categories from 1001-seeds.json
+ *   --seeds=venues          Scrape only specific categories (comma-separated)
+ *   --pages=1               Number of listing pages to scrape per seed (default 1)
+ *   --limit=50              Max number of sets to scrape per seed
+ *   --delay=1500            Delay between requests in ms (default 1500)
  *   --dry-run               Just list URLs, don't import
+ *   --headful               Run with visible browser (useful for solving captchas)
  */
 
-const puppeteer = require('puppeteer-core');
+// Try puppeteer (bundled Chrome) first, fall back to puppeteer-core
+let puppeteer;
+try {
+  puppeteer = require('puppeteer');
+} catch (e) {
+  puppeteer = require('puppeteer-core');
+}
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { execSync } = require('child_process');
 
 // Configuration
-const API_BASE_URL = process.env.API_URL || 'https://rork-dj-set-list-creator.vercel.app';
-const DELAY_BETWEEN_REQUESTS = 3000; // 3 seconds between page loads
+const API_BASE_URL = process.env.API_URL || 'https://trakthat.app';
+const DEFAULT_DELAY = 1500;
 
-// Find Chrome executable
+// Find Chrome executable (only needed for puppeteer-core)
 function findChrome() {
   const paths = [
     // macOS
@@ -39,7 +52,7 @@ function findChrome() {
 
   for (const p of paths) {
     try {
-      require('fs').accessSync(p);
+      fs.accessSync(p);
       return p;
     } catch (e) {
       // Not found, try next
@@ -57,30 +70,97 @@ function findChrome() {
   return null;
 }
 
+// Apply stealth patches to a page to avoid bot detection
+async function applyStealthPatches(page) {
+  // Override navigator.webdriver
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    // Override chrome.runtime to look like a real browser
+    window.chrome = { runtime: {} };
+    // Override permissions query
+    const originalQuery = window.navigator.permissions.query;
+    window.navigator.permissions.query = (parameters) =>
+      parameters.name === 'notifications'
+        ? Promise.resolve({ state: Notification.permission })
+        : originalQuery(parameters);
+    // Override plugins to look non-empty
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [1, 2, 3, 4, 5],
+    });
+    // Override languages
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-US', 'en'],
+    });
+  });
+}
+
 // Parse command line args
 const args = process.argv.slice(2);
 const options = {
-  source: 'most-liked',
-  limit: 10,
+  source: null,
+  seeds: null,       // null = not using seeds, '' = all categories, 'venues,labels' = specific
+  limit: 50,
+  pages: 1,
+  delay: DEFAULT_DELAY,
   dryRun: false,
+  headful: false,
 };
 
 args.forEach(arg => {
   if (arg.startsWith('--source=')) {
     options.source = arg.replace('--source=', '');
+  } else if (arg === '--seeds') {
+    options.seeds = '';  // All categories
+  } else if (arg.startsWith('--seeds=')) {
+    options.seeds = arg.replace('--seeds=', '');
   } else if (arg.startsWith('--limit=')) {
     options.limit = parseInt(arg.replace('--limit=', ''));
+  } else if (arg.startsWith('--pages=')) {
+    options.pages = parseInt(arg.replace('--pages=', ''));
+  } else if (arg.startsWith('--delay=')) {
+    options.delay = parseInt(arg.replace('--delay=', ''));
   } else if (arg === '--dry-run') {
     options.dryRun = true;
+  } else if (arg === '--headful') {
+    options.headful = true;
   }
 });
 
-// Source URLs
+// Default to seeds mode if nothing specified
+if (options.source === null && options.seeds === null) {
+  options.seeds = '';
+}
+
+// Source URLs (legacy presets)
 const SOURCES = {
   'most-liked': 'https://www.1001tracklists.com/specials/most_liked_tracklists.html',
   'premium': 'https://www.1001tracklists.com/specials/premium_audio_livesets/index.html',
   'trending': 'https://www.1001tracklists.com/charts/trending/index.html',
 };
+
+// Load seeds from 1001-seeds.json
+function loadSeeds(categories) {
+  const seedPath = path.join(__dirname, '1001-seeds.json');
+  if (!fs.existsSync(seedPath)) {
+    console.error('Seed file not found:', seedPath);
+    process.exit(1);
+  }
+
+  const seeds = JSON.parse(fs.readFileSync(seedPath, 'utf8'));
+  const cats = categories ? categories.split(',').map(c => c.trim()) : Object.keys(seeds);
+
+  const entries = [];
+  for (const cat of cats) {
+    if (!seeds[cat]) {
+      console.warn(`Unknown category: ${cat} (available: ${Object.keys(seeds).join(', ')})`);
+      continue;
+    }
+    for (const entry of seeds[cat]) {
+      entries.push({ ...entry, category: cat });
+    }
+  }
+  return entries;
+}
 
 // Send data to our API
 function sendToApi(data) {
@@ -258,7 +338,7 @@ async function extractSetData(page, sourceUrl) {
               title: trackName || 'Unknown',
               artist: trackArtist || result.setInfo.djName || 'Unknown',
               timestamp_seconds: secs,
-              timestamp_str: timeStr || '0:00',
+              timestamp_str: timeStr || null,
               position: index + 1,
               is_unreleased: isUnreleased,
             });
@@ -276,164 +356,262 @@ async function extractSetData(page, sourceUrl) {
   }, sourceUrl);
 }
 
-// Main function
-async function main() {
-  console.log('='.repeat(60));
-  console.log('1001Tracklists Bulk Scraper (Puppeteer)');
-  console.log('='.repeat(60));
-  console.log(`Source: ${options.source}`);
-  console.log(`Limit: ${options.limit}`);
-  console.log(`Dry run: ${options.dryRun}`);
-  console.log(`API: ${API_BASE_URL}`);
-  console.log('');
+// Scrape tracklist URLs from a listing page, with pagination
+async function scrapeListingPage(page, baseUrl, maxPages) {
+  const allUrls = [];
 
-  // Find Chrome
-  const chromePath = findChrome();
-  if (!chromePath) {
-    console.error('❌ Could not find Chrome/Chromium installation');
-    console.log('Please install Google Chrome or Chromium');
-    process.exit(1);
-  }
-  console.log(`Using Chrome: ${chromePath}`);
-  console.log('');
+  for (let p = 1; p <= maxPages; p++) {
+    // Build paginated URL
+    const pageUrl = p === 1 ? baseUrl : appendPage(baseUrl, p);
 
-  // Get source URL
-  let sourceUrl;
-  if (options.source.startsWith('url:')) {
-    sourceUrl = options.source.replace('url:', '');
-  } else {
-    sourceUrl = SOURCES[options.source];
-  }
+    console.log(`  Page ${p}: ${pageUrl}`);
+    await page.goto(pageUrl, { waitUntil: 'networkidle2', timeout: 60000 });
 
-  if (!sourceUrl) {
-    console.error(`Unknown source: ${options.source}`);
-    console.log('Available sources: most-liked, premium, trending, url:<full-url>');
-    process.exit(1);
-  }
+    // Wait for dynamic content
+    await sleep(3000);
 
-  let browser;
-  try {
-    // Launch browser
-    console.log('Launching browser...');
-    browser = await puppeteer.launch({
-      executablePath: chromePath,
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    const page = await browser.newPage();
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
-
-    // Fetch index page
-    console.log(`Fetching index page: ${sourceUrl}`);
-    await page.goto(sourceUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-
-    // Wait longer for dynamic content and potential cloudflare check
-    console.log('Waiting for page to fully load...');
-    await sleep(5000);
-
-    // Check for cloudflare/turnstile challenge
+    // Check for IP block or cloudflare challenge
     const pageContent = await page.content();
-    if (pageContent.includes('turnstile') || pageContent.includes('challenge-platform')) {
-      console.log('⚠️  Cloudflare challenge detected, waiting longer...');
+    const bodyText = await page.evaluate(() => document.body?.innerText?.substring(0, 300) || '');
+
+    if (bodyText.includes('has been limited due to overuse') || bodyText.includes('captcha to unblock')) {
+      console.log('  ⛔ IP is rate-limited by 1001tracklists!');
+      if (options.headful) {
+        console.log('  Solve the captcha in the browser window, then press Enter...');
+        await new Promise(r => process.stdin.once('data', r));
+        await sleep(2000);
+      } else {
+        console.log('  Run with --headful to solve captcha, or wait and try later');
+        return [];
+      }
+    } else if (pageContent.includes('turnstile') || pageContent.includes('challenge-platform')) {
+      console.log('  ⚠️  Cloudflare challenge detected, waiting...');
       await sleep(10000);
     }
 
-    // Debug: log page title
-    const pageTitle = await page.title();
-    console.log(`Page title: ${pageTitle}`);
-
-    const tracklistUrls = await extractTracklistUrls(page);
-
-    // If no URLs found, try scrolling to load more content
-    if (tracklistUrls.length === 0) {
-      console.log('No URLs found, trying to scroll...');
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await sleep(3000);
-    }
-
-    const finalUrls = tracklistUrls.length > 0 ? tracklistUrls : await extractTracklistUrls(page);
-    console.log(`Found ${finalUrls.length} tracklist URLs`);
-
-    // Limit URLs
-    const urlsToProcess = finalUrls.slice(0, options.limit);
-    console.log(`Processing ${urlsToProcess.length} sets...`);
-    console.log('');
-
-    if (options.dryRun) {
-      console.log('DRY RUN - URLs that would be processed:');
-      urlsToProcess.forEach((url, i) => {
-        console.log(`  ${i + 1}. ${url}`);
-      });
-      await browser.close();
-      return;
-    }
-
-    // Process each tracklist
-    const results = {
-      success: 0,
-      skipped: 0,
-      failed: 0,
-    };
-
-    for (let i = 0; i < urlsToProcess.length; i++) {
-      const url = urlsToProcess[i];
-      console.log(`[${i + 1}/${urlsToProcess.length}] ${url}`);
-
-      try {
-        // Navigate to tracklist page
-        await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-
-        // Extract set data
-        const setData = await extractSetData(page, url);
-
-        if (!setData.setInfo.title || setData.setInfo.title.includes('1001Tracklists')) {
-          console.log('  ⚠️  Skipped: Could not extract set info');
-          results.skipped++;
-          continue;
+    const urls = await extractTracklistUrls(page);
+    if (urls.length === 0) {
+      if (p === 1) {
+        // First page empty — try scrolling
+        await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        await sleep(3000);
+        const retryUrls = await extractTracklistUrls(page);
+        if (retryUrls.length > 0) {
+          allUrls.push(...retryUrls);
         }
+      }
+      break; // No more pages
+    }
 
-        console.log(`  Title: ${setData.setInfo.title}`);
-        console.log(`  DJ: ${setData.setInfo.djName}`);
-        console.log(`  Tracks: ${setData.tracks.length}`);
-        if (setData.setInfo.youtube_url) console.log(`  YouTube: ✓`);
-        if (setData.setInfo.soundcloud_url) console.log(`  SoundCloud: ✓`);
+    // Only add URLs we haven't seen
+    const before = allUrls.length;
+    for (const url of urls) {
+      if (!allUrls.includes(url)) allUrls.push(url);
+    }
+    const newCount = allUrls.length - before;
+    console.log(`  Found ${urls.length} URLs (${newCount} new, ${allUrls.length} total)`);
 
-        // Send to API
-        const apiResult = await sendToApi(setData);
+    if (newCount === 0) break; // All duplicates = no more new content
+  }
 
-        if (apiResult.success) {
-          if (apiResult.setsCreated > 0) {
-            console.log(`  ✅ Imported!`);
-            results.success++;
-          } else {
-            console.log(`  ⏭️  Already exists`);
-            results.skipped++;
-          }
+  return allUrls;
+}
+
+// Append page number to a URL
+function appendPage(url, pageNum) {
+  // Handle URLs that already have query params
+  if (url.includes('?')) {
+    return `${url}&p=${pageNum}`;
+  }
+  // Handle URLs ending in /index.html
+  if (url.endsWith('/index.html')) {
+    return url.replace('/index.html', `/index${pageNum}.html`);
+  }
+  // Handle URLs ending in .html
+  if (url.endsWith('.html')) {
+    return url.replace('.html', `${pageNum}.html`);
+  }
+  // Default: add query param
+  return `${url}?p=${pageNum}`;
+}
+
+// Process a batch of tracklist URLs
+async function processTracklistUrls(page, urls, results, delay) {
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    console.log(`  [${i + 1}/${urls.length}] ${url}`);
+
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      const setData = await extractSetData(page, url);
+
+      if (!setData.setInfo.title || setData.setInfo.title.includes('1001Tracklists')) {
+        console.log('    ⚠️  Skipped: Could not extract set info');
+        results.skipped++;
+        continue;
+      }
+
+      console.log(`    ${setData.setInfo.djName} — ${setData.setInfo.title} (${setData.tracks.length} tracks)`);
+
+      const apiResult = await sendToApi(setData);
+
+      if (apiResult.success) {
+        if (apiResult.setsCreated > 0) {
+          console.log('    ✅ Imported');
+          results.success++;
         } else {
-          console.log(`  ❌ Error: ${apiResult.error || 'Unknown'}`);
-          results.failed++;
+          console.log('    ⏭️  Already exists');
+          results.skipped++;
         }
-
-      } catch (e) {
-        console.log(`  ❌ Error: ${e.message}`);
+      } else {
+        console.log(`    ❌ Error: ${apiResult.error || 'Unknown'}`);
         results.failed++;
       }
 
-      // Delay between requests
-      if (i < urlsToProcess.length - 1) {
-        await sleep(DELAY_BETWEEN_REQUESTS);
-      }
+    } catch (e) {
+      console.log(`    ❌ Error: ${e.message}`);
+      results.failed++;
     }
 
-    // Summary
+    if (i < urls.length - 1) {
+      await sleep(delay);
+    }
+  }
+}
+
+// Main function
+async function main() {
+  const isSeedMode = options.seeds !== null;
+
+  console.log('='.repeat(60));
+  console.log('1001Tracklists Bulk Scraper (Puppeteer)');
+  console.log('='.repeat(60));
+
+  if (isSeedMode) {
+    console.log(`Mode: Seeds ${options.seeds || '(all categories)'}`);
+  } else {
+    console.log(`Source: ${options.source}`);
+  }
+  console.log(`Limit per seed: ${options.limit}`);
+  console.log(`Pages per seed: ${options.pages}`);
+  console.log(`Delay: ${options.delay}ms`);
+  console.log(`Dry run: ${options.dryRun}`);
+  console.log(`Headful: ${options.headful}`);
+  console.log(`API: ${API_BASE_URL}`);
+  console.log('');
+
+  // Find Chrome (only needed if puppeteer doesn't bundle one)
+  const chromePath = findChrome();
+  if (chromePath) {
+    console.log(`Using Chrome: ${chromePath}`);
+  } else {
+    console.log('Using Puppeteer bundled Chrome');
+  }
+  console.log('');
+
+  // Build list of sources to scrape
+  let sources = [];
+  if (isSeedMode) {
+    const seeds = loadSeeds(options.seeds || null);
+    sources = seeds.map(s => ({ name: `[${s.category}] ${s.name}`, url: s.url }));
+    console.log(`Loaded ${sources.length} seeds`);
+  } else {
+    let sourceUrl;
+    if (options.source.startsWith('url:')) {
+      sourceUrl = options.source.replace('url:', '');
+    } else {
+      sourceUrl = SOURCES[options.source];
+    }
+    if (!sourceUrl) {
+      console.error(`Unknown source: ${options.source}`);
+      console.log('Available: most-liked, premium, trending, url:<full-url>, --seeds');
+      process.exit(1);
+    }
+    sources = [{ name: options.source, url: sourceUrl }];
+  }
+
+  console.log('');
+
+  let browser;
+  try {
+    console.log(`Launching browser (${options.headful ? 'headful' : 'headless'})...`);
+    const launchOpts = {
+      headless: options.headful ? false : 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-infobars',
+        '--window-size=1920,1080',
+      ],
+    };
+    // Only set executablePath if we found a local Chrome (puppeteer may bundle its own)
+    if (chromePath) {
+      launchOpts.executablePath = chromePath;
+    }
+    browser = await puppeteer.launch(launchOpts);
+
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+    await applyStealthPatches(page);
+
+    // Grand totals
+    const grandTotal = { success: 0, skipped: 0, failed: 0, urlsFound: 0 };
+
+    for (let si = 0; si < sources.length; si++) {
+      const src = sources[si];
+      console.log('');
+      console.log('-'.repeat(60));
+      console.log(`[${si + 1}/${sources.length}] ${src.name}`);
+      console.log(`  ${src.url}`);
+      console.log('-'.repeat(60));
+
+      // Scrape listing page(s) for tracklist URLs
+      const tracklistUrls = await scrapeListingPage(page, src.url, options.pages);
+
+      if (tracklistUrls.length === 0) {
+        console.log('  No tracklist URLs found, skipping');
+        continue;
+      }
+
+      // Limit
+      const urlsToProcess = tracklistUrls.slice(0, options.limit);
+      grandTotal.urlsFound += urlsToProcess.length;
+      console.log(`  Processing ${urlsToProcess.length} of ${tracklistUrls.length} tracklists`);
+
+      if (options.dryRun) {
+        console.log('  DRY RUN — URLs:');
+        urlsToProcess.forEach((url, i) => {
+          console.log(`    ${i + 1}. ${url}`);
+        });
+        continue;
+      }
+
+      // Process each tracklist
+      const results = { success: 0, skipped: 0, failed: 0 };
+      await processTracklistUrls(page, urlsToProcess, results, options.delay);
+
+      // Per-seed summary
+      console.log(`  Summary: ✅ ${results.success} imported, ⏭️ ${results.skipped} skipped, ❌ ${results.failed} failed`);
+
+      grandTotal.success += results.success;
+      grandTotal.skipped += results.skipped;
+      grandTotal.failed += results.failed;
+    }
+
+    // Grand summary
     console.log('');
     console.log('='.repeat(60));
-    console.log('Summary');
+    console.log('Grand Total');
     console.log('='.repeat(60));
-    console.log(`✅ Imported: ${results.success}`);
-    console.log(`⏭️  Skipped: ${results.skipped}`);
-    console.log(`❌ Failed: ${results.failed}`);
+    console.log(`Seeds processed: ${sources.length}`);
+    console.log(`URLs found: ${grandTotal.urlsFound}`);
+    if (!options.dryRun) {
+      console.log(`✅ Imported: ${grandTotal.success}`);
+      console.log(`⏭️  Skipped: ${grandTotal.skipped}`);
+      console.log(`❌ Failed: ${grandTotal.failed}`);
+    }
 
   } catch (e) {
     console.error('Fatal error:', e.message);

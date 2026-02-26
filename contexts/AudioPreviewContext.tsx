@@ -100,56 +100,61 @@ export const [AudioPreviewProvider, useAudioPreview] = createContextHook(() => {
     }
   }, []);
 
+  // Track state via refs for stable closures (avoids stale closure issues)
+  const currentTrackIdRef = useRef<string | null>(null);
+  currentTrackIdRef.current = currentTrackId;
+  const isPlayingRef = useRef(false);
+  isPlayingRef.current = isPlaying;
+
   const playPreview = useCallback(async (trackId: string, previewUrl: string) => {
-    // Same track — toggle pause/resume
-    if (currentTrackId === trackId && soundRef.current) {
-      const status = await soundRef.current.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-        }
-        return;
+    // Same track — toggle pause/resume (optimistic UI)
+    if (currentTrackIdRef.current === trackId && soundRef.current) {
+      if (isPlayingRef.current) {
+        // Optimistic: show paused immediately
+        setIsPlaying(false);
+        soundRef.current.pauseAsync().catch(() => setIsPlaying(true));
+      } else {
+        // Optimistic: show playing immediately
+        setIsPlaying(true);
+        soundRef.current.playAsync().catch(() => setIsPlaying(false));
       }
+      return;
     }
 
     genRef.current++;
     const gen = genRef.current;
 
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    }
-
+    // Update UI immediately before async work
     setCurrentTrackId(trackId);
     setIsPlaying(false);
     setIsLoading(true);
     setProgress(0);
 
+    // Unload old sound in background (don't block UI)
+    if (soundRef.current) {
+      const old = soundRef.current;
+      soundRef.current = null;
+      old.unloadAsync().catch(() => {});
+    }
+
     await loadAndPlay(gen, previewUrl, trackId);
-  }, [currentTrackId, loadAndPlay]);
+  }, [loadAndPlay]);
 
   /**
    * Search Deezer directly (same pattern as feed) then play.
    * Deezer API is free, no auth, no CORS issues on mobile.
    */
   const playDeezerPreview = useCallback(async (trackId: string, artist: string, title: string) => {
-    // Same track — toggle pause/resume
-    if (currentTrackId === trackId && soundRef.current) {
-      const status = await soundRef.current.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await soundRef.current.pauseAsync();
-          setIsPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setIsPlaying(true);
-        }
-        return;
+    // Same track — toggle pause/resume (optimistic UI)
+    if (currentTrackIdRef.current === trackId && soundRef.current) {
+      if (isPlayingRef.current) {
+        setIsPlaying(false);
+        soundRef.current.pauseAsync().catch(() => setIsPlaying(true));
+      } else {
+        setIsPlaying(true);
+        soundRef.current.playAsync().catch(() => setIsPlaying(false));
       }
+      return;
     }
 
     // Check client-side cache
@@ -167,38 +172,46 @@ export const [AudioPreviewProvider, useAudioPreview] = createContextHook(() => {
     genRef.current++;
     const gen = genRef.current;
 
-    if (soundRef.current) {
-      await soundRef.current.unloadAsync().catch(() => {});
-      soundRef.current = null;
-    }
-
+    // Update UI immediately
     setCurrentTrackId(trackId);
     setIsPlaying(false);
     setIsLoading(true);
     setProgress(0);
 
+    // Unload old sound in background
+    if (soundRef.current) {
+      const old = soundRef.current;
+      soundRef.current = null;
+      old.unloadAsync().catch(() => {});
+    }
+
     const cleanedTitle = cleanTitle(title);
     const cleanedArtist = cleanTitle(artist);
 
-    // Two-query strategy — same as feed: structured first, then simple
+    // Parallel Deezer queries — fire both at once, use first valid result
     const queries = [
       encodeURIComponent(`artist:"${cleanedArtist}" track:"${cleanedTitle}"`),
       encodeURIComponent(`${cleanedArtist} ${cleanedTitle}`),
     ];
 
-    for (const q of queries) {
-      if (genRef.current !== gen) return;
-      try {
-        const res = await fetch(`https://api.deezer.com/search?q=${q}&limit=1`);
-        if (genRef.current !== gen) return;
-        const json = await res.json();
-        const preview = json?.data?.[0]?.preview;
+    const results = await Promise.allSettled(
+      queries.map(q =>
+        fetch(`https://api.deezer.com/search?q=${q}&limit=1`).then(r => r.json())
+      )
+    );
+
+    if (genRef.current !== gen) return;
+
+    // Pick the first result that has a preview URL
+    for (const result of results) {
+      if (result.status === 'fulfilled') {
+        const preview = result.value?.data?.[0]?.preview;
         if (preview) {
           previewCache.current.set(trackId, preview);
           await loadAndPlay(gen, preview, trackId);
           return;
         }
-      } catch {}
+      }
     }
 
     // Nothing found
@@ -208,18 +221,17 @@ export const [AudioPreviewProvider, useAudioPreview] = createContextHook(() => {
       setCurrentTrackId(null);
       setFailedTrackId(trackId);
     }
-  }, [currentTrackId, playPreview, loadAndPlay]);
+  }, [playPreview, loadAndPlay]);
 
   const togglePlayPause = useCallback(async () => {
     if (!soundRef.current) return;
-    const status = await soundRef.current.getStatusAsync();
-    if (!status.isLoaded) return;
-    if (status.isPlaying) {
-      await soundRef.current.pauseAsync();
+    // Optimistic toggle — update UI immediately, revert on failure
+    if (isPlayingRef.current) {
       setIsPlaying(false);
+      soundRef.current.pauseAsync().catch(() => setIsPlaying(true));
     } else {
-      await soundRef.current.playAsync();
       setIsPlaying(true);
+      soundRef.current.playAsync().catch(() => setIsPlaying(false));
     }
   }, []);
 

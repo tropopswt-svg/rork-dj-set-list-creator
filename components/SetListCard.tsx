@@ -109,7 +109,7 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
             <View style={styles.bottomRowLarge}>
               <View style={styles.trackCount}>
                 <Music size={12} color={Colors.dark.text} />
-                <Text style={styles.trackCountText}>{setList.tracksIdentified || setList.trackCount || setList.tracks.length} tracks</Text>
+                <Text style={styles.trackCountText}>{setList.trackCount || setList.tracks.length} tracks</Text>
               </View>
               {setList.commentsScraped && (
                 <View style={styles.commentsCount}>
@@ -168,7 +168,7 @@ export default function SetListCard({ setList, onPress, large }: SetListCardProp
         </View>
       </View>
       <View style={styles.badge}>
-        <Text style={styles.badgeText}>{setList.tracksIdentified || setList.trackCount || setList.tracks.length}</Text>
+        <Text style={styles.badgeText}>{setList.trackCount || setList.tracks.length}</Text>
       </View>
     </Pressable>
   );

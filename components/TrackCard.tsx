@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, ActivityIndicator, Animated } from 'react-native';
 import { Image } from 'expo-image';
-import { Plus, CheckCircle, User, ThumbsUp, Disc3, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle, CircleDot, Sparkles, Volume2, Play, Pause } from 'lucide-react-native';
+import { Plus, CheckCircle, User, ThumbsUp, Clock, Link2, ExternalLink, X, AlertCircle, Youtube, Music2, Wand2, ShieldCheck, HelpCircle, CircleDot, Sparkles, Volume2, Play, Pause } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import Colors from '@/constants/colors';
@@ -26,6 +26,33 @@ interface TrackCardProps {
   isPreviewLoading?: boolean;
   hasPreview?: boolean;
   previewFailed?: boolean; // Brief "no preview" feedback
+}
+
+// Liquid glass unreleased badge with shimmer animation
+function UnreleasedBadge() {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 2000, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 2000, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+
+  const glowOpacity = shimmer.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.3, 0.7],
+  });
+
+  return (
+    <View style={styles.unreleasedGlass}>
+      <Animated.View style={[styles.unreleasedGlassShimmer, { opacity: glowOpacity }]} />
+      <Sparkles size={9} color="#FFD700" />
+      <Text style={styles.unreleasedGlassText}>Unreleased</Text>
+    </View>
+  );
 }
 
 export default function TrackCard({
@@ -336,11 +363,8 @@ export default function TrackCard({
               {isPartialId ? 'Unknown Title' : (isUnidentified ? 'Unknown Track' : displayTitle)}
             </Text>
             {isUnidentified && (
-              <View style={styles.questionBadge3d}>
-                <View style={styles.questionBadgeShadow} />
-                <View style={styles.questionBadgeFace}>
-                  <Text style={styles.questionBadgeText}>?</Text>
-                </View>
+              <View style={styles.idBadgePill}>
+                <Text style={styles.idBadgePillText}>ID</Text>
               </View>
             )}
           </View>
@@ -349,7 +373,7 @@ export default function TrackCard({
           </Text>
           {featuredCount > 0 && (
             <Pressable style={styles.featuredRow} onPress={handleFeaturedPress}>
-              <Disc3 size={12} color="#C41E3A" />
+              <Music2 size={12} color="#C41E3A" />
               <Text style={styles.featuredMainText}>
                 In {featuredCount} other set{featuredCount !== 1 ? 's' : ''}
               </Text>
@@ -358,24 +382,12 @@ export default function TrackCard({
           <View style={styles.meta}>
             {renderSourceIcon()}
             {renderVerificationBadge()}
-            {/* Release status badges */}
+            {/* Release status badges — liquid glass */}
             {showUnreleasedBadge && (
-              <View style={styles.unreleasedBadge3d}>
-                <View style={styles.unreleasedBadgeShadow} />
-                <View style={styles.unreleasedBadgeFace}>
-                  <Sparkles size={9} color="#FFD700" />
-                  <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
-                </View>
-              </View>
+              <UnreleasedBadge />
             )}
             {showPartialIdBadge && (
-              <View style={styles.unreleasedBadge3d}>
-                <View style={styles.unreleasedBadgeShadow} />
-                <View style={styles.unreleasedBadgeFace}>
-                  <Sparkles size={9} color="#FFD700" />
-                  <Text style={styles.unreleasedBadgeText}>Unreleased</Text>
-                </View>
-              </View>
+              <UnreleasedBadge />
             )}
             {/* Spotify verified badge — track matched to Spotify */}
             {!isUnidentified && !showUnreleasedBadge && !showPartialIdBadge && hasConfirmedRelease && (
@@ -455,17 +467,16 @@ export default function TrackCard({
               <Text style={styles.idThisButtonText}>ID This</Text>
             </Pressable>
           )}
-          {/* Show identify button for unidentified tracks */}
+          {/* Show trakd identify button for unidentified tracks */}
           {isUnidentified && onIdentify && !onListen && (
             <Pressable
-              style={styles.identifyButton}
+              style={styles.trakdIdentifyButton}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 onIdentify();
               }}
             >
-              <Wand2 size={14} color="#FFF" />
-              <Text style={styles.identifyButtonText}>ID</Text>
+              <Text style={styles.trakdIdentifyText}>trakd</Text>
             </Pressable>
           )}
           {onUpvote && !track.verified && !isUnidentified && (
@@ -529,7 +540,7 @@ export default function TrackCard({
                     />
                   ) : (
                     <View style={[styles.featuredSetCover, { backgroundColor: Colors.dark.surface, justifyContent: 'center', alignItems: 'center' }]}>
-                      <Disc3 size={16} color={Colors.dark.textMuted} />
+                      <Music2 size={16} color={Colors.dark.textMuted} />
                     </View>
                   )}
                   <View style={styles.featuredSetInfo}>
@@ -713,45 +724,34 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#22C55E',
   },
-  unreleasedBadge3d: {
-    position: 'relative' as const,
-    paddingBottom: 2,
-  },
-  unreleasedBadgeShadow: {
-    position: 'absolute' as const,
-    top: 2,
-    left: 1,
-    right: -1,
-    bottom: -1,
-    borderRadius: 7,
-    backgroundColor: 'rgba(180, 130, 0, 0.4)',
-  },
-  unreleasedBadgeFace: {
+  unreleasedGlass: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 7,
-    backgroundColor: 'rgba(10, 10, 10, 0.6)',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 215, 0, 0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 215, 0, 0.3)',
-    borderTopColor: 'rgba(255, 223, 120, 0.5)',
-    borderBottomColor: 'rgba(255, 215, 0, 0.15)',
-    shadowColor: '#FFD700',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 4,
+    borderColor: 'rgba(255, 215, 0, 0.15)',
+    borderTopColor: 'rgba(255, 223, 120, 0.25)',
+    borderBottomColor: 'rgba(255, 215, 0, 0.08)',
+    overflow: 'hidden' as const,
   },
-  unreleasedBadgeText: {
+  unreleasedGlassShimmer: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 10,
+  },
+  unreleasedGlassText: {
     fontSize: 9,
-    fontWeight: '800' as const,
+    fontWeight: '700' as const,
     color: '#FFD700',
-    letterSpacing: 0.4,
-    textShadowColor: 'rgba(255, 215, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 0 },
-    textShadowRadius: 3,
+    letterSpacing: 0.3,
   },
   releasedBadge: {
     flexDirection: 'row',
@@ -877,27 +877,29 @@ const styles = StyleSheet.create({
     fontWeight: '600' as const,
     color: '#FFFFFF',
   },
-  identifyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(10, 10, 10, 0.65)',
+  trakdIdentifyButton: {
+    backgroundColor: 'rgba(196, 30, 58, 0.65)',
     paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    borderTopColor: 'rgba(255,255,255,0.22)',
-    shadowColor: '#000',
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+    borderTopColor: 'rgba(255, 255, 255, 0.25)',
+    borderBottomColor: 'rgba(196, 30, 58, 0.3)',
+    shadowColor: '#C41E3A',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
-    shadowRadius: 6,
+    shadowRadius: 4,
     elevation: 3,
   },
-  identifyButtonText: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: '#FFF',
+  trakdIdentifyText: {
+    fontSize: 10,
+    fontWeight: '900' as const,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   listenButton: {
     flexDirection: 'row',
@@ -921,47 +923,19 @@ const styles = StyleSheet.create({
     fontWeight: '700' as const,
     color: '#FFF',
   },
-  questionBadge3d: {
-    width: 26,
-    height: 30,
-    position: 'relative',
-  },
-  questionBadgeShadow: {
-    position: 'absolute',
-    bottom: 0,
-    left: 1,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(196, 30, 58, 0.3)',
-  },
-  questionBadgeFace: {
-    position: 'absolute',
-    top: 0,
-    left: 1,
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: 'rgba(196, 30, 58, 0.85)',
+  idBadgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
-    borderTopColor: 'rgba(255, 255, 255, 0.35)',
-    borderBottomColor: 'rgba(196, 30, 58, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#C41E3A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.35,
-    shadowRadius: 5,
-    elevation: 6,
+    borderColor: 'rgba(196, 30, 58, 0.25)',
   },
-  questionBadgeText: {
-    color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '900',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
+  idBadgePillText: {
+    color: '#C41E3A',
+    fontSize: 10,
+    fontWeight: '800' as const,
+    letterSpacing: 0.5,
   },
   unidentifiedTimestamp: {
     backgroundColor: 'rgba(196, 30, 58, 0.2)',
