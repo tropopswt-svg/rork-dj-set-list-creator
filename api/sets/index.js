@@ -113,13 +113,19 @@ function normalizeScores(scores) {
   return scores.map(s => s / max);
 }
 
+// ── For You Constants ────────────────────────────────────────────────────
+
+const RADIO_TITLE_PATTERN = /\b(radio|broadcast|podcast)\b/i;
+
+const COLD_START_SEED_ARTISTS = ['chris-stussy', 'max-dean', 'locklead'];
+
 // ── Query Builder ────────────────────────────────────────────────────────
 
 function buildBaseQuery(supabase, { dj, search } = {}) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   let query = supabase
     .from('sets')
-    .select('*, artists:dj_id(image_url, genres)', { count: 'exact' })
+    .select('*, artists:dj_id(image_url, genres), set_tracks(count)', { count: 'exact' })
     // Exclude future events — sets that haven't happened yet have no tracklists
     .or(`event_date.is.null,event_date.lte.${today}`);
   if (dj) query = query.ilike('dj_name', `%${dj}%`);
@@ -132,6 +138,8 @@ function buildBaseQuery(supabase, { dj, search } = {}) {
 function transformSet(set) {
   const youtubeVideoId = extractYouTubeVideoId(set.youtube_url);
   const coverUrl = set.cover_url || getYouTubeThumbnail(youtubeVideoId) || null;
+  // Use actual row count from set_tracks join; fall back to stored track_count
+  const actualTrackCount = set.set_tracks?.[0]?.count ?? set.track_count ?? 0;
   return {
     id: set.id,
     name: set.title,
@@ -141,7 +149,7 @@ function transformSet(set) {
     location: set.location || null,
     date: set.event_date || set.created_at,
     totalDuration: set.duration_seconds || 0,
-    trackCount: set.track_count || 0,
+    trackCount: actualTrackCount,
     coverUrl,
     sourceLinks: [
       set.tracklist_url && { platform: '1001tracklists', url: set.tracklist_url },
@@ -200,6 +208,15 @@ export default async function handler(req, res) {
       const { data: pool, error, count } = await query;
       if (error) throw error;
       totalCount = count;
+
+      // Filter radio shows / broadcasts / podcasts and sets older than 6 years
+      const sixYearsAgo = Date.now() - 6 * 365.25 * 86400000;
+      const filteredPool = (pool || []).filter(s => {
+        if (RADIO_TITLE_PATTERN.test(s.title)) return false;
+        const date = s.event_date || s.created_at;
+        if (date && new Date(date).getTime() < sixYearsAgo) return false;
+        return true;
+      });
 
       // Gather personalization signals (gracefully degrade if tables are empty)
       const affinityMap = {};
@@ -288,11 +305,36 @@ export default async function handler(req, res) {
         || Object.keys(genreScores).length > 0
         || followedArtistIds.size > 0;
 
+      // Build cold-start genre profile from seed artists (only when no personalization)
+      let coldStartGenreScores = {};
+      if (!hasPersonalization) {
+        const { data: seedArtists } = await supabase
+          .from('artists')
+          .select('genres')
+          .in('slug', COLD_START_SEED_ARTISTS);
+
+        const genreCounts = {};
+        (seedArtists || []).forEach(a => {
+          (a.genres || []).forEach(g => {
+            const genre = g.toLowerCase();
+            genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+          });
+        });
+
+        if (Object.keys(genreCounts).length > 0) {
+          const maxCount = Math.max(...Object.values(genreCounts));
+          for (const g in genreCounts) coldStartGenreScores[g] = genreCounts[g] / maxCount;
+        } else {
+          // Hardcoded fallback if seed artists have no genres in DB
+          coldStartGenreScores = { house: 1.0, 'tech house': 0.9, 'deep house': 0.8, minimal: 0.7 };
+        }
+      }
+
       // Compute velocity scores and normalize relative to the pool
-      const rawVelocities = (pool || []).map(s => engagementVelocity(s));
+      const rawVelocities = filteredPool.map(s => engagementVelocity(s));
       const normVelocities = normalizeScores(rawVelocities);
 
-      const scored = (pool || []).map((set, i) => {
+      const scored = filteredPool.map((set, i) => {
         let score;
         if (hasPersonalization) {
           // ── Genre match (discovery signal) ──
@@ -348,11 +390,33 @@ export default async function handler(req, res) {
           // Apply novelty multiplier: new stuff scores up to 1.5x, already-liked scores 0x
           score = rawScore * (0.5 + novelty * 0.5);
         } else {
-          // Anonymous / cold-start: trending algorithm
+          // Anonymous / cold-start: genre-aware scoring using seed artist taste profile
+          let genreMatch = 0;
+          if (Object.keys(coldStartGenreScores).length > 0) {
+            const setGenres = [];
+            if (set.genre) setGenres.push(set.genre.toLowerCase());
+            if (set.artists?.genres) {
+              set.artists.genres.forEach(g => setGenres.push(g.toLowerCase()));
+            }
+            for (const setGenre of setGenres) {
+              if (coldStartGenreScores[setGenre]) {
+                genreMatch = Math.max(genreMatch, coldStartGenreScores[setGenre]);
+              } else {
+                for (const [g, s] of Object.entries(coldStartGenreScores)) {
+                  if (setGenre.includes(g) || g.includes(setGenre)) {
+                    genreMatch = Math.max(genreMatch, s * 0.7);
+                  }
+                }
+              }
+            }
+          }
+
           const velocity = normVelocities[i];
           const recency = recencyScore(set.event_date || set.created_at, 14);
           const quality = qualityScore(set);
-          score = velocity * 0.45 + recency * 0.35 + quality * 0.20;
+
+          // Genre 30%, velocity 25%, recency 20%, quality 25%
+          score = genreMatch * 0.30 + velocity * 0.25 + recency * 0.20 + quality * 0.25;
         }
         return { ...set, _score: score };
       });
