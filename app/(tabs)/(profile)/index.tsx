@@ -169,7 +169,7 @@ export default function ProfileScreen() {
 
       const asset = result.assets[0];
       const ext = asset.uri.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${authUser?.id || 'user'}-${Date.now()}.${ext}`;
+      const fileName = `${authUser?.id || 'user'}/${Date.now()}.${ext}`;
 
       // Use FormData — React Native handles local file URIs natively, no conversion needed
       const formData = new FormData();
