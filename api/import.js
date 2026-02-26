@@ -361,26 +361,23 @@ function isValidTrackPart(str) {
   if (/^[a-z]/.test(str) && lcAlphaCount < 4 && !/^(dj |mc |de |di |da |le |la |el |vs |ft |a |i )/i.test(str)) return false;
 
   // Reject common non-track patterns
+  // NOTE: keep these conservative — this validates individual artist/title PARTS after
+  // splitting on " - ", so "Check It Out", "I Remember", "What Is Love" are all valid titles
   const invalidPatterns = [
     /^https?:/i,
     /^www\./i,
-    /^listen\s+to/i,
-    /^check\s+(out|it)/i,
-    /^i\s+(remember|love|need|think)/i,
-    /^(this|that|it)\s+(is|was)/i,
+    /^listen\s+to\s/i,                             // "Listen to this track" — but not "Listen" alone
     /^not\s+sure/i,
     /^anyone/i,
-    /^what\s+(is|was)/i,
     /^(so|very|really|fucking)\s+(good|fire|sick)/i,
-    /^(amazing|incredible|insane|crazy|unreal)$/i,
+    /^(amazing|incredible|insane|crazy|unreal)$/i, // Only reject as standalone word
     /starting\s+at/i,
-    /\d{4}$/,  // Ends with a year (likely a comment about an event)
-    /^(set|mix|live|vibes?|tune|song|track)$/i,  // Single generic music words
-    /^(man|bro|mate|dude|lol|omg|wow)$/i,        // Reactions/filler
-    /^(yes|no|yeah|nah|yep|nope)$/i,             // Affirmatives
-    /^(here|there|now|then|just|only)$/i,         // Adverbs alone
-    /^\d+$/,                                       // Pure numbers
-    /^\d+\)\s*/,                                   // Starts with "75)" etc (leftover numbering)
+    /^(set|mix|live|vibes?|tune|song|track)$/i,    // Single generic music words only
+    /^(man|bro|mate|dude|lol|omg|wow)$/i,          // Reactions/filler
+    /^(yes|no|yeah|nah|yep|nope)$/i,               // Affirmatives
+    /^(here|there|now|then|just|only)$/i,           // Adverbs alone
+    /^\d+$/,                                         // Pure numbers
+    /^\d+\)\s*/,                                     // Starts with "75)" etc (leftover numbering)
   ];
   
   for (const pattern of invalidPatterns) {
