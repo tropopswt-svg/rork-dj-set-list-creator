@@ -108,13 +108,14 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: fetchError.message });
     }
 
-    if (!existingTracks || existingTracks.length === 0) {
-      return res.status(404).json({ error: 'No tracks found for this set' });
-    }
-
-    const existingTrackCount = existingTracks.length;
+    // Empty set is fine — all scraped tracks will be inserted as new
+    const safeExistingTracks = existingTracks || [];
+    const existingTrackCount = safeExistingTracks.length;
     // Use max position (not array length) so new inserts don't collide with sparse positions
-    let maxPosition = Math.max(...existingTracks.map(t => t.position || 0));
+    // Math.max(...[]) = -Infinity, so default to 0 for empty sets
+    let maxPosition = safeExistingTracks.length > 0
+      ? Math.max(...safeExistingTracks.map(t => t.position || 0))
+      : 0;
     let updatedCount = 0;
     let newTracksAdded = 0;
     let confirmedCount = 0;
@@ -144,7 +145,7 @@ export default async function handler(req, res) {
 
       let bestStrategy = 'normal';
 
-      for (const existingTrack of existingTracks) {
+      for (const existingTrack of safeExistingTracks) {
         // Strategy 1: Normal — title↔title, artist↔artist
         const titleScore = similarity(scrapedTrack.title, existingTrack.track_title);
         const artistScore = similarity(scrapedTrack.artist, existingTrack.artist_name);
@@ -215,7 +216,7 @@ export default async function handler(req, res) {
         // No match found at 0.6 threshold — double-check with title-only similarity
         // to catch near-duplicates like "Be Good to Me" vs "Be Good 2 Me"
         let isNearDuplicate = false;
-        for (const existingTrack of existingTracks) {
+        for (const existingTrack of safeExistingTracks) {
           // Title-only check (original)
           const titleSim = similarity(scrapedTrack.title, existingTrack.track_title);
           // Swap check: scraped title vs existing artist, scraped artist vs existing title
