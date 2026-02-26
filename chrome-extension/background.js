@@ -2,7 +2,7 @@
 // Handles communication between content scripts and the API
 
 // Update this to your Vercel deployment URL
-const DEFAULT_API_URL = 'https://rork-dj-set-list-creator.vercel.app';
+const DEFAULT_API_URL = 'https://trakthat.app';
 
 // Cache the API URL
 let cachedApiUrl = null;
@@ -13,8 +13,9 @@ let batchProgress = { total: 0, done: 0, success: 0, errors: 0, djName: '' };
 let batchTabId    = null;
 let batchRunning  = false;
 let batchTabTimer = null;
-const BATCH_TAB_TIMEOUT = 45000; // 45s per tab — allows for Cloudflare challenge
-const BATCH_TAB_DELAY   = 12000; // 12s between tabs — stay under CF rate limit
+const BATCH_TAB_TIMEOUT = 60000; // 60s per tab — allows for Cloudflare challenge
+const BATCH_TAB_DELAY   = 25000; // 25s base between tabs — stay under CF rate limit
+const BATCH_JITTER      = 10000; // +0-10s random jitter to look human
 
 async function processBatchQueue() {
   if (!batchRunning || batchQueue.length === 0) {
@@ -61,7 +62,8 @@ function handleBatchTabComplete(success) {
   chrome.tabs.remove(tabToClose).catch(() => {});
 
   // Pause between tabs — be polite to 1001tracklists
-  setTimeout(processBatchQueue, BATCH_TAB_DELAY);
+  const jitter = Math.floor(Math.random() * BATCH_JITTER);
+  setTimeout(processBatchQueue, BATCH_TAB_DELAY + jitter);
 }
 
 // Get API URL from storage or use default
@@ -91,7 +93,7 @@ async function sendToApi(data) {
   };
 
   try {
-    const response = await fetch(`${apiUrl}/api/import`, {
+    const response = await fetch(`${apiUrl}/api/chrome-import`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

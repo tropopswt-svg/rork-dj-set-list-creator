@@ -97,30 +97,126 @@ module.exports = async function handler(req, res) {
             const { data: existing } = await supabase
               .from('sets')
               .select('id')
-              .eq('tracklists_url', sourceUrl)
+              .eq('tracklist_url', sourceUrl)
               .single();
             existingSet = existing;
           }
 
+          // Also check by slug
+          if (!existingSet) {
+            const setSlug = generateSlug(`${setInfo.djName}-${setInfo.title}`.substring(0, 100));
+            const { data: bySlug } = await supabase
+              .from('sets')
+              .select('id')
+              .eq('slug', setSlug)
+              .single();
+            existingSet = bySlug;
+          }
+
           if (existingSet) {
             results.setsSkipped++;
+            results.setId = existingSet.id;
             console.log('[Chrome Import] Set already exists:', setInfo.title);
+
+            // Backfill missing tracks (ADDITIVE — never remove)
+            if (data.tracks && data.tracks.length > 0) {
+              const { data: existingTracks } = await supabase
+                .from('set_tracks')
+                .select('position, timestamp_seconds')
+                .eq('set_id', existingSet.id);
+
+              const existingPositions = new Set((existingTracks || []).map(t => t.position));
+              let backfilled = 0;
+              let updated = 0;
+
+              for (const track of data.tracks) {
+                const pos = track.position || 0;
+                if (existingPositions.has(pos)) {
+                  // Update timestamp if we have one and existing doesn't
+                  if (track.timestamp_seconds && track.timestamp_seconds > 0) {
+                    await supabase
+                      .from('set_tracks')
+                      .update({ timestamp_seconds: track.timestamp_seconds, timestamp_str: track.timestamp_str })
+                      .eq('set_id', existingSet.id)
+                      .eq('position', pos);
+                    updated++;
+                  }
+                } else {
+                  await supabase.from('set_tracks').insert({
+                    set_id: existingSet.id,
+                    track_title: track.title,
+                    artist_name: track.artist || 'Unknown',
+                    position: pos,
+                    timestamp_seconds: track.timestamp_seconds || null,
+                    timestamp_str: track.timestamp_str || null,
+                    source: '1001tracklists',
+                    is_id: track.title?.toLowerCase() === 'id',
+                    is_unreleased: track.is_unreleased || false,
+                  });
+                  backfilled++;
+                }
+              }
+
+              if (backfilled > 0) {
+                const { count } = await supabase
+                  .from('set_tracks')
+                  .select('*', { count: 'exact', head: true })
+                  .eq('set_id', existingSet.id);
+                if (count !== null) {
+                  await supabase.from('sets').update({ track_count: count }).eq('id', existingSet.id);
+                }
+              }
+
+              if (backfilled > 0 || updated > 0) {
+                console.log(`[Chrome Import] Backfilled ${backfilled} tracks, updated ${updated} timestamps`);
+              }
+            }
           } else {
+            // Generate slug for dedup
+            const setSlug = generateSlug(`${setInfo.djName}-${setInfo.title}`.substring(0, 100));
+
+            // Find DJ's artist ID
+            let djId = null;
+            if (setInfo.djName) {
+              const { data: djData } = await supabase
+                .from('artists')
+                .select('id')
+                .eq('slug', generateSlug(setInfo.djName))
+                .single();
+              if (djData) djId = djData.id;
+            }
+
+            // Parse date
+            let eventDate = null;
+            if (setInfo.date) {
+              const dateMatch = setInfo.date.match(/(\d{4})-(\d{2})-(\d{2})/) ||
+                                setInfo.date.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+              if (dateMatch) {
+                eventDate = dateMatch[0].includes('-') ? dateMatch[0] : `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}`;
+              }
+            }
+
             // Create the set
             const { data: newSet, error: setError } = await supabase
               .from('sets')
               .insert({
                 title: setInfo.title,
+                slug: setSlug,
                 dj_name: setInfo.djName,
+                dj_id: djId,
                 venue: setInfo.venue || null,
                 event_name: setInfo.eventName || null,
-                set_date: setInfo.date || null,
+                event_date: eventDate,
                 duration_seconds: setInfo.durationSeconds || null,
                 track_count: data.tracks?.length || 0,
-                tracklists_url: sourceUrl,
+                tracklist_url: sourceUrl,
                 soundcloud_url: setInfo.soundcloud_url || null,
                 youtube_url: setInfo.youtube_url || null,
                 mixcloud_url: setInfo.mixcloud_url || null,
+                spotify_url: setInfo.spotify_url || null,
+                apple_music_url: setInfo.apple_music_url || null,
+                source: '1001tracklists',
+                cover_url: data.coverUrl || null,
               })
               .select('id')
               .single();
