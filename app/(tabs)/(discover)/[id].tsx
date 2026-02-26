@@ -2972,12 +2972,6 @@ export default function SetDetailScreen() {
                     commentsScraped: importResult.commentsCount || 0,
                   };
 
-                  // Kick off Spotify enrichment (non-blocking)
-                  fetch(`${API_BASE_URL}/api/spotify-enrich`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
-                  }).catch(() => {});
                 }
               }
             } catch (importError: any) {
@@ -3003,6 +2997,10 @@ export default function SetDetailScreen() {
             } catch (e: any) {
               if (__DEV__) console.warn('[AddSource] Refresh failed:', e.message);
             }
+
+            // Trigger Spotify enrichment via the auto-enrich flow so it re-fetches
+            // the set after completing and shows album art / verified badges in real-time
+            setNeedsEnrichment(true);
 
             try { await addPoints('source_added', setList.id); } catch (e) {}
 

@@ -78,8 +78,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  // Rate limit: 10 enrich requests per minute per IP
-  if (!rateLimit(req, res, { key: 'spotify-enrich', limit: 10, windowMs: 60_000 })) return;
+  // Rate limit: 100 enrich requests per minute per IP (relaxed for testing)
+  if (!rateLimit(req, res, { key: 'spotify-enrich', limit: 100, windowMs: 60_000 })) return;
 
   const token = await getSpotifyToken();
   if (!token) {
