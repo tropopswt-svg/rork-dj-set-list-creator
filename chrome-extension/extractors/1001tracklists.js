@@ -706,18 +706,36 @@
       };
     }
 
-    // For genre pages, extract top tracks - tracks only, NO sets
+    // For genre pages — check for tracklist listings first (batch import of sets)
     if (isGenrePage) {
+      const listingUrls = extractDjProfileUrls();
+      if (listingUrls.length > 0) {
+        // Genre listing page with sets — offer batch import
+        const genreName = document.querySelector('#pageTitle, h1')?.textContent?.trim() ||
+                          document.title.replace(/ \| 1001Tracklists$/i, '').trim();
+        return {
+          source: '1001tracklists',
+          sourceUrl: currentUrl,
+          pageType: 'genre_listing',
+          isBatchPage: true,
+          tracklistUrls: listingUrls,
+          pageLabel: genreName,
+          scrapedAt: new Date().toISOString(),
+          tracks: [],
+          artists: [],
+        };
+      }
+
+      // Fallback: no tracklist links found, extract top tracks only
       const genreResult = extractGenreTopTracks();
       return {
         source: '1001tracklists',
         sourceUrl: currentUrl,
-        pageType: 'genre', // Important: this tells the API not to create a set
+        pageType: 'genre',
         scrapedAt: new Date().toISOString(),
         genreName: genreResult.genreName,
         tracks: genreResult.tracks,
         artists: genreResult.artists,
-        // No setInfo - this ensures no set is created
       };
     }
 
@@ -1080,10 +1098,10 @@
   // Initialize
   function init() {
     createButton();
-    // DJ profile pages: no auto-scrape (batch button handles everything)
-    // Genre/chart pages: auto-scrape still fires to capture top tracks
-    // Tracklist pages: auto-scrape handles the set
-    if (!isDjProfilePage()) {
+    // Skip auto-scrape on listing/batch pages (DJ profiles, genre pages)
+    // — they use the batch button instead
+    const isListingPage = isDjProfilePage() || location.pathname.includes('/genre/');
+    if (!isListingPage) {
       setTimeout(autoScrape, 3000);
     }
   }
