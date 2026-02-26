@@ -2370,11 +2370,19 @@ async function importFromYouTube(url, apiKey) {
     console.log(`[YouTube Import] Cross-reference: ${matched}/${untimedDescTracks.length} description tracks got timestamps from comments`);
   }
 
-  // Separate timestamped and still-untimed tracks for proper dedup
-  const timedTracks = [...descTracks.filter(t => t.timestamp > 0), ...commentTracks];
-  const stillUntimed = descTracks.filter(t => !t.timestamp || t.timestamp === 0);
+  // Separate timed vs untimed comment tracks — CASE 4 produces untimed ones (timestamp=0)
+  // They must NOT go into deduplicateSingleSource which would collapse them all into one segment
+  const timedCommentTracks = commentTracks.filter(t => t.timestamp > 0);
+  const untimedCommentTracks = commentTracks.filter(t => !t.timestamp || t.timestamp === 0);
 
-  console.log(`[YouTube Import] Timed tracks: ${timedTracks.length}, still untimed: ${stillUntimed.length}`);
+  // Separate timestamped and still-untimed tracks for proper dedup
+  const timedTracks = [...descTracks.filter(t => t.timestamp > 0), ...timedCommentTracks];
+  const stillUntimed = [
+    ...descTracks.filter(t => !t.timestamp || t.timestamp === 0),
+    ...untimedCommentTracks,
+  ];
+
+  console.log(`[YouTube Import] Timed tracks: ${timedTracks.length}, still untimed: ${stillUntimed.length} (${untimedCommentTracks.length} from comment tracklist)`);
   const setId = `yt-${video.id}-${Date.now()}`;
 
   // Deduplicate only the timestamped tracks (segment-based grouping works correctly for these)
@@ -2387,14 +2395,13 @@ async function importFromYouTube(url, apiKey) {
 
   // For untimed tracks, only keep those that don't already exist in the timed set
   const untimedUnique = stillUntimed.filter(ut => {
-    const isDuplicate = dedupedTimed.some(tt =>
+    return !dedupedTimed.some(tt =>
       calculateTrackSimilarity(ut.title, ut.artist, tt.title, tt.artist) >= 0.55
     );
-    return !isDuplicate;
   });
 
   if (untimedUnique.length > 0) {
-    console.log(`[YouTube Import] ${untimedUnique.length} untimed tracks not found in comments — appending as unmatched`);
+    console.log(`[YouTube Import] ${untimedUnique.length} untimed unique tracks (${untimedCommentTracks.length > 0 ? 'incl. comment tracklist' : 'from description'})`);
   }
 
   // Build ordered track list: use description order as canonical order.
@@ -2404,7 +2411,7 @@ async function importFromYouTube(url, apiKey) {
   // Start with description tracks in order (some now have timestamps from cross-ref)
   const orderedTracks = descTracks.map(dt => ({ ...dt }));
 
-  // Add comment-only tracks (not in description) — insert at position based on timestamp
+  // Add timed comment-only tracks (not in description) — insert at position based on timestamp
   const commentOnlyTracks = dedupedTimed.filter(ct => {
     return !descTracks.some(dt =>
       calculateTrackSimilarity(ct.title, ct.artist, dt.title, dt.artist) >= 0.55
@@ -2422,6 +2429,16 @@ async function importFromYouTube(url, apiKey) {
       }
     }
     orderedTracks.splice(insertIdx, 0, ct);
+  }
+
+  // Append untimed comment-only tracks (e.g. full tracklist posted without timestamps)
+  // that aren't already represented in orderedTracks — they get interpolated below
+  const untimedCommentOnly = untimedUnique.filter(ut =>
+    !orderedTracks.some(ot => calculateTrackSimilarity(ut.title, ut.artist, ot.title, ot.artist) >= 0.55)
+  );
+  if (untimedCommentOnly.length > 0) {
+    console.log(`[YouTube Import] Appending ${untimedCommentOnly.length} untimed comment-only tracks for interpolation`);
+    orderedTracks.push(...untimedCommentOnly.map(t => ({ ...t })));
   }
 
   // Interpolate timestamps: use anchored tracks + total duration to fill gaps

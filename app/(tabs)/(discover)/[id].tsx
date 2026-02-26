@@ -2596,11 +2596,6 @@ export default function SetDetailScreen() {
                           console.warn('[Reanalyze] update-tracks error:', updateData);
                         }
 
-                        fetch(`${API_BASE_URL}/api/spotify-enrich`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ action: 'enrich-set', setId: setList.id }),
-                        }).catch(() => {});
                         const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
                         const refreshData = await refreshResponse.json();
                         if (refreshData.success && refreshData.set) {
@@ -2612,6 +2607,9 @@ export default function SetDetailScreen() {
                             setDbSet(refreshedSet);
                           }
                         }
+
+                        // Trigger Spotify enrichment via auto-enrich flow (re-fetches UI when done)
+                        setNeedsEnrichment(true);
 
                         // Build breakdown message from update-tracks response
                         const timestamped = updateData.updatedCount || 0;
