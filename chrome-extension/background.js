@@ -13,9 +13,9 @@ let batchProgress = { total: 0, done: 0, success: 0, errors: 0, djName: '' };
 let batchTabId    = null;
 let batchRunning  = false;
 let batchTabTimer = null;
-const BATCH_TAB_TIMEOUT = 60000; // 60s per tab — allows for Cloudflare challenge
-const BATCH_TAB_DELAY   = 25000; // 25s base between tabs — stay under CF rate limit
-const BATCH_JITTER      = 10000; // +0-10s random jitter to look human
+const BATCH_TAB_TIMEOUT = 30000; // 30s per tab
+const BATCH_TAB_DELAY   = 8000;  // 8s base between tabs
+const BATCH_JITTER      = 4000;  // +0-4s random jitter
 
 async function processBatchQueue() {
   if (!batchRunning || batchQueue.length === 0) {

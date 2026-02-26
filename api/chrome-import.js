@@ -269,13 +269,17 @@ module.exports = async function handler(req, res) {
                         .replace(/\(\s*$/, '').trim();
                     }
 
+                    const ts = hasTimestamp ? track.timestamp_seconds : null;
+                    const tsStr = hasTimestamp ? (track.timestamp_str || null) : null;
+
                     await supabase
                       .from('set_tracks')
                       .insert({
                         set_id: newSet.id,
                         track_title: cleanTitle,
-                        artist_name: track.artist,
-                        timestamp_seconds: track.timestamp_seconds || 0,
+                        artist_name: track.artist || 'Unknown',
+                        timestamp_seconds: ts,
+                        timestamp_str: tsStr,
                         position: track.position || 0,
                         is_id: track.title?.toLowerCase() === 'id' || track.is_unreleased || false,
                         source: '1001tracklists',
