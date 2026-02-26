@@ -1072,7 +1072,7 @@ const npStyles = StyleSheet.create({
 
 // ── Feed Card ───────────────────────────────────────────────────────────
 // Immersive TikTok-style card with frosted glass overlays and 3D depth
-function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, onSkipTrack, nowPlaying, isMuted, isFirstCard }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void; onSkipTrack?: (setId: string) => void; nowPlaying?: { title: string; artist: string } | null; isMuted?: boolean; isFirstCard?: boolean }) {
+function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, onSkipTrack, nowPlaying, isMuted }: { item: any; onPress: () => void; cardHeight: number; onOpenComments: (setId: string) => void; onTracksLoaded?: (setId: string, tracks: any[]) => void; onSkipTrack?: (setId: string) => void; nowPlaying?: { title: string; artist: string } | null; isMuted?: boolean }) {
   const { user } = useAuth();
   const { isLiked, likeCount, isLoading: likeLoading, toggleLike } = useLikeSet(item.set.id);
   const router = useRouter();
@@ -1081,19 +1081,6 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
   const lastTapTime = useRef(0);
   const tapTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showDoubleTapHeart, setShowDoubleTapHeart] = useState(false);
-
-  // Slow fade-in for the first card on app launch
-  const fadeAnim = useRef(new Animated.Value(isFirstCard ? 0 : 1)).current;
-  useEffect(() => {
-    if (isFirstCard) {
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        delay: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, []);
 
   // Fetch tracks for floating track cards
   const [floatingTracks, setFloatingTracks] = useState<{ title: string; artist: string; coverUrl?: string; isId?: boolean }[]>([]);
@@ -1181,7 +1168,7 @@ function FeedCard({ item, onPress, cardHeight, onOpenComments, onTracksLoaded, o
   const commentCount = item.set.commentCount ?? 0;
 
   return (
-    <Animated.View style={[styles.feedCard, { height: cardHeight, opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+    <Animated.View style={[styles.feedCard, { height: cardHeight, transform: [{ scale: scaleAnim }] }]}>
       {/* Outer glow ring for 3D lift */}
       <View style={styles.feedCardGlow} />
 
@@ -1649,10 +1636,10 @@ export default function FeedScreen() {
       soundRef.current = sound;
       setNowPlaying({ title, artist });
       hasPlayedOnceRef.current = true;
-      // Gentle fade-in on first play (0 → target over ~1.5s)
+      // Gentle fade-in on first play (0 → target over ~2.4s)
       if (isFirstPlay && targetVol > 0) {
-        const steps = 8;
-        const stepMs = 180;
+        const steps = 12;
+        const stepMs = 200;
         for (let i = 1; i <= steps; i++) {
           await new Promise(r => setTimeout(r, stepMs));
           if (audioGenRef.current !== gen) return true; // scrolled away, sound already set
@@ -1808,7 +1795,6 @@ export default function FeedScreen() {
   // ── Visibility handling ──
 
   const handleSetBecameVisible = useCallback(async (setId: string) => {
-    if (!isAuthenticated) return;
     if (audioDisabledRef.current) return;
     if (visibleSetIdRef.current === setId && soundRef.current) return; // already playing this
 
@@ -2163,12 +2149,11 @@ export default function FeedScreen() {
     }
   }, [realFeedItems.length, handleSetBecameVisible]);
 
-  const renderFeedCard = useCallback(({ item, index }: { item: any; index: number }) => (
+  const renderFeedCard = useCallback(({ item }: { item: any }) => (
     <View style={{ height: fullFeedHeight, justifyContent: 'center', paddingVertical: CARD_GAP / 2 }}>
       <FeedCard
         item={item}
         cardHeight={cardPageHeight}
-        isFirstCard={index === 0}
         onPress={() => {
           // Suppress accidental taps during/right-after scroll
           if (isScrollingRef.current) return;
