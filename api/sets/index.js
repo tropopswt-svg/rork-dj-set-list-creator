@@ -352,13 +352,16 @@ export default async function handler(req, res) {
         || Object.keys(genreScores).length > 0
         || followedArtistIds.size > 0;
 
-      // Build cold-start genre profile from seed artists (only when no personalization)
+      // Build cold-start profile from seed artists (only when no personalization)
       let coldStartGenreScores = {};
+      const seedArtistIds = new Set();
       if (!hasPersonalization) {
         const { data: seedArtists } = await supabase
           .from('artists')
-          .select('genres')
+          .select('id, genres')
           .in('slug', COLD_START_SEED_ARTISTS);
+
+        (seedArtists || []).forEach(a => seedArtistIds.add(a.id));
 
         const genreCounts = {};
         (seedArtists || []).forEach(a => {
@@ -437,7 +440,7 @@ export default async function handler(req, res) {
           // Apply novelty multiplier: known artists score ~92%, already-liked drops out
           score = rawScore * (0.5 + novelty * 0.5);
         } else {
-          // Anonymous / cold-start: genre-aware scoring using seed artist taste profile
+          // Anonymous / cold-start: seed artist boost + genre + trending
           let genreMatch = 0;
           if (Object.keys(coldStartGenreScores).length > 0) {
             const setGenres = [];
@@ -458,12 +461,16 @@ export default async function handler(req, res) {
             }
           }
 
+          // Direct seed artist boost — sets from seed artists always rank high
+          const isSeedArtist = seedArtistIds.has(set.dj_id);
+          const seedBoost = isSeedArtist ? 1.0 : 0;
+
           const velocity = normVelocities[i];
           const recency = recencyScore(set.event_date || set.created_at, 14);
           const quality = qualityScore(set);
 
-          // Genre 30%, velocity 25%, recency 20%, quality 25%
-          score = genreMatch * 0.30 + velocity * 0.25 + recency * 0.20 + quality * 0.25;
+          // Seed boost 40%, genre 15%, velocity 15%, recency 15%, quality 15%
+          score = seedBoost * 0.40 + genreMatch * 0.15 + velocity * 0.15 + recency * 0.15 + quality * 0.15;
         }
         return { ...set, _score: score };
       });
