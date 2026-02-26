@@ -164,7 +164,7 @@ function popularityScore(set, normVelocity) {
 
 const RADIO_TITLE_PATTERN = /\b(radio|broadcast|podcast|essential mix)\b/i;
 
-const COLD_START_SEED_ARTISTS = ['chris-stussy', 'max-dean', 'locklead'];
+const COLD_START_SEED_ARTISTS = ['chris-stussy', 'max-dean', 'josh-baker', 'ranger-trucco', 'rossi', 'locklead'];
 
 // ── Query Builder ────────────────────────────────────────────────────────
 
@@ -411,12 +411,12 @@ export default async function handler(req, res) {
             }
           }
 
-          // ── Novelty bonus ──
-          // Boost sets the user HASN'T seen (not liked, not from followed artists).
-          // This is what makes "For You" a discovery feed rather than an echo chamber.
+          // ── Novelty ──
+          // Liked sets are suppressed. Known artists get a mild discovery nudge
+          // but still rank well — the feed should feel taste-aligned, not random.
           const isKnownArtist = followedArtistIds.has(set.dj_id) || !!affinityMap[set.dj_id];
           const isAlreadyLiked = likedSetIds.has(set.id);
-          const novelty = isAlreadyLiked ? 0 : (isKnownArtist ? 0.3 : 1.0);
+          const novelty = isAlreadyLiked ? 0 : (isKnownArtist ? 0.85 : 1.0);
 
           const affinity = affinityMap[set.dj_id] || 0;
           const social = Math.min(socialSignals[set.id] || 0, 1);
@@ -424,17 +424,17 @@ export default async function handler(req, res) {
           const recency = recencyScore(set.event_date || set.created_at, 14);
           const quality = qualityScore(set);
 
-          // Discovery-weighted scoring:
-          //   Genre match   30% — same vibe, new artist (primary discovery)
-          //   Social signal 25% — similar users liked this
-          //   Velocity      15% — trending signal
+          // Taste-aligned scoring:
+          //   Affinity      25% — artists you engage with rank high
+          //   Genre match   25% — same vibe, new or known artist
+          //   Social signal 20% — similar users liked this
+          //   Velocity      10% — trending signal
           //   Recency       10% — freshness
-          //   Affinity      10% — familiar artists (intentionally low)
           //   Quality       10% — metadata completeness
-          const rawScore = genreMatch * 0.30 + social * 0.25 + velocity * 0.15
-            + recency * 0.10 + affinity * 0.10 + quality * 0.10;
+          const rawScore = affinity * 0.25 + genreMatch * 0.25 + social * 0.20
+            + velocity * 0.10 + recency * 0.10 + quality * 0.10;
 
-          // Apply novelty multiplier: new stuff scores up to 1.5x, already-liked scores 0x
+          // Apply novelty multiplier: known artists score ~92%, already-liked drops out
           score = rawScore * (0.5 + novelty * 0.5);
         } else {
           // Anonymous / cold-start: genre-aware scoring using seed artist taste profile
