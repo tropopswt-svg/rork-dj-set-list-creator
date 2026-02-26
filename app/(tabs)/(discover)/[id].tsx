@@ -53,6 +53,7 @@ import CommentsSection from '@/components/CommentsSection';
 import WaveformTimeline from '@/components/WaveformTimeline';
 import SimilarSets from '@/components/SimilarSets';
 import IDThisModal from '@/components/IDThisModal';
+import AcrScanButton from '@/components/AcrScanButton';
 import { Track, SourceLink, TrackConflict, SetList } from '@/types';
 import { useLikeSet } from '@/hooks/useSocial';
 import { getFallbackImage, getVenueImage } from '@/utils/coverImage';
@@ -104,39 +105,6 @@ function TrakdWaveCenter() {
           }}
         />
       ))}
-    </View>
-  );
-}
-
-// Pulse overlay for source chips that are missing a link
-function PulsingSourceChip({ children, hasLink, color }: { children: React.ReactNode; hasLink: boolean; color: string }) {
-  const pulseAnim = useRef(new RNAnimated.Value(0.3)).current;
-
-  useEffect(() => {
-    if (hasLink) { pulseAnim.stopAnimation(); return; }
-    const loop = RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-        RNAnimated.timing(pulseAnim, { toValue: 0.3, duration: 1000, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
-      ])
-    );
-    loop.start();
-    return () => { pulseAnim.stopAnimation(); };
-  }, [hasLink]);
-
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      {children}
-      {!hasLink && (
-        <RNAnimated.View
-          pointerEvents="none"
-          style={{
-            position: 'absolute', top: 0, left: 4, right: 4, bottom: -2,
-            borderRadius: 14, borderWidth: 1.5, borderColor: color,
-            opacity: pulseAnim,
-          }}
-        />
-      )}
     </View>
   );
 }
@@ -495,6 +463,8 @@ function transformApiSet(apiSet: any): SetList {
     tracksIdentified: apiSet.tracksIdentified,
     description: apiSet.description,
     source: apiSet.source,
+    acrScanStatus: apiSet.acrScanStatus || null,
+    acrScanSubmittedAt: apiSet.acrScanSubmittedAt || null,
   };
 }
 
@@ -1923,7 +1893,6 @@ export default function SetDetailScreen() {
               <RNAnimated.View style={[styles.statsSectionWrap, { transform: [{ scale: chartScale }] }]}>
                 <View style={styles.statsSection}>
                   {/* YouTube — left of chart */}
-                  <PulsingSourceChip hasLink={!!ytLink} color="#FF0000">
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
@@ -1948,7 +1917,6 @@ export default function SetDetailScreen() {
                       </Text>
                     </View>
                   </Pressable>
-                  </PulsingSourceChip>
 
                   {/* Chart ring — center */}
                   <IdentificationRing
@@ -1968,7 +1936,6 @@ export default function SetDetailScreen() {
                   />
 
                   {/* SoundCloud — right of chart */}
-                  <PulsingSourceChip hasLink={!!scLink} color="#FF5500">
                   <Pressable
                     style={({ pressed }) => [styles.sourceChip, pressed && { transform: [{ scale: 0.92 }], opacity: 0.8 }]}
                     onPress={() => {
@@ -1993,7 +1960,6 @@ export default function SetDetailScreen() {
                       </Text>
                     </View>
                   </Pressable>
-                  </PulsingSourceChip>
                 </View>
 
                 {/* Gold trakd badge — shown when both sources are linked */}
@@ -2003,6 +1969,100 @@ export default function SetDetailScreen() {
                     <Text style={styles.trakdBadgeText}>trakd</Text>
                   </View>
                 )}
+
+                {/* ACRCloud Fingerprint Scan button */}
+                <AcrScanButton
+                  setId={setList.id}
+                  acrScanStatus={setList.acrScanStatus || null}
+                  hasSourceUrl={!!(ytLink || scLink)}
+                  onScanComplete={async (acrTracks) => {
+                    if (!acrTracks || acrTracks.length === 0) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+                      analyzePopupScale.value = 0;
+                      analyzePopupOpacity.value = 0;
+                      setAnalyzeResult({ type: 'empty', message: 'No tracks identified by fingerprint scan' });
+                      analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                      analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                      return;
+                    }
+                    try {
+                      const hadExistingTracks = (setList.tracks?.length || 0) > 0;
+
+                      // Feed ACR tracks through update-tracks (additive merge)
+                      // When set is empty, update-tracks inserts all tracks as primary source
+                      const updateResponse = await fetch(`${API_BASE_URL}/api/sets/update-tracks`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          setId: setList.id,
+                          tracks: acrTracks,
+                          source: 'acrcloud',
+                        }),
+                      });
+                      const updateData = await updateResponse.json();
+
+                      // Refresh set data
+                      const refreshResponse = await fetch(`${API_BASE_URL}/api/sets/${setList.id}`);
+                      const refreshData = await refreshResponse.json();
+                      if (refreshData.success && refreshData.set) {
+                        const refreshedSet = transformApiSet(refreshData.set);
+                        const currentTrackCount = setList.tracks?.length || 0;
+                        const newTrackCount = refreshedSet.tracks?.length || 0;
+                        if (newTrackCount >= currentTrackCount) {
+                          setDbSet(refreshedSet);
+                        }
+                      }
+                      setNeedsEnrichment(true);
+
+                      // Build result message — different framing for empty vs existing sets
+                      const timestamped = updateData.updatedCount || 0;
+                      const added = updateData.newTracksAdded || 0;
+                      const verified = updateData.confirmedCount || 0;
+
+                      let resultType: 'success' | 'empty';
+                      let msg: string;
+
+                      if (!hadExistingTracks && added > 0) {
+                        // Empty set populated from ACR as primary source
+                        resultType = 'success';
+                        msg = `${added} tracks identified from fingerprint`;
+                      } else {
+                        const parts: string[] = [];
+                        if (added > 0) parts.push(`${added} new`);
+                        if (timestamped > 0) parts.push(`${timestamped} timestamped`);
+                        if (verified > 0) parts.push(`${verified} verified`);
+                        resultType = (timestamped > 0 || added > 0) ? 'success' : (verified > 0 ? 'success' : 'empty');
+                        msg = parts.length > 0 ? `ACR: ${parts.join(', ')}` : 'No new tracks from scan';
+                      }
+
+                      Haptics.notificationAsync(
+                        resultType === 'success'
+                          ? Haptics.NotificationFeedbackType.Success
+                          : Haptics.NotificationFeedbackType.Warning
+                      );
+                      analyzePopupScale.value = 0;
+                      analyzePopupOpacity.value = 0;
+                      setAnalyzeResult({ type: resultType, message: msg, trackCount: timestamped + added });
+                      analyzePopupScale.value = withSpring(1, { damping: 12, stiffness: 150 });
+                      analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                    } catch (err: any) {
+                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                      analyzePopupScale.value = 0;
+                      analyzePopupOpacity.value = 0;
+                      setAnalyzeResult({ type: 'error', message: err.message || 'Failed to merge ACR tracks' });
+                      analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                      analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                    }
+                  }}
+                  onError={(message) => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+                    analyzePopupScale.value = 0;
+                    analyzePopupOpacity.value = 0;
+                    setAnalyzeResult({ type: 'error', message });
+                    analyzePopupScale.value = withSpring(1, { damping: 14, stiffness: 120 });
+                    analyzePopupOpacity.value = withTiming(1, { duration: 200 });
+                  }}
+                />
               </RNAnimated.View>
             );
           })()}
@@ -2510,7 +2570,7 @@ export default function SetDetailScreen() {
                 style={styles.chartBadge3d}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  setBadgeExplain({ type: 'trakd', count: setList.tracksIdentified || (sortedTracks.length + unplacedTracks.length) });
+                  setBadgeExplain({ type: 'trakd', count: sortedTracks.length + unplacedTracks.length });
                   badgeExplainAnim.setValue(0);
                   RNAnimated.spring(badgeExplainAnim, { toValue: 1, damping: 14, stiffness: 160, mass: 0.7, useNativeDriver: true }).start();
                 }}
@@ -2521,7 +2581,7 @@ export default function SetDetailScreen() {
                   <View style={[styles.chartBadge3dIcon, { backgroundColor: 'rgba(0, 212, 170, 0.2)' }]}>
                     <Sparkles size={14} color="#00D4AA" />
                   </View>
-                  <Text style={styles.chartBadge3dValue}>{setList.tracksIdentified || (sortedTracks.length + unplacedTracks.length)}</Text>
+                  <Text style={styles.chartBadge3dValue}>{sortedTracks.length + unplacedTracks.length}</Text>
                   <Text style={[styles.chartBadge3dLabel, { color: '#00D4AA' }]}>trakd</Text>
                 </View>
               </Pressable>
