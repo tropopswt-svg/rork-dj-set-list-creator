@@ -239,8 +239,11 @@ export default async function handler(req, res) {
           }
         }
 
-        // Only add as new track if we have a timestamp AND it's not a near-duplicate
-        if (!isNearDuplicate && timestamp > 0) {
+        // Insert new track if:
+        //  - has a real timestamp, OR
+        //  - set is empty (bootstrapping from scratch) — accept untimed tracks too
+        const allowUntimed = existingTrackCount === 0;
+        if (!isNearDuplicate && (timestamp > 0 || allowUntimed)) {
           maxPosition++;
           const position = maxPosition;
 
@@ -250,11 +253,13 @@ export default async function handler(req, res) {
             artist_name: scrapedTrack.artist || 'Unknown',
             track_title: cleanScrapedTitle,
             position: position,
-            timestamp_seconds: timestamp,
-            timestamp_str: scrapedTrack.timestampFormatted || formatTimestamp(timestamp),
             source: source || 'youtube',
             is_id: false,
           };
+          if (timestamp > 0) {
+            insertData.timestamp_seconds = timestamp;
+            insertData.timestamp_str = scrapedTrack.timestampFormatted || formatTimestamp(timestamp);
+          }
           if (scrapedUnreleased) {
             insertData.is_unreleased = true;
             insertData.unreleased_source = 'comment_hint';
@@ -265,7 +270,7 @@ export default async function handler(req, res) {
 
           if (!insertError) {
             newTracksAdded++;
-            console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp}s`);
+            console.log(`[Update Tracks] Added new track "${scrapedTrack.title}" at ${timestamp > 0 ? timestamp + 's' : 'no timestamp'}`);
           } else {
             console.log(`[Update Tracks] Insert error for "${scrapedTrack.title}":`, insertError);
             errorCount++;

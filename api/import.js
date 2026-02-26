@@ -521,26 +521,84 @@ function parseComments(comments, djName = null) {
         addTrack(comment.parentTimestamp, info, comment, false, text);
       }
     }
+    // CASE 4: Multi-line comment with NO timestamps but 3+ "Artist - Title" lines
+    // Someone posted the entire tracklist in one comment without timestamps
+    else if (lines.length >= 3) {
+      const candidateLines = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        // Strip numbered prefixes: "1.", "2)", "03 -", etc.
+        let cleaned = trimmed.replace(/^\d{1,3}[.):\-–—]\s*/, '').trim();
+        if (/^\d{1,3}\s+/.test(trimmed)) {
+          cleaned = trimmed.replace(/^\d{1,3}\s+/, '').trim();
+        }
+        const info = parseTrackInfo(cleaned);
+        if (info) candidateLines.push({ info, rawLine: trimmed });
+      }
+      // Only treat as tracklist if majority of lines parse as tracks
+      if (candidateLines.length >= 3 && candidateLines.length >= lines.filter(l => l.trim()).length * 0.5) {
+        console.log(`[parseComments] CASE 4: untimed tracklist in comment by "${comment.authorName}" — ${candidateLines.length} tracks (${comment.likeCount} likes)`);
+        for (let i = 0; i < candidateLines.length; i++) {
+          let info = candidateLines[i].info;
+          if (djName && areNamesSimilar(info.artist, djName)) {
+            const reparsed = parseTrackInfo(info.title);
+            info = reparsed || { title: info.title, artist: 'Unknown Artist' };
+          }
+          // Use a position-based key so same track at different positions isn't deduped
+          const key = `untimed-${i}-${info.artist.toLowerCase()}-${info.title.toLowerCase()}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            const isUnreleased = detectUnreleasedInText(candidateLines[i].rawLine);
+            const cleanTitle = isUnreleased ? stripUnreleasedFromTitle(info.title) : info.title;
+            let conf = 0.6;
+            if (comment.likeCount > 100) conf += 0.2;
+            else if (comment.likeCount > 10) conf += 0.1;
+            tracks.push({
+              timestamp: 0,
+              timestampFormatted: '',
+              title: cleanTitle,
+              artist: info.artist,
+              confidence: Math.min(conf, 1),
+              sourceAuthor: comment.authorName,
+              likes: comment.likeCount,
+              isUnreleased,
+              position: i,
+            });
+          }
+        }
+      }
+    }
   }
 
-  console.log(`Parsed ${tracks.length} tracks from comments`);
+  console.log(`Parsed ${tracks.length} tracks from comments (${tracks.filter(t => t.timestamp > 0).length} timed, ${tracks.filter(t => !t.timestamp).length} untimed)`);
 
-  const sortedTracks = tracks.sort((a, b) => a.timestamp - b.timestamp);
+  // Sort: timed tracks by timestamp, untimed tracks by their position in the original comment
+  const sortedTracks = tracks.sort((a, b) => {
+    if (a.timestamp > 0 && b.timestamp > 0) return a.timestamp - b.timestamp;
+    if (a.timestamp > 0) return -1; // timed before untimed
+    if (b.timestamp > 0) return 1;
+    return (a.position || 0) - (b.position || 0); // preserve comment order for untimed
+  });
 
   // Normalize helper for dedup comparison
   const normalize = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
   // Dedup: if two tracks are within 60 seconds and have similar titles, keep the higher-confidence one
+  // For untimed tracks (timestamp=0), dedup by title+artist only (not timestamp proximity)
   const deduped = [];
   for (const track of sortedTracks) {
-    const existing = deduped.find(t =>
-      Math.abs(t.timestamp - track.timestamp) < 60 &&
-      (normalize(t.title) === normalize(track.title) ||
-       normalize(t.artist + t.title).includes(normalize(track.title)) ||
-       normalize(track.artist + track.title).includes(normalize(t.title)))
-    );
+    const existing = deduped.find(t => {
+      const titleMatch = normalize(t.title) === normalize(track.title) ||
+        normalize(t.artist + t.title).includes(normalize(track.title)) ||
+        normalize(track.artist + track.title).includes(normalize(t.title));
+      if (!titleMatch) return false;
+      // Timed tracks: require timestamp proximity
+      if (t.timestamp > 0 && track.timestamp > 0) return Math.abs(t.timestamp - track.timestamp) < 60;
+      // One or both are untimed: dedup by title+artist match only
+      return true;
+    });
     if (existing) {
-      // Keep the one with higher confidence
       if (track.confidence > existing.confidence) {
         const idx = deduped.indexOf(existing);
         deduped[idx] = track;
@@ -550,7 +608,7 @@ function parseComments(comments, djName = null) {
     }
   }
 
-  console.log(`After dedup: ${deduped.length} tracks (removed ${sorted.length - deduped.length} duplicates)`);
+  console.log(`After dedup: ${deduped.length} tracks`);
   return deduped;
 }
 
