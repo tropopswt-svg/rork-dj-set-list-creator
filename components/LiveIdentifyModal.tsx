@@ -16,7 +16,6 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Disc3,
   ExternalLink,
   Music2,
   RotateCcw,
@@ -24,6 +23,7 @@ import {
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system/legacy';
 import Colors from '@/constants/colors';
+import { stopFeedAudio } from '@/lib/feedAudioController';
 
 // API URL for identify endpoint
 const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
@@ -50,6 +50,7 @@ interface LiveIdentifyModalProps {
   onClose: () => void;
   onTrackIdentified?: (track: IdentifiedTrack) => void;
   continuousMode?: boolean;
+  onStopAllAudio?: () => void;
 }
 
 type IdentifyState = 'idle' | 'recording' | 'analyzing' | 'success' | 'no_match' | 'error';
@@ -357,6 +358,7 @@ export default function LiveIdentifyModal({
   onClose,
   onTrackIdentified,
   continuousMode = false,
+  onStopAllAudio,
 }: LiveIdentifyModalProps) {
   const [state, setState] = useState<IdentifyState>('idle');
   const [identifiedTrack, setIdentifiedTrack] = useState<IdentifiedTrack | null>(null);
@@ -592,6 +594,10 @@ export default function LiveIdentifyModal({
       Alert.alert('Permission Required', 'Please grant microphone permission to identify tracks.');
       return;
     }
+
+    // Stop all in-app audio before recording so the mic captures external music only
+    try { onStopAllAudio?.(); } catch {}
+    try { stopFeedAudio(); } catch {}
 
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -869,7 +875,7 @@ export default function LiveIdentifyModal({
                 <View style={styles.idButtonWaveContainer}>
                   <ScanningWaveform isActive={false} />
                 </View>
-                <Text style={styles.idButtonText}>ID</Text>
+                <Text style={styles.idButtonText}>trakd</Text>
               </Animated.View>
             </Pressable>
             <Text style={styles.hintText}>
@@ -912,11 +918,11 @@ export default function LiveIdentifyModal({
                     { transform: [{ scale: pulseAnim }] }
                   ]}
                 >
-                  ID
+                  trakd
                 </Animated.Text>
               </Animated.View>
             </View>
-            {/* Stealth status text - above secret message */}
+            {/* Stealth status text */}
             <Animated.View
               style={[
                 styles.stealthListeningContainer,
@@ -931,10 +937,6 @@ export default function LiveIdentifyModal({
               <Text style={styles.stealthListeningDots}>...</Text>
               <Text style={styles.stealthListeningText}>Listening</Text>
             </Animated.View>
-            {/* Secret message */}
-            <Text style={styles.secretMessage}>
-              Shhh... We Won't Let Anyone Know You Don't Know Ball 😏
-            </Text>
           </View>
         );
 
@@ -949,7 +951,7 @@ export default function LiveIdentifyModal({
                   { transform: [{ scale: pulseAnim }] }
                 ]}
               >
-                <Disc3 size={48} color={Colors.dark.primary} strokeWidth={1.5} />
+                <Music2 size={48} color={Colors.dark.primary} strokeWidth={1.5} />
               </Animated.View>
             </View>
             <Text style={styles.hintText}>
@@ -969,7 +971,7 @@ export default function LiveIdentifyModal({
             {identifiedTrack && (
               <View style={styles.trackCard}>
                 <View style={styles.trackCoverPlaceholder}>
-                  <Disc3 size={32} color={Colors.dark.primary} />
+                  <Music2 size={32} color={Colors.dark.primary} />
                 </View>
                 <View style={styles.trackInfo}>
                   <Text style={styles.trackTitle} numberOfLines={2}>
@@ -1212,22 +1214,26 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 200,
     height: 200,
-    borderRadius: 32,
+    borderRadius: 100,
     backgroundColor: Colors.dark.primary,
   },
   idButton: {
     width: 160,
     height: 160,
-    borderRadius: 28,
-    backgroundColor: Colors.dark.primary,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: Colors.dark.primary,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
     shadowRadius: 20,
     elevation: 15,
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.22)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
   },
   idButtonWaveContainer: {
     position: 'absolute',
@@ -1235,14 +1241,17 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 0.3,
+    opacity: 0.2,
   },
   idButtonText: {
-    fontSize: 72,
+    fontSize: 28,
     fontWeight: '900',
-    color: '#fff',
-    letterSpacing: -3,
+    color: 'rgba(255, 255, 255, 0.85)',
+    letterSpacing: 1,
     zIndex: 2,
+    textShadowColor: 'rgba(196, 30, 58, 0.5)',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
   },
   hintText: {
     fontSize: 14,
@@ -1273,24 +1282,14 @@ const styles = StyleSheet.create({
     letterSpacing: 5,
     textTransform: 'uppercase',
   },
-  secretMessage: {
-    position: 'absolute',
-    bottom: 60,
-    left: 24,
-    right: 24,
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.5)',
-    textAlign: 'center',
-    fontStyle: 'italic',
-    letterSpacing: 0.3,
-  },
+  // secretMessage style removed — replaced with cleaner trakd branding
   listeningText: {
     fontSize: 24,
     fontWeight: '600',
     color: 'rgba(255, 255, 255, 0.3)', // Dim text - stealth mode
     marginBottom: 40,
   },
-  // Recording button styles - rounded square box
+  // Recording button styles - liquid glass circle
   recordingOuter: {
     width: 200,
     height: 200,
@@ -1301,24 +1300,26 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 200,
     height: 200,
-    borderRadius: 36,
-    backgroundColor: 'rgba(30, 30, 30, 0.5)', // Subtle dark glow - stealth mode
+    borderRadius: 100,
+    backgroundColor: 'rgba(196, 30, 58, 0.15)',
   },
   recordingButton: {
     width: 160,
     height: 160,
-    borderRadius: 28,
-    backgroundColor: '#0a0a0a', // Near black - stealth mode
+    borderRadius: 80,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.8,
-    shadowRadius: 25,
+    shadowColor: '#C41E3A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
     elevation: 20,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)', // Very subtle border
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderTopColor: 'rgba(255, 255, 255, 0.15)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
   },
   recordingWaveContainer: {
     position: 'absolute',
@@ -1326,13 +1327,13 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    opacity: 0.15, // More subtle waveform in stealth mode
+    opacity: 0.15,
   },
   recordingIdText: {
-    fontSize: 64,
+    fontSize: 24,
     fontWeight: '900',
-    color: 'rgba(255, 255, 255, 0.25)', // Dim text - hard to see from distance
-    letterSpacing: -2,
+    color: 'rgba(255, 255, 255, 0.35)',
+    letterSpacing: 1,
     zIndex: 2,
   },
   // Waveform styles
@@ -1386,11 +1387,17 @@ const styles = StyleSheet.create({
     width: 140,
     height: 140,
     borderRadius: 70,
-    backgroundColor: Colors.dark.surface,
-    borderWidth: 3,
-    borderColor: Colors.dark.primary,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    borderTopColor: 'rgba(255, 255, 255, 0.22)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: Colors.dark.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
   },
   // Result styles
   resultContent: {
@@ -1402,31 +1409,50 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: 'rgba(34, 197, 94, 0.15)',
+    backgroundColor: 'rgba(34, 197, 94, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.2)',
+    borderTopColor: 'rgba(34, 197, 94, 0.3)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
   },
   successText: {
     fontSize: 24,
     fontWeight: '700',
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 24,
+    letterSpacing: 0.3,
   },
   trackCard: {
     width: width - 48,
     flexDirection: 'row',
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     borderRadius: 16,
     padding: 16,
     gap: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.15)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
   trackCoverPlaceholder: {
     width: 72,
     height: 72,
     borderRadius: 12,
-    backgroundColor: Colors.dark.background,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1437,12 +1463,12 @@ const styles = StyleSheet.create({
   trackTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 4,
   },
   trackArtist: {
     fontSize: 15,
-    color: Colors.dark.textSecondary,
+    color: 'rgba(255, 255, 255, 0.5)',
     marginBottom: 4,
   },
   trackLabel: {
@@ -1451,16 +1477,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   confidenceBadge: {
-    backgroundColor: 'rgba(0, 212, 170, 0.1)',
+    backgroundColor: 'rgba(0, 212, 170, 0.08)',
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 212, 170, 0.15)',
+    borderTopColor: 'rgba(0, 212, 170, 0.25)',
   },
   confidenceText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.dark.primary,
+    color: 'rgba(0, 212, 170, 0.9)',
   },
   linksRow: {
     flexDirection: 'row',
@@ -1471,15 +1500,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: Colors.dark.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    borderTopColor: 'rgba(255, 255, 255, 0.18)',
   },
   linkChipText: {
     fontSize: 13,
     fontWeight: '500',
-    color: Colors.dark.text,
+    color: 'rgba(255, 255, 255, 0.8)',
   },
   tryAgainButton: {
     flexDirection: 'row',
@@ -1487,6 +1519,10 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 20,
     paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
   },
   tryAgainText: {
     fontSize: 15,

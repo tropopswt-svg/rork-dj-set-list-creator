@@ -10,6 +10,7 @@ import LiveIdentifyModal from '@/components/LiveIdentifyModal';
 import SetRecordingModal from '@/components/SetRecordingModal';
 import SetRecordingBanner from '@/components/SetRecordingBanner';
 import { stopSetRecording, getRecordingStatus, IdentifiedTrack } from '@/components/SetRecordingService';
+import { useAudioPreview } from '@/contexts/AudioPreviewContext';
 
 const API_URL = process.env.EXPO_PUBLIC_RORK_API_BASE_URL || 'https://rork-dj-set-list-creator.vercel.app';
 import { AuthGateModal } from '@/components/AuthGate';
@@ -172,6 +173,7 @@ export default function TabLayout() {
     });
     return () => subscription.unsubscribe();
   }, []);
+  const { stop: stopPreviewAudio } = useAudioPreview();
   const [showActionModal, setShowActionModal] = useState(false);
   const [showIdentifyModal, setShowIdentifyModal] = useState(false);
   const [showContinuousIdentifyModal, setShowContinuousIdentifyModal] = useState(false);
@@ -450,12 +452,14 @@ export default function TabLayout() {
       <LiveIdentifyModal
         visible={showIdentifyModal}
         onClose={() => setShowIdentifyModal(false)}
+        onStopAllAudio={stopPreviewAudio}
       />
 
       <LiveIdentifyModal
         visible={showContinuousIdentifyModal}
         onClose={() => setShowContinuousIdentifyModal(false)}
         continuousMode={true}
+        onStopAllAudio={stopPreviewAudio}
       />
 
       <SetRecordingModal

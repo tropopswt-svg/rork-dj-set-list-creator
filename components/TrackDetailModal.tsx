@@ -37,6 +37,7 @@ const PLATFORM_CONFIG: Record<string, { label: string; color: string; icon?: str
   bandcamp: { label: 'Bandcamp', color: '#629AA9' },
   youtube: { label: 'YouTube', color: '#FF0000' },
   apple_music: { label: 'Apple Music', color: '#FC3C44' },
+  deezer: { label: 'Deezer', color: '#A238FF' },
   other: { label: 'Link', color: Colors.dark.textMuted },
 };
 
@@ -241,7 +242,9 @@ export default function TrackDetailModal({
                     </View>
                   </View>
                 </View>
-                <Text style={styles.previewPowered}>Spotify</Text>
+                <Text style={styles.previewPowered}>
+                  {track.previewUrl?.includes('audio-ssl.itunes.apple.com') ? 'Apple Music' : 'Spotify'}
+                </Text>
               </Pressable>
             )}
 

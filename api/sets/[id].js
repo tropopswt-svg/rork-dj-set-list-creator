@@ -272,7 +272,8 @@ export default async function handler(req, res) {
         verified: !track.is_id,
         confidence: track.is_id ? 0 : 1,
         // Spotify data — cascade: spotify_data JSONB → joined tracks table
-        coverUrl: spotify.album_art_url || linkedTrack.artwork_url || undefined,
+        // Artwork priority: Apple Music 1400px > Spotify 640px > Deezer > linked track > SoundCloud
+        coverUrl: spotify.apple_music_artwork_url || spotify.album_art_url || linkedTrack.artwork_url || undefined,
         album: spotify.album || undefined,
         previewUrl: spotify.preview_url || spotify.deezer_preview_url || linkedTrack.spotify_preview_url || undefined,
         isrc: spotify.isrc || undefined,
@@ -283,6 +284,14 @@ export default async function handler(req, res) {
           spotifyDirectUrl && {
             platform: 'spotify',
             url: spotifyDirectUrl,
+          },
+          spotify.apple_music_url && {
+            platform: 'apple_music',
+            url: spotify.apple_music_url,
+          },
+          spotify.deezer_url && {
+            platform: 'deezer',
+            url: spotify.deezer_url,
           },
         ].filter(Boolean),
         // Unreleased catalog cross-reference

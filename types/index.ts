@@ -1,5 +1,5 @@
 export interface TrackLink {
-  platform: 'spotify' | 'beatport' | 'soundcloud' | 'bandcamp' | 'youtube' | 'apple_music' | 'other';
+  platform: 'spotify' | 'beatport' | 'soundcloud' | 'bandcamp' | 'youtube' | 'apple_music' | 'deezer' | 'other';
   url: string;
 }
 
