@@ -113,9 +113,56 @@ function normalizeScores(scores) {
   return scores.map(s => s / max);
 }
 
+// ── Popularity Scoring ───────────────────────────────────────────────────
+
+const RADIO_KEYWORDS = [
+  'bbc radio', 'radio 1', 'essential mix', 'circoloco radio',
+  'lot radio', 'rinse fm', 'nts radio', 'worldwide fm', 'red light radio',
+  'radio show', 'ra podcast', 'resident advisor podcast',
+];
+
+/**
+ * Detect if a set is a radio show / broadcast / podcast.
+ * Checks title and venue against known radio keywords.
+ */
+function isRadioSet(set) {
+  const text = `${set.title || ''} ${set.dj_name || ''} ${set.venue || ''}`.toLowerCase();
+  return RADIO_KEYWORDS.some(kw => text.includes(kw));
+}
+
+/**
+ * Artist-driven popularity score for the "Popular" sort.
+ *
+ * Weights:
+ *   Artist Spotify popularity  55%  (normalized 0-100 → 0-1, default 25 for unknowns)
+ *   Followers count            15%  (log-scaled, saturates ~10M)
+ *   App engagement             15%  (engagement velocity, normalized across pool)
+ *   Quality score              10%  (metadata completeness)
+ *   Recency                     5%  (60-day half-life)
+ *
+ * Radio sets get a 0.7× multiplier.
+ */
+function popularityScore(set, normVelocity) {
+  // Artist signals — default to modest values for unknown artists
+  const artistPop = (set.artists?.popularity ?? 25) / 100;
+  const followers = set.artists?.followers_count ?? 0;
+  const followerScore = Math.min(Math.log10(followers + 1) / 7, 1); // saturates ~10M
+
+  const quality = qualityScore(set);
+  const recency = recencyScore(set.event_date || set.created_at, 60);
+
+  const raw = artistPop * 0.55
+    + followerScore * 0.15
+    + normVelocity * 0.15
+    + quality * 0.10
+    + recency * 0.05;
+
+  return isRadioSet(set) ? raw * 0.7 : raw;
+}
+
 // ── For You Constants ────────────────────────────────────────────────────
 
-const RADIO_TITLE_PATTERN = /\b(radio|broadcast|podcast)\b/i;
+const RADIO_TITLE_PATTERN = /\b(radio|broadcast|podcast|essential mix)\b/i;
 
 const COLD_START_SEED_ARTISTS = ['chris-stussy', 'max-dean', 'locklead'];
 
@@ -125,7 +172,7 @@ function buildBaseQuery(supabase, { dj, search } = {}) {
   const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   let query = supabase
     .from('sets')
-    .select('*, artists:dj_id(image_url, genres), set_tracks(count)', { count: 'exact' })
+    .select('*, artists:dj_id(image_url, genres, popularity, followers_count), set_tracks(count)', { count: 'exact' })
     // Exclude future events — sets that haven't happened yet have no tracklists
     .or(`event_date.is.null,event_date.lte.${today}`);
   if (dj) query = query.ilike('dj_name', `%${dj}%`);
@@ -212,7 +259,7 @@ export default async function handler(req, res) {
       // Filter radio shows / broadcasts / podcasts and sets older than 6 years
       const sixYearsAgo = Date.now() - 6 * 365.25 * 86400000;
       const filteredPool = (pool || []).filter(s => {
-        if (RADIO_TITLE_PATTERN.test(s.title)) return false;
+        if (isRadioSet(s) || RADIO_TITLE_PATTERN.test(s.title) || RADIO_TITLE_PATTERN.test(s.dj_name)) return false;
         const date = s.event_date || s.created_at;
         if (date && new Date(date).getTime() < sixYearsAgo) return false;
         return true;
@@ -426,10 +473,11 @@ export default async function handler(req, res) {
     }
 
     // ── Most Popular ─────────────────────────────────────────────────
-    // Engagement velocity ranking — rewards sets getting engagement NOW,
-    // not sets that accumulated likes over years.
+    // Artist-driven popularity: Spotify popularity (55%) + followers (15%)
+    // + app engagement (15%) + quality (10%) + recency (5%).
+    // Radio sets get a 0.7× penalty so live sets rank above broadcasts.
     else if (sort === 'popular') {
-      const POOL_SIZE = 200;
+      const POOL_SIZE = 500;
       const query = buildBaseQuery(supabase, { dj, search })
         .order('created_at', { ascending: false })
         .limit(POOL_SIZE);
@@ -437,9 +485,12 @@ export default async function handler(req, res) {
       if (error) throw error;
       totalCount = count;
 
-      const scored = (pool || []).map(set => ({
+      const rawVelocities = (pool || []).map(s => engagementVelocity(s));
+      const normVelocities = normalizeScores(rawVelocities);
+
+      const scored = (pool || []).map((set, i) => ({
         ...set,
-        _score: engagementVelocity(set),
+        _score: popularityScore(set, normVelocities[i]),
       }));
       scored.sort((a, b) => b._score - a._score);
       resultSets = scored.slice(off, off + lim);
