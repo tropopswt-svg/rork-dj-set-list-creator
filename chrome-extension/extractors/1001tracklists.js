@@ -832,13 +832,17 @@
 
     // Live-update the count when the page loads more content (e.g. "See More" sidebar)
     let countObserver = null;
+    let countDebounce = null;
     function startCountObserver() {
       if (countObserver) return;
       countObserver = new MutationObserver(() => {
-        if (!btn.innerHTML.startsWith('⏳')) {
+        if (btn.innerHTML.startsWith('⏳')) return;
+        if (countDebounce) return; // debounce — run at most once per second
+        countDebounce = setTimeout(() => {
+          countDebounce = null;
           const n = extractDjProfileUrls().length;
           btn.innerHTML = `📋 Queue ${n} Sets`;
-        }
+        }, 1000);
       });
       countObserver.observe(document.body, { childList: true, subtree: true });
     }
@@ -956,13 +960,18 @@
       return;
     }
 
-    // Not loaded yet — watch for them
+    // Not loaded yet — watch for them (debounced to avoid freezing on heavy pages)
+    let btnDebounce = null;
     const observer = new MutationObserver(() => {
       if (document.getElementById('identified-btn')) { observer.disconnect(); return; }
-      if (extractDjProfileUrls().length > 0) {
-        observer.disconnect();
-        createDjProfileButton();
-      }
+      if (btnDebounce) return;
+      btnDebounce = setTimeout(() => {
+        btnDebounce = null;
+        if (extractDjProfileUrls().length > 0) {
+          observer.disconnect();
+          createDjProfileButton();
+        }
+      }, 500);
     });
     observer.observe(document.body, { childList: true, subtree: true });
 
@@ -1046,12 +1055,14 @@
   
   // Auto-scrape function
   async function autoScrape() {
-    const result = await chrome.storage.sync.get(['autoScrape']);
+    const result = await chrome.storage.sync.get(['autoScrape', 'batchMode']);
     if (!result.autoScrape) return;
 
-    console.log('[1001TL] Auto-scrape enabled, starting...');
-    // Wait for Cloudflare challenge to pass and page to fully render
-    await new Promise(resolve => setTimeout(resolve, 7000));
+    const isBatch = !!result.batchMode;
+    // In batch mode: minimal wait (page already loaded). Manual: wait for CF challenge.
+    const waitMs = isBatch ? 2000 : 7000;
+    console.log(`[1001TL] Auto-scrape enabled (batch=${isBatch}), waiting ${waitMs}ms...`);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
 
     const data = await extract();
     if (data.tracks.length === 0) {
@@ -1096,13 +1107,16 @@
   }
 
   // Initialize
-  function init() {
+  async function init() {
     createButton();
     // Skip auto-scrape on listing/batch pages (DJ profiles, genre pages)
     // — they use the batch button instead
     const isListingPage = isDjProfilePage() || location.pathname.includes('/genre/');
     if (!isListingPage) {
-      setTimeout(autoScrape, 3000);
+      // In batch mode: start fast. Manual browsing: give page time to settle.
+      const { batchMode } = await chrome.storage.sync.get(['batchMode']);
+      const initDelay = batchMode ? 500 : 3000;
+      setTimeout(autoScrape, initDelay);
     }
   }
 
